@@ -62,6 +62,71 @@ $(function() {
   var LRC_CENTER_OFFSET = LRC_LINE_HEIGHT * ((LRC_VISIBLE_LINES - 1) / 2);
   var LRC_SCROLL_TRANSITION =
     'transform 0.45s cubic-bezier(0.22, 1, 0.36, 1)';
+  var SEARCH_TIMEOUT_MS = 30000;
+  var SEARCH_TYPICAL_MS = 12000;
+  var searchProgressTimer = null;
+  var searchProgressOk = false;
+
+  function calcSearchProgressPercent(elapsedMs) {
+    var t = Math.min(elapsedMs / SEARCH_TIMEOUT_MS, 1);
+    return Math.min(92, Math.round((1 - Math.pow(1 - t, 2.2)) * 92));
+  }
+
+  function formatSearchWaitHint(elapsedSec) {
+    if (elapsedSec < 2) {
+      return '通常需要 5–15 秒，请稍候';
+    }
+    if (elapsedSec >= 25) {
+      return '即将达到 30 秒上限，若仍无响应请检查网络后重试';
+    }
+    var remain = Math.max(1, Math.ceil(SEARCH_TYPICAL_MS / 1000 - elapsedSec));
+    return '预计还需约 ' + remain + ' 秒（多数请求在 15 秒内完成）';
+  }
+
+  function startSearchProgress() {
+    stopSearchProgress(false);
+    var $box = $('#j-search-progress');
+    if (!$box.length) return;
+
+    var startAt = Date.now();
+    searchProgressOk = false;
+    $box.addClass('is-active').attr('aria-hidden', 'false');
+    $('#j-search-progress-bar').css('width', '0%');
+    $('#j-search-progress-label').text('正在搜索…');
+    $('#j-search-progress-time').text('已等待 0 秒');
+    $('#j-search-progress-hint').text(formatSearchWaitHint(0));
+
+    searchProgressTimer = setInterval(function() {
+      var elapsed = Date.now() - startAt;
+      var sec = Math.floor(elapsed / 1000);
+      var pct = calcSearchProgressPercent(elapsed);
+      $('#j-search-progress-bar').css('width', pct + '%');
+      $('#j-search-progress-time').text('已等待 ' + sec + ' 秒');
+      $('#j-search-progress-hint').text(formatSearchWaitHint(sec));
+    }, 120);
+  }
+
+  function stopSearchProgress(done) {
+    if (searchProgressTimer) {
+      clearInterval(searchProgressTimer);
+      searchProgressTimer = null;
+    }
+    var $box = $('#j-search-progress');
+    if (!$box.length) return;
+
+    if (done) {
+      $('#j-search-progress-bar').css('width', '100%');
+      $('#j-search-progress-label').text('搜索完成');
+      $('#j-search-progress-hint').text('正在展示结果…');
+      setTimeout(function() {
+        $box.removeClass('is-active').attr('aria-hidden', 'true');
+        $('#j-search-progress-bar').css('width', '0%');
+      }, 400);
+    } else {
+      $box.removeClass('is-active').attr('aria-hidden', 'true');
+      $('#j-search-progress-bar').css('width', '0%');
+    }
+  }
 
   function stripLrcMeta(lrc) {
     if (!lrc) return lrc;
@@ -379,6 +444,7 @@ $(function() {
     setTimeout(updateTypeIndicator, 240);
 
     $('#j-submit').button('reset');
+    stopSearchProgress(false);
 
     if (player) {
       try {
@@ -577,6 +643,7 @@ $(function() {
             dataType: 'json',
             beforeSend: function beforeSend() {
               isload = true;
+              searchProgressOk = false;
               var title = document.title;
               switch (filter) {
                 case 'name':
@@ -592,12 +659,16 @@ $(function() {
               if (page === 1) {
                 $('#j-input').attr('disabled', true);
                 $('#j-submit').button('loading');
+                startSearchProgress();
               } else {
                 $more.text('请稍后...');
               }
             },
             success: function success(result) {
               if (result.code === 200 && result.data) {
+                if (page === 1) {
+                  searchProgressOk = true;
+                }
                 result.data.map(function(v) {
                   if (!v.title) v.title = '暂无';
                   if (!v.author) v.author = '暂无';
@@ -728,6 +799,7 @@ $(function() {
             complete: function complete() {
               isload = false;
               if (page === 1) {
+                stopSearchProgress(searchProgressOk);
                 $('#j-input').attr('disabled', false);
                 $('#j-submit').button('reset');
               }

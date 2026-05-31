@@ -641,6 +641,64 @@ a:hover {
   }
 }
 
+/* 搜索进度 */
+.search-progress {
+  overflow: hidden;
+  max-height: 0;
+  margin-top: 0;
+  opacity: 0;
+  transition: max-height 0.35s ease, margin-top 0.35s ease, opacity 0.25s ease;
+}
+
+.search-progress.is-active {
+  max-height: 120px;
+  margin-top: 14px;
+  opacity: 1;
+}
+
+.search-progress__track {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.search-progress__bar {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent) 0%, #ff7a9a 55%, #ffc2d0 100%);
+  box-shadow: 0 0 12px var(--accent-glow);
+  transition: width 0.25s ease-out;
+}
+
+.search-progress__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.search-progress__time {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.search-progress__hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.45;
+}
+
 .am-btn-default {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-primary);

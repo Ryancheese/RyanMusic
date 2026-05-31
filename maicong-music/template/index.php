@@ -108,6 +108,16 @@ if (!defined('MC_CORE')) {
                         <?php } ?>
                         </div>
                         <button id="j-submit" type="submit" class="am-btn am-btn-primary am-btn-lg am-btn-block am-radius" data-am-loading="{spinner: 'off', loadingText: '搜索中...', resetText: '搜索'}">搜索</button>
+                        <div id="j-search-progress" class="search-progress" aria-hidden="true" role="status" aria-live="polite">
+                            <div class="search-progress__track">
+                                <div id="j-search-progress-bar" class="search-progress__bar"></div>
+                            </div>
+                            <p class="search-progress__meta">
+                                <span id="j-search-progress-label">正在搜索…</span>
+                                <span id="j-search-progress-time" class="search-progress__time">已等待 0 秒</span>
+                            </p>
+                            <p id="j-search-progress-hint" class="search-progress__hint">通常需要 5–15 秒，请稍候</p>
+                        </div>
                     </div>
                 </form>
                 <form id="j-main" class="am-form am-u-md-12 am-u-sm-centered music-main glass-panel">
