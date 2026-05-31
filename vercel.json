@@ -1,0 +1,27 @@
+{
+  "functions": {
+    "api/*.php": {
+      "runtime": "vercel-php@0.9.0",
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  },
+  "routes": [
+    {
+      "src": "/static/(.*)",
+      "dest": "/maicong-music/static/$1"
+    },
+    {
+      "src": "/favicon.ico",
+      "dest": "/maicong-music/favicon.ico"
+    },
+    {
+      "src": "/help.php",
+      "dest": "/api/help.php"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.php"
+    }
+  ]
+}
