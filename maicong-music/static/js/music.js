@@ -686,10 +686,14 @@ $(function() {
                 player.on('ended', function() {
                   document.title = siteTitle;
                 });
-                if (result.data.length < 10) {
+                var hasMore =
+                  typeof result.has_more === 'boolean'
+                    ? result.has_more
+                    : result.data.length >= 10;
+                if (!hasMore) {
                   $more.hide();
                 } else {
-                  $more.text('载入更多');
+                  $more.show().text('载入更多');
                 }
               } else {
                 if (page === 1) {

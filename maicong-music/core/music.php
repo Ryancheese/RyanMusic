@@ -161,6 +161,61 @@ function mc_get_myhkw_song($songid, $site)
     return $json['data'][0];
 }
 
+function mc_set_response_meta($key, $value)
+{
+    if (!isset($GLOBALS['MC_RESPONSE_META']) || !is_array($GLOBALS['MC_RESPONSE_META'])) {
+        $GLOBALS['MC_RESPONSE_META'] = [];
+    }
+    $GLOBALS['MC_RESPONSE_META'][$key] = $value;
+}
+
+function mc_name_search_source_page($page)
+{
+    $page = (int) $page;
+    if ($page < 1) {
+        $page = 1;
+    }
+    if ($page <= 2) {
+        return 1;
+    }
+    return $page - 1;
+}
+
+function mc_slice_name_search_songids($songids, $page)
+{
+    if (!is_array($songids)) {
+        return [
+            'songids' => [],
+            'has_more' => false,
+        ];
+    }
+
+    $page = (int) $page;
+    if ($page < 1) {
+        $page = 1;
+    }
+
+    $source_count = count($songids);
+    if ($page === 1) {
+        $offset = 0;
+        $limit = 3;
+        $has_more = $source_count > 3;
+    } elseif ($page === 2) {
+        $offset = 3;
+        $limit = 7;
+        $has_more = $source_count >= 10;
+    } else {
+        $offset = 0;
+        $limit = 10;
+        $has_more = $source_count >= 10;
+    }
+
+    return [
+        'songids' => array_values(array_slice($songids, $offset, $limit)),
+        'has_more' => $has_more,
+    ];
+}
+
 // 音频数据接口地址
 function mc_song_urls($value, $type = 'query', $site = 'netease', $page = 1)
 {
@@ -599,7 +654,7 @@ function mc_get_song_by_name($query, $site = 'netease', $page = 1)
     if (!$query) {
         return;
     }
-    $radio_search_url = mc_song_urls($query, 'query', $site, $page);
+    $radio_search_url = mc_song_urls($query, 'query', $site, mc_name_search_source_page($page));
     if (empty($query) || empty($radio_search_url)) {
         return;
     }
@@ -741,7 +796,12 @@ function mc_get_song_by_name($query, $site = 'netease', $page = 1)
             }
             break;
     }
-    return mc_get_song_by_id($radio_songid, $site, true);
+    $radio_page = mc_slice_name_search_songids($radio_songid, $page);
+    mc_set_response_meta('has_more', $radio_page['has_more']);
+    if (empty($radio_page['songids'])) {
+        return;
+    }
+    return mc_get_song_by_id($radio_page['songids'], $site, true);
 }
 
 // 获取音频信息 - 歌曲ID
@@ -1439,10 +1499,18 @@ function post($key)
 function response($data, $code = 200, $error = '')
 {
     header('Content-type:text/json; charset=utf-8');
-    echo json_encode(array(
+    $payload = array(
         'data'  => $data,
         'code'  => $code,
         'error' => $error
-    ));
+    );
+    if (!empty($GLOBALS['MC_RESPONSE_META']) && is_array($GLOBALS['MC_RESPONSE_META'])) {
+        foreach ($GLOBALS['MC_RESPONSE_META'] as $key => $value) {
+            if (!array_key_exists($key, $payload)) {
+                $payload[$key] = $value;
+            }
+        }
+    }
+    echo json_encode($payload);
     exit();
 }
