@@ -43,13 +43,17 @@ if (!defined('MC_CORE')) {
                 <h2 class="help-page__h2">播放与下载</h2>
                 <ul>
                     <li>搜索成功后可在线试听，部分歌曲因版权可能无法播放</li>
-                    <li>结果页可查看来源页、播放地址与歌词，并支持下载（视浏览器与资源而定）</li>
+                    <li>结果页可查看播放地址与歌词，并支持下载（视浏览器与资源而定）</li>
                 </ul>
+                <h2 class="help-page__h2" id="disclaimer">免责声明</h2>
+                <div class="disclaimer-block">
+                    <?php include MC_TEMP_DIR . '/disclaimer-content.php'; ?>
+                </div>
             </article>
         </div>
     </section>
     <footer class="footer">
-        <p class="am-text-sm">v<?php echo MC_VERSION; ?>&nbsp;&copy;&nbsp;<?php echo date('Y'); ?>&nbsp;<a href="./">RyanMusic</a></p>
+        <p class="am-text-sm">v<?php echo MC_VERSION; ?>&nbsp;&copy;&nbsp;<?php echo date('Y'); ?>&nbsp;<a href="./">RyanMusic</a>&nbsp;·&nbsp;<a href="help.php#disclaimer">免责声明</a></p>
     </footer>
     <script src="//cdn.staticfile.org/jquery/1.11.1/jquery.min.js"></script>
     <script src="static/js/music.js?v=<?php echo MC_VERSION; ?>"></script>

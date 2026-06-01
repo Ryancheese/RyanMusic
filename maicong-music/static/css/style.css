@@ -1462,6 +1462,59 @@ a:hover {
   overflow: visible;
 }
 
+.disclaimer-block,
+.disclaimer-popup {
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.disclaimer-list {
+  margin: 0 0 16px;
+  padding-left: 1.25em;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.disclaimer-list li + li {
+  margin-top: 10px;
+}
+
+.disclaimer-contact {
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--text-secondary);
+}
+
+.disclaimer-contact a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.disclaimer-contact a:hover {
+  text-decoration: underline;
+}
+
+.disclaimer-popup__more {
+  margin: 14px 0 0;
+  font-size: 13px;
+  text-align: center;
+}
+
+.disclaimer-popup__more a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.disclaimer-popup__more a:hover {
+  text-decoration: underline;
+}
+
 /* Tips */
 .music-tips {
   margin-top: 28px;

@@ -168,15 +168,15 @@ if (!defined('MC_CORE')) {
                     <h4 class="am-popup-title">免责声明</h4>
                     <span data-am-modal-close class="am-close">&times;</span>
                 </div>
-                <div class="am-popup-bd">
-                    <p>本站音频文件来自各网站接口，本站不会修改任何音频文件</p>
-                    <p>音频版权来自各网站，本站只提供数据查询服务，不提供任何音频存储和贩卖服务</p>
+                <div class="am-popup-bd disclaimer-popup">
+                    <?php include MC_TEMP_DIR . '/disclaimer-content.php'; ?>
+                    <p class="disclaimer-popup__more"><a href="help.php#disclaimer">查看完整说明</a></p>
                 </div>
             </div>
         </div>
     </section>
     <footer class="footer">
-        <p class="am-text-sm">v<?php echo MC_VERSION; ?>&nbsp;&copy;&nbsp;<?php echo date('Y'); ?>&nbsp;<a href="https://github.com/maicong/music/releases" target="_blank" rel="author">源码下载</a>&nbsp;<a href="https://github.com/maicong/music/issues" target="_blank">意见反馈</a>&nbsp;<a href="javascript:void(0)" data-am-modal="{target: '#copr-info'}">免责声明</a></p>
+        <p class="am-text-sm">v<?php echo MC_VERSION; ?>&nbsp;&copy;&nbsp;<?php echo date('Y'); ?>&nbsp;<a href="help.php">使用帮助</a>&nbsp;·&nbsp;<a href="javascript:void(0)" data-am-modal="{target: '#copr-info'}">免责声明</a>&nbsp;·&nbsp;<a href="mailto:17625416243@163.com">联系站长</a></p>
     </footer>
     <script src="//cdn.staticfile.org/jquery/1.11.1/jquery.min.js"></script>
     <script src="//cdn.staticfile.org/amazeui/2.3.0/js/amazeui.min.js"></script>
