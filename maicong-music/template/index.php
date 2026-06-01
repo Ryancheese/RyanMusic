@@ -70,7 +70,6 @@ if (!defined('MC_CORE')) {
                     <span class="hero-poster__watermark hero-poster__watermark--2">乐</span>
                 </div>
                 <div class="hero-poster__content">
-                    <p class="hero-poster__eyebrow">NETEASE × QQ</p>
                     <h1 class="hero-poster__title">
                         <span class="hero-poster__stroke" aria-hidden="true">RYAN</span>
                         <span class="hero-poster__line">RYAN</span>
@@ -132,6 +131,7 @@ if (!defined('MC_CORE')) {
                     <div id="j-show" class="result-player result-player--studio">
                         <div id="j-player" class="aplayer"></div>
                     </div>
+                    <button type="button" id="j-load-more" class="result-load-more" hidden>加载更多</button>
 
                     <section class="result-meta" aria-label="曲目详情">
                         <div class="meta-card">
@@ -146,7 +146,7 @@ if (!defined('MC_CORE')) {
                         <div class="meta-card meta-card--lrc">
                             <span class="meta-card__label"><i class="am-icon-file-text-o am-icon-fw"></i>歌词</span>
                             <div class="meta-card__body meta-card__body--lrc">
-                                <textarea id="j-lrc" class="meta-card__textarea" rows="3" readonly></textarea>
+                                <pre id="j-lrc" class="meta-card__lrc-text"></pre>
                                 <a id="j-lrc-btn" class="meta-card__action" target="_blank" rel="noopener" title="下载歌词">
                                     <i id="j-lrc-btn-icon" class="am-icon-external-link"></i>
                                 </a>
@@ -154,34 +154,16 @@ if (!defined('MC_CORE')) {
                         </div>
                     </section>
                 </form>
-                <div class="help-entry am-u-md-12 am-u-sm-centered">
-                    <a href="help.php" class="help-entry__btn">
-                        <i class="am-icon-question-circle am-icon-fw"></i>
-                        使用帮助
-                    </a>
-                </div>
-            </div>
-        </div>
-        <div class="am-popup" id="copr-info">
-            <div class="am-popup-inner">
-                <div class="am-popup-hd">
-                    <h4 class="am-popup-title">免责声明</h4>
-                    <span data-am-modal-close class="am-close">&times;</span>
-                </div>
-                <div class="am-popup-bd disclaimer-popup">
-                    <?php include MC_TEMP_DIR . '/disclaimer-content.php'; ?>
-                    <p class="disclaimer-popup__more"><a href="help.php#disclaimer">查看完整说明</a></p>
-                </div>
             </div>
         </div>
     </section>
     <footer class="footer">
-        <p class="am-text-sm">v<?php echo MC_VERSION; ?>&nbsp;&copy;&nbsp;<?php echo date('Y'); ?>&nbsp;<a href="help.php">使用帮助</a>&nbsp;·&nbsp;<a href="javascript:void(0)" data-am-modal="{target: '#copr-info'}">免责声明</a>&nbsp;·&nbsp;<a href="mailto:17625416243@163.com">联系站长</a></p>
+        <p class="am-text-sm">v<?php echo MC_VERSION; ?>&nbsp;&copy;&nbsp;<?php echo date('Y'); ?>&nbsp;<a href="help.php">使用帮助</a>&nbsp;·&nbsp;<a href="disclaimer.php">免责声明</a>&nbsp;·&nbsp;<a href="mailto:17625416243@163.com">联系站长</a></p>
     </footer>
     <script src="//cdn.staticfile.org/jquery/1.11.1/jquery.min.js"></script>
     <script src="//cdn.staticfile.org/amazeui/2.3.0/js/amazeui.min.js"></script>
     <script src="//cdn.staticfile.org/aplayer/1.6.0/APlayer.min.js"></script>
     <script src="//cdn.staticfile.org/Base64/1.0.1/base64.min.js"></script>
-    <script src="static/js/music.js?v<?php echo MC_VERSION; ?>"></script>
+    <script src="static/js/music.js?v=<?php echo MC_VERSION; ?>"></script>
 </body>
 </html>

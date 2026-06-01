@@ -175,10 +175,7 @@ function mc_name_search_source_page($page)
     if ($page < 1) {
         $page = 1;
     }
-    if ($page <= 2) {
-        return 1;
-    }
-    return $page - 1;
+    return $page;
 }
 
 function mc_slice_name_search_songids($songids, $page)
@@ -190,29 +187,12 @@ function mc_slice_name_search_songids($songids, $page)
         ];
     }
 
-    $page = (int) $page;
-    if ($page < 1) {
-        $page = 1;
-    }
-
-    $source_count = count($songids);
-    if ($page === 1) {
-        $offset = 0;
-        $limit = 3;
-        $has_more = $source_count > 3;
-    } elseif ($page === 2) {
-        $offset = 3;
-        $limit = 7;
-        $has_more = $source_count >= 10;
-    } else {
-        $offset = 0;
-        $limit = 10;
-        $has_more = $source_count >= 10;
-    }
+    $limit = 10;
+    $slice = array_values(array_slice($songids, 0, $limit));
 
     return [
-        'songids' => array_values(array_slice($songids, $offset, $limit)),
-        'has_more' => $has_more,
+        'songids' => $slice,
+        'has_more' => count($songids) >= $limit,
     ];
 }
 

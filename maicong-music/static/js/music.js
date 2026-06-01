@@ -10,7 +10,38 @@
  *
  */
 
+function patchAPlayerAuthorDisplay() {
+  if (!window.APlayer || APlayer.prototype._authorDisplayPatched) return;
+
+  var origSetMusic = APlayer.prototype.setMusic;
+  if (typeof origSetMusic !== 'function') return;
+
+  APlayer.prototype._authorDisplayPatched = true;
+  APlayer.prototype.setMusic = function(index) {
+    origSetMusic.apply(this, arguments);
+    var authorEl = this.element.getElementsByClassName('aplayer-author')[0];
+    if (authorEl && this.music && this.music.author) {
+      authorEl.textContent = this.music.author;
+    }
+  };
+
+  var origAddMusic = APlayer.prototype.addMusic;
+  if (typeof origAddMusic === 'function') {
+    APlayer.prototype.addMusic = function(tracks) {
+      origAddMusic.apply(this, arguments);
+      var list = this.element.getElementsByClassName('aplayer-list')[0];
+      if (list) {
+        list.classList.remove('aplayer-list-hide');
+        list.style.height = 'auto';
+        list.style.maxHeight = 'none';
+        list.style.overflow = 'visible';
+      }
+    };
+  }
+}
+
 $(function() {
+  patchAPlayerAuthorDisplay();
   // 获取参数
   function q(key) {
     var value = null;
@@ -189,21 +220,50 @@ $(function() {
     }
   }
 
+  function getPlayerRoot() {
+    var $el = $('#j-player');
+    return $el.hasClass('aplayer') ? $el : $el.children('.aplayer').first();
+  }
+
   function movePlayButton() {
-    var $controller = $('#j-player .aplayer-controller');
-    var $btn = $('#j-player .aplayer-button').first();
+    var $controller = getPlayerRoot().find('.aplayer-controller');
+    var $btn = getPlayerRoot().find('.aplayer-pic .aplayer-button').first();
+    if (!$btn.length) {
+      $btn = getPlayerRoot().find('.aplayer-button').first();
+    }
     if (!$btn.length || !$controller.length) return;
     if ($btn.parent()[0] !== $controller[0]) {
-      $btn.prependTo($controller);
+      $controller.prepend($btn);
     }
     $btn.addClass('studio-play-btn');
   }
 
+  function resetPlayerListLayout($ap) {
+    var $list = $ap.find('.aplayer-list');
+    if (!$list.length) return;
+    $list.removeClass('aplayer-list-hide');
+    $list.css({
+      height: 'auto',
+      maxHeight: 'none',
+      overflow: 'visible'
+    });
+  }
+
+  function cleanPlayerAuthorLabel($ap) {
+    $ap.find('.aplayer-author').each(function() {
+      var text = $.trim($(this).text());
+      if (/^-\s*/.test(text)) {
+        $(this).text(text.replace(/^-\s*/, ''));
+      }
+    });
+  }
+
   function tunePlayerStudio(playerInstance) {
-    var $ap = $('#j-player').children('.aplayer');
+    var $ap = getPlayerRoot();
     if (!$ap.length) return;
 
     movePlayButton();
+    resetPlayerListLayout($ap);
 
     var lrcHeight = LRC_LINE_HEIGHT * LRC_VISIBLE_LINES;
     var $lrc = $ap.find('.aplayer-lrc');
@@ -233,6 +293,7 @@ $(function() {
     });
 
     syncLrcDisplay(playerInstance);
+    cleanPlayerAuthorLabel($ap);
   }
 
   function patchLrcCenterScroll(playerInstance) {
@@ -299,6 +360,36 @@ $(function() {
     } else {
       $root.removeClass('is-playing');
     }
+  }
+
+  function bindPlayerPlayback(playerInstance, getTrackData, setValue, siteTitle) {
+    if (!playerInstance || playerInstance._playbackBound) return;
+    playerInstance._playbackBound = true;
+
+    playerInstance.on('play', function() {
+      var data = getTrackData();
+      if (!data) return;
+      var img = new Image();
+      img.src = data.pic;
+      img.onerror = function() {
+        $('.aplayer-pic').css('background-image', 'url(' + nopic + ')');
+      };
+      document.title = '正在播放: ' + data.title + ' - ' + data.author;
+      setValue(data);
+    });
+
+    playerInstance.on('ended', function() {
+      document.title = siteTitle;
+    });
+  }
+
+  function updateLoadMoreButton(hasMore, filter) {
+    var $more = $('#j-load-more');
+    if (filter !== 'name' || !hasMore) {
+      $more.prop('hidden', true).addClass('is-hidden');
+      return;
+    }
+    $more.prop('hidden', false).removeClass('is-hidden').text('加载更多');
   }
 
   function bindPlayerStudio(playerInstance) {
@@ -441,6 +532,7 @@ $(function() {
 
     $('#j-type').show();
     setMusicType('netease');
+    updateLoadMoreButton(false, 'name');
     setTimeout(updateTypeIndicator, 240);
 
     $('#j-submit').button('reset');
@@ -627,8 +719,8 @@ $(function() {
         var type =
           filter === 'url' ? '_' : $('input[name="music_type"]:checked').val();
         var page = 1;
-        var $more = $('<div class="aplayer-more">载入更多</div>');
         var isload = false;
+        var $more = $('#j-load-more');
         var ajax = function ajax(input, filter, type, page) {
           $.ajax({
             type: 'POST',
@@ -659,6 +751,7 @@ $(function() {
               if (page === 1) {
                 $('#j-input').attr('disabled', true);
                 $('#j-submit').button('loading');
+                updateLoadMoreButton(false, filter);
                 startSearchProgress();
               } else {
                 $more.text('请稍后...');
@@ -685,7 +778,7 @@ $(function() {
                   $('#j-src-btn')
                     .attr('href', buildDownloadUrl(data.url, name))
                     .removeAttr('target download');
-                  $('#j-lrc').val(data.lrc);
+                  $('#j-lrc').text(data.lrc);
                   $('#j-lrc-btn').attr(
                     'href',
                     'data:application/octet-stream;base64,' +
@@ -710,7 +803,6 @@ $(function() {
                   setValue(playerList[0]);
 
                   $('#j-validator').slideUp();
-                  $('#j-main').slideDown();
 
                   player = new APlayer({
                     element: $('#j-player')[0],
@@ -725,9 +817,20 @@ $(function() {
                   });
 
                   bindPlayerStudio(player);
-                  $('#j-player').append($more);
+                  bindPlayerPlayback(
+                    player,
+                    function() {
+                      return playerList[player.playIndex];
+                    },
+                    setValue,
+                    siteTitle
+                  );
+                  movePlayButton();
+                  tunePlayerStudio(player);
 
-                  $more.on('click', function() {
+                  $('#j-main').slideDown(320);
+
+                  $more.off('click.loadMore').on('click.loadMore', function() {
                     if (isload) return;
                     page++;
                     ajax(input, filter, type, page);
@@ -735,37 +838,16 @@ $(function() {
                 } else {
                   player.addMusic(result.data);
                   playerList = playerList.concat(result.data);
+                  resetPlayerListLayout(getPlayerRoot());
+                  movePlayButton();
                 }
 
-                player.on('canplay', function() {
-                  player.play();
-                });
-                player.on('play', function() {
-                  var data = playerList[player.playIndex];
-                  var img = new Image();
-                  img.src = data.pic;
-                  img.onerror = function() {
-                    $('.aplayer-pic').css(
-                      'background-image',
-                      'url(' + nopic + ')'
-                    );
-                  };
-                  document.title =
-                    '正在播放: ' + data.title + ' - ' + data.author;
-                  setValue(data);
-                });
-                player.on('ended', function() {
-                  document.title = siteTitle;
-                });
                 var hasMore =
-                  typeof result.has_more === 'boolean'
+                  filter === 'name' &&
+                  (typeof result.has_more === 'boolean'
                     ? result.has_more
-                    : result.data.length >= 10;
-                if (!hasMore) {
-                  $more.hide();
-                } else {
-                  $more.show().text('载入更多');
-                }
+                    : result.data.length >= 10);
+                updateLoadMoreButton(hasMore, filter);
               } else {
                 if (page === 1) {
                   $('#j-input')
@@ -776,7 +858,7 @@ $(function() {
                 } else {
                   $more.text('没有了');
                   setTimeout(function() {
-                    $more.slideUp();
+                    updateLoadMoreButton(false, filter);
                   }, 1000);
                 }
               }

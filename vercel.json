@@ -20,6 +20,10 @@
       "dest": "/api/help.php"
     },
     {
+      "src": "/disclaimer.php",
+      "dest": "/api/disclaimer.php"
+    },
+    {
       "src": "/(.*)",
       "dest": "/api/index.php"
     }

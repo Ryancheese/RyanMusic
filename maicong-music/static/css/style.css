@@ -228,16 +228,6 @@ a:hover {
   z-index: 1;
 }
 
-.hero-poster__eyebrow {
-  margin: 0 0 10px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.42em;
-  text-indent: 0.42em;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-}
-
 .hero-poster__title {
   position: relative;
   margin: 0;
@@ -331,11 +321,6 @@ a:hover {
   .hero-poster__ribbon span {
     padding: 8px 14px;
     letter-spacing: 0.12em;
-  }
-
-  .hero-poster__eyebrow {
-    letter-spacing: 0.28em;
-    text-indent: 0.28em;
   }
 }
 
@@ -845,8 +830,7 @@ a:hover {
   align-items: flex-start;
 }
 
-.meta-card__input,
-.meta-card__textarea {
+.meta-card__input {
   flex: 1;
   min-width: 0;
   margin: 0;
@@ -858,7 +842,6 @@ a:hover {
   font-family: "SF Mono", "Menlo", "Monaco", "Consolas", monospace;
   font-size: 12px;
   line-height: 1.45;
-  resize: none;
   outline: none;
   -webkit-appearance: none;
   appearance: none;
@@ -867,35 +850,32 @@ a:hover {
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 
-.meta-card__textarea {
-  min-height: 4.35em;
-  max-height: 4.35em;
-  overflow: auto;
+.meta-card__lrc-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text-secondary);
+  font-family: "SF Mono", "Menlo", "Monaco", "Consolas", monospace;
+  font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
-  word-break: break-all;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-}
-
-.meta-card--lrc .meta-card__textarea {
-  background: rgba(0, 0, 0, 0.22) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  color: var(--text-secondary) !important;
+  word-break: break-word;
+  overflow: visible;
+  max-height: none;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 .meta-card__input:focus,
-.meta-card__textarea:focus,
-.meta-card__input:hover,
-.meta-card__textarea:hover {
+.meta-card__input:hover {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: rgba(255, 255, 255, 0.18) !important;
-}
-
-.meta-card--lrc .meta-card__textarea:focus,
-.meta-card--lrc .meta-card__textarea:hover {
-  background: rgba(0, 0, 0, 0.28) !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
 }
 
 .meta-card__action {
@@ -988,11 +968,15 @@ a:hover {
 
 .result-player--studio .aplayer-info .aplayer-music {
   grid-area: title;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
   float: none !important;
   margin: 0 !important;
   padding: 0 !important;
   height: auto !important;
   white-space: normal !important;
+  overflow: visible !important;
 }
 
 .result-player--studio .aplayer-info .aplayer-music .aplayer-title {
@@ -1017,7 +1001,7 @@ a:hover {
   grid-area: bar;
   display: flex !important;
   align-items: center;
-  gap: 12px;
+  gap: 24px;
   margin: 12px 0 0 !important;
   padding: 0 !important;
 }
@@ -1069,7 +1053,7 @@ a:hover {
 .result-player--studio .aplayer-info .aplayer-controller .aplayer-bar-wrap {
   flex: 1;
   min-width: 0;
-  margin: 0 !important;
+  margin: 0 0 0 4px !important;
   padding: 6px 0 !important;
 }
 
@@ -1200,13 +1184,11 @@ a:hover {
   display: block !important;
   margin: 16px -8px 0 !important;
   padding: 12px 4px 4px !important;
-  max-height: 220px;
-  overflow-x: hidden;
-  overflow-y: auto;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
   background: transparent !important;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
 .result-player--studio .aplayer-list ol {
@@ -1358,8 +1340,12 @@ a:hover {
 }
 
 .aplayer .aplayer-more,
+.result-player--studio > .aplayer-more,
+.result-load-more,
 .music-more {
-  margin-top: 12px;
+  display: block;
+  width: 100%;
+  margin: 0 0 16px;
   padding: 10px;
   border-radius: var(--radius-pill);
   text-align: center;
@@ -1372,47 +1358,17 @@ a:hover {
   transition: all 0.2s ease;
 }
 
+.result-load-more.is-hidden,
+.result-load-more[hidden] {
+  display: none !important;
+}
+
 .aplayer .aplayer-more:hover,
+.result-player--studio > .aplayer-more:hover,
+.result-load-more:hover,
 .music-more:hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.12);
-}
-
-/* 帮助入口按钮 */
-.help-entry {
-  margin-top: 20px;
-  text-align: center;
-}
-
-.help-entry__btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 160px;
-  padding: 12px 28px;
-  border-radius: var(--radius-pill);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-secondary);
-  font-size: 15px;
-  font-weight: 600;
-  text-decoration: none;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
-}
-
-.help-entry__btn:hover {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(250, 45, 85, 0.4);
-  transform: translateY(-1px);
-}
-
-.help-entry__btn i {
-  font-size: 16px;
-  opacity: 0.85;
 }
 
 /* 帮助页 */
@@ -1462,8 +1418,7 @@ a:hover {
   overflow: visible;
 }
 
-.disclaimer-block,
-.disclaimer-popup {
+.disclaimer-block {
   padding: 16px 18px;
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.05);
@@ -1497,21 +1452,6 @@ a:hover {
 }
 
 .disclaimer-contact a:hover {
-  text-decoration: underline;
-}
-
-.disclaimer-popup__more {
-  margin: 14px 0 0;
-  font-size: 13px;
-  text-align: center;
-}
-
-.disclaimer-popup__more a {
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.disclaimer-popup__more a:hover {
   text-decoration: underline;
 }
 
@@ -1727,7 +1667,7 @@ a:hover {
   }
 
   .result-player--studio .aplayer-list {
-    max-height: 200px;
+    max-height: none;
   }
 
   .result-meta {
