@@ -39,6 +39,7 @@ if (!defined('MC_CORE')) {
 </head>
 <body class="theme-apple-glass">
     <div class="light-flow" aria-hidden="true">
+        <span class="light-flow__bloom"></span>
         <span class="light-flow__orb light-flow__orb--1"></span>
         <span class="light-flow__orb light-flow__orb--2"></span>
         <span class="light-flow__orb light-flow__orb--3"></span>

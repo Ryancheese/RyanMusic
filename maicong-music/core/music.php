@@ -123,6 +123,121 @@ function mc_stream_download($url, $filename)
     return $ok && $code >= 200 && $code < 400;
 }
 
+function mc_media_referer($url)
+{
+    if (preg_match('#(163\.com|126\.net|netease)#i', $url)) {
+        return 'https://music.163.com/';
+    }
+    if (preg_match('#myhkw\.cn#i', $url)) {
+        return 'https://s.myhkw.cn/';
+    }
+    return 'https://y.qq.com/';
+}
+
+/**
+ * 同源流式代理（支持 Range），便于 <audio> 分析频谱且不跨域静音。
+ */
+function mc_proxy_stream($url, $options = [])
+{
+    if (!preg_match('#^https?://#i', $url) || headers_sent()) {
+        return false;
+    }
+
+    $as_download = !empty($options['download']);
+    $filename = isset($options['filename']) ? $options['filename'] : 'RyanMusic.mp3';
+    $default_type = isset($options['content_type']) ? $options['content_type'] : 'audio/mpeg';
+    $referer = mc_media_referer($url);
+    $range = isset($_SERVER['HTTP_RANGE']) ? trim($_SERVER['HTTP_RANGE']) : '';
+
+    $status_code = 200;
+    $resp_headers = [];
+    $headers_sent_flag = false;
+
+    $req_headers = [
+        'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer: ' . $referer,
+        'Accept: */*',
+    ];
+    if ($range !== '') {
+        $req_headers[] = 'Range: ' . $range;
+    }
+
+    @ini_set('zlib.output_compression', '0');
+    if (function_exists('apache_setenv')) {
+        @apache_setenv('no-gzip', '1');
+    }
+    while (ob_get_level() > 0) {
+        @ob_end_clean();
+    }
+
+    $ch = curl_init($url);
+    $opts = [
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS      => 5,
+        CURLOPT_HTTPHEADER     => $req_headers,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_TIMEOUT        => 300,
+        CURLOPT_CONNECTTIMEOUT => 20,
+        CURLOPT_RETURNTRANSFER => false,
+        CURLOPT_HEADERFUNCTION => function ($curl, $header_line) use (&$status_code, &$resp_headers) {
+            if (preg_match('/^HTTP\/\S+\s+(\d+)/i', $header_line, $m)) {
+                $status_code = (int) $m[1];
+                $resp_headers = [];
+            } elseif (preg_match('/^([^:]+):\s*(.+)$/', trim($header_line), $m)) {
+                $resp_headers[strtolower(trim($m[1]))] = trim($m[2]);
+            }
+            return strlen($header_line);
+        },
+        CURLOPT_WRITEFUNCTION => function ($curl, $chunk) use (
+            &$headers_sent_flag,
+            &$status_code,
+            &$resp_headers,
+            $as_download,
+            $filename,
+            $default_type
+        ) {
+            if (!$headers_sent_flag) {
+                $headers_sent_flag = true;
+                http_response_code($status_code >= 100 ? $status_code : 200);
+                $ctype = isset($resp_headers['content-type']) ? $resp_headers['content-type'] : $default_type;
+                header('Content-Type: ' . $ctype);
+                header('Cache-Control: no-store');
+                header('Accept-Ranges: bytes');
+                if (isset($resp_headers['content-length'])) {
+                    header('Content-Length: ' . $resp_headers['content-length']);
+                }
+                if (isset($resp_headers['content-range'])) {
+                    header('Content-Range: ' . $resp_headers['content-range']);
+                }
+                if ($as_download) {
+                    header(
+                        'Content-Disposition: attachment; filename="' .
+                        str_replace('"', '', $filename) .
+                        '"; filename*=UTF-8\'\'' .
+                        rawurlencode($filename)
+                    );
+                }
+            }
+            echo $chunk;
+            if (function_exists('ob_flush')) {
+                @ob_flush();
+            }
+            flush();
+            return strlen($chunk);
+        },
+    ];
+    if (MC_PROXY) {
+        $opts[CURLOPT_HTTPPROXYTUNNEL] = 1;
+        $opts[CURLOPT_PROXY] = MC_PROXY;
+        $opts[CURLOPT_PROXYUSERPWD] = MC_PROXYUSERPWD;
+    }
+    curl_setopt_array($ch, $opts);
+    $ok = curl_exec($ch);
+    curl_close($ch);
+    return (bool) $ok;
+}
+
 // 判断地址是否有误
 function mc_is_error($url) {
     $curl = new Curl();
@@ -1829,6 +1944,30 @@ function mc_netease_resolve_play_url($songid)
     return null;
 }
 
+function mc_netease_resolve_pic_url($songid)
+{
+    $raw = mc_curl([
+        'method'  => 'POST',
+        'url'     => 'http://music.163.com/api/linux/forward',
+        'referer' => 'http://music.163.com/',
+        'proxy'   => false,
+        'body'    => encode_netease_data([
+            'method' => 'GET',
+            'url'    => 'http://music.163.com/api/song/detail',
+            'params' => [
+                'id'  => $songid,
+                'ids' => '[' . $songid . ']',
+            ],
+        ]),
+    ]);
+    $json = json_decode($raw, true);
+    $pic = $json['songs'][0]['album']['picUrl'] ?? null;
+    if (!$pic) {
+        return null;
+    }
+    return mc_netease_https_url($pic . (strpos($pic, '?') === false ? '?param=300x300' : ''));
+}
+
 function mc_netease_wrap_track($song)
 {
     if (($song['type'] ?? '') !== 'netease' || empty($song['songid'])) {
@@ -1836,9 +1975,7 @@ function mc_netease_wrap_track($song)
     }
     $id = $song['songid'];
     $song['url'] = mc_api_proxy_url('url', 'netease', $id);
-    if (!empty($song['pic'])) {
-        $song['pic'] = mc_netease_https_url($song['pic']);
-    }
+    $song['pic'] = mc_api_proxy_url('pic', 'netease', $id);
     return $song;
 }
 
@@ -1883,27 +2020,36 @@ function mc_api_handle_request()
                 header('HTTP/1.1 502 Bad Gateway');
                 exit('无法获取播放地址');
             }
-            if (!empty($_GET['dl'])) {
-                $name = isset($_GET['name']) ? $_GET['name'] : 'RyanMusic';
-                $name = preg_replace('/[\\\\\/:*?"<>|\x00-\x1F]/u', '_', $name);
-                if (!preg_match('/\.mp3$/i', $name)) {
-                    $name .= '.mp3';
-                }
-                header('Content-Disposition: attachment; filename="' . $name . '"');
+            $name = isset($_GET['name']) ? $_GET['name'] : 'RyanMusic';
+            $name = preg_replace('/[\\\\\/:*?"<>|\x00-\x1F]/u', '_', $name);
+            if (!preg_match('/\.mp3$/i', $name)) {
+                $name .= '.mp3';
             }
-            header('Location: ' . $play_url, true, 302);
+            $ok = mc_proxy_stream($play_url, [
+                'download'     => !empty($_GET['dl']),
+                'filename'     => $name,
+                'content_type' => 'audio/mpeg',
+            ]);
+            if (!$ok) {
+                header('HTTP/1.1 502 Bad Gateway');
+                exit('无法获取播放地址');
+            }
             exit;
         case 'pic':
-            if ($type !== 'qq') {
-                header('HTTP/1.1 400 Bad Request');
-                exit('该音源封面无需代理');
-            }
-            $pic = mc_qq_resolve_pic_url($id);
+            $pic = ($type === 'qq')
+                ? mc_qq_resolve_pic_url($id)
+                : mc_netease_resolve_pic_url($id);
             if (!$pic) {
                 header('HTTP/1.1 404 Not Found');
                 exit('封面不存在');
             }
-            header('Location: ' . $pic, true, 302);
+            $ok = mc_proxy_stream($pic, [
+                'download'     => false,
+                'content_type' => 'image/jpeg',
+            ]);
+            if (!$ok) {
+                header('Location: ' . $pic, true, 302);
+            }
             exit;
         case 'lrc':
             if ($type !== 'qq') {

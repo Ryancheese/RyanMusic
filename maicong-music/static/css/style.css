@@ -68,13 +68,48 @@ body::after {
   opacity: 0.35;
 }
 
-/* 流光背景 */
+/* 流光背景（Apple Music 风格律动） */
 .light-flow {
   position: fixed;
   inset: 0;
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
+  --pulse: 0;
+  --bass: 0;
+  --mid: 0;
+  --treble: 0;
+  --energy: 0;
+}
+
+.light-flow__bloom {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(
+      ellipse 70% 55% at 50% 40%,
+      rgba(var(--bloom-r, 250), var(--bloom-g, 45), var(--bloom-b, 85), calc(0.12 + var(--energy) * 0.28)) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 20% 70%,
+      rgba(var(--bloom2-r, 88), var(--bloom2-g, 86), var(--bloom2-b, 214), calc(0.08 + var(--bass) * 0.22)) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 80% 25%,
+      rgba(var(--bloom3-r, 255), var(--bloom3-g, 120), var(--bloom3-b, 160), calc(0.06 + var(--mid) * 0.2)) 0%,
+      transparent 58%
+    );
+  filter: blur(8px);
+  opacity: 0.85;
+  transform: scale(calc(1 + var(--pulse) * 0.08));
+  transition: opacity 0.6s ease;
+  will-change: transform, opacity;
+}
+
+.light-flow--playing .light-flow__bloom {
+  opacity: 1;
 }
 
 .light-flow__orb {
@@ -82,17 +117,26 @@ body::after {
   border-radius: 50%;
   filter: blur(72px);
   opacity: 0;
-  will-change: left, top, transform, opacity, background;
+  will-change: left, top, transform, opacity, background, filter;
   transition:
     left 9s cubic-bezier(0.45, 0.05, 0.2, 1),
     top 9s cubic-bezier(0.45, 0.05, 0.2, 1),
-    transform 9s cubic-bezier(0.45, 0.05, 0.2, 1),
     opacity 1.2s ease,
     background 1.2s ease;
+  transform: scale(calc(var(--orb-base-scale, 1) * (1 + var(--pulse) * 0.18 + var(--bass) * 0.12)));
+}
+
+.light-flow--playing .light-flow__orb {
+  filter: blur(calc(64px - var(--energy) * 18px));
+  transition:
+    left 7s cubic-bezier(0.45, 0.05, 0.2, 1),
+    top 7s cubic-bezier(0.45, 0.05, 0.2, 1),
+    opacity 0.8s ease,
+    background 0.8s ease;
 }
 
 .light-flow__orb.is-visible {
-  opacity: var(--orb-opacity, 0.52);
+  opacity: calc(var(--orb-opacity, 0.52) * (0.85 + var(--energy) * 0.55));
 }
 
 .light-flow__orb--1 {
@@ -123,16 +167,18 @@ body::after {
     105deg,
     transparent 38%,
     rgba(255, 255, 255, 0.04) 44%,
-    rgba(var(--beam-ar), var(--beam-ag), var(--beam-ab), 0.14) 50%,
-    rgba(var(--beam-br), var(--beam-bg), var(--beam-bb), 0.12) 56%,
+    rgba(var(--beam-ar), var(--beam-ag), var(--beam-ab), calc(0.1 + var(--mid) * 0.16)) 50%,
+    rgba(var(--beam-br), var(--beam-bg), var(--beam-bb), calc(0.08 + var(--treble) * 0.14)) 56%,
     rgba(255, 255, 255, 0.03) 62%,
     transparent 68%
   );
   background-size: 220% 100%;
   animation: flow-beam var(--beam-duration, 9s) linear infinite;
+  animation-duration: calc(var(--beam-duration, 9s) / (1 + var(--energy) * 0.85));
   mix-blend-mode: screen;
-  opacity: var(--beam-opacity, 0.85);
-  transition: opacity 1s ease;
+  opacity: calc(var(--beam-opacity, 0.85) * (0.75 + var(--energy) * 0.45));
+  transform: translateY(calc(var(--bass) * -12px)) scaleY(calc(1 + var(--pulse) * 0.06));
+  transition: opacity 0.4s ease;
 }
 
 @keyframes flow-beam {
@@ -1687,7 +1733,8 @@ a:hover {
   }
 
   .light-flow__orb,
-  .light-flow__beam {
+  .light-flow__beam,
+  .light-flow__bloom {
     animation: none !important;
     opacity: 0.35;
   }

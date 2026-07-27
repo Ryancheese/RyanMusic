@@ -438,6 +438,9 @@ $(function() {
       img.onerror = function() {
         $('.aplayer-pic').css('background-image', "url('" + nopic + "')");
       };
+      if (ambientGlow && data.pic) {
+        ambientGlow.setCover(data.pic);
+      }
       document.title = '正在播放: ' + data.title + ' - ' + data.author;
       setValue(data);
     });
@@ -619,14 +622,21 @@ $(function() {
 
   function initLightFlowCycle() {
     var $flow = $('.light-flow');
-    if (!$flow.length) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (!$flow.length) return null;
+
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) {
       $flow.find('.light-flow__orb').addClass('is-visible');
-      return;
+      return {
+        setPlaying: function() {},
+        setCover: function() {},
+        bindPlayer: function() {}
+      };
     }
 
     var $orbs = $flow.find('.light-flow__orb');
     var $beam = $flow.find('.light-flow__beam');
+    var flowEl = $flow[0];
     var schemes = [
       {
         orbs: ['250,45,85', '88,86,214', '255,120,160'],
@@ -650,7 +660,12 @@ $(function() {
       }
     ];
     var lastScheme = -1;
-    var timer = null;
+    var paletteTimer = null;
+    var playing = false;
+    var rafId = 0;
+    var levels = { pulse: 0, bass: 0, mid: 0, treble: 0, energy: 0 };
+    var audioGraph = null;
+    var boundAudio = null;
 
     function rand(min, max) {
       return min + Math.random() * (max - min);
@@ -660,41 +675,39 @@ $(function() {
       return (
         'radial-gradient(circle, rgba(' +
         rgb +
-        ', 0.72) 0%, rgba(' +
+        ', 0.78) 0%, rgba(' +
         rgb +
         ', 0) 68%)'
       );
     }
 
-    function placeOrb($orb, alpha) {
-      $orb.css({
-        left: rand(-12, 72) + '%',
-        top: rand(-12, 72) + '%',
-        transform: 'scale(' + rand(0.88, 1.18).toFixed(2) + ')',
-        '--orb-opacity': alpha.toFixed(2)
-      });
+    function parseRgb(str) {
+      var p = String(str)
+        .split(',')
+        .map(function(n) {
+          return parseInt(n, 10) || 0;
+        });
+      return { r: p[0], g: p[1], b: p[2] };
     }
 
-    function tick() {
-      var idx;
-      do {
-        idx = Math.floor(Math.random() * schemes.length);
-      } while (idx === lastScheme && schemes.length > 1);
-      lastScheme = idx;
-
-      var scheme = schemes[idx];
+    function applyPalette(scheme) {
       $orbs.each(function(i) {
         var $orb = $(this);
-        $orb.removeClass('is-visible');
-        placeOrb($orb, scheme.opacity * rand(0.85, 1.1));
-        $orb.css('background', orbGradient(scheme.orbs[i % scheme.orbs.length]));
-        setTimeout(function() {
-          $orb.addClass('is-visible');
-        }, 80 + i * 120);
+        var rgb = scheme.orbs[i % scheme.orbs.length];
+        $orb.css({
+          background: orbGradient(rgb),
+          '--orb-opacity': (scheme.opacity * rand(0.88, 1.08)).toFixed(2),
+          '--orb-base-scale': rand(0.92, 1.12).toFixed(2),
+          left: rand(-12, 72) + '%',
+          top: rand(-12, 72) + '%'
+        });
+        $orb.addClass('is-visible');
       });
-
       var beamA = scheme.beam[0].split(',');
       var beamB = scheme.beam[1].split(',');
+      var c0 = parseRgb(scheme.orbs[0]);
+      var c1 = parseRgb(scheme.orbs[1]);
+      var c2 = parseRgb(scheme.orbs[2] || scheme.orbs[0]);
       $beam.css({
         '--beam-ar': beamA[0],
         '--beam-ag': beamA[1],
@@ -702,21 +715,279 @@ $(function() {
         '--beam-br': beamB[0],
         '--beam-bg': beamB[1],
         '--beam-bb': beamB[2],
-        '--beam-duration': rand(7, 13).toFixed(1) + 's',
-        '--beam-opacity': rand(0.65, 0.95).toFixed(2)
+        '--beam-duration': (playing ? rand(5.5, 9) : rand(7, 13)).toFixed(1) + 's',
+        '--beam-opacity': rand(0.7, 0.95).toFixed(2)
       });
-
-      timer = setTimeout(tick, rand(5200, 8800));
+      $flow.css({
+        '--bloom-r': c0.r,
+        '--bloom-g': c0.g,
+        '--bloom-b': c0.b,
+        '--bloom2-r': c1.r,
+        '--bloom2-g': c1.g,
+        '--bloom2-b': c1.b,
+        '--bloom3-r': c2.r,
+        '--bloom3-g': c2.g,
+        '--bloom3-b': c2.b
+      });
     }
 
-    tick();
+    function nextIdlePalette() {
+      var idx;
+      do {
+        idx = Math.floor(Math.random() * schemes.length);
+      } while (idx === lastScheme && schemes.length > 1);
+      lastScheme = idx;
+      applyPalette(schemes[idx]);
+      paletteTimer = setTimeout(nextIdlePalette, playing ? rand(9000, 14000) : rand(5200, 8800));
+    }
+
+    function avgRange(data, from, to) {
+      var sum = 0;
+      var n = 0;
+      for (var i = from; i < to && i < data.length; i++) {
+        sum += data[i];
+        n++;
+      }
+      return n ? sum / n / 255 : 0;
+    }
+
+    function smooth(curr, next, factor) {
+      return curr + (next - curr) * factor;
+    }
+
+    function detachAudioGraph() {
+      audioGraph = null;
+      boundAudio = null;
+    }
+
+    function ensureAudioGraph(audio) {
+      if (!audio) return null;
+      if (audioGraph && boundAudio === audio) return audioGraph;
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      try {
+        if (audio._ryanMediaConnected) {
+          audioGraph = audio._ryanMediaConnected;
+          boundAudio = audio;
+          return audioGraph;
+        }
+        var ctx = new Ctx();
+        var src = ctx.createMediaElementSource(audio);
+        var analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.72;
+        src.connect(analyser);
+        analyser.connect(ctx.destination);
+        audioGraph = {
+          ctx: ctx,
+          analyser: analyser,
+          data: new Uint8Array(analyser.frequencyBinCount)
+        };
+        audio._ryanMediaConnected = audioGraph;
+        boundAudio = audio;
+        return audioGraph;
+      } catch (e) {
+        detachAudioGraph();
+        return null;
+      }
+    }
+
+    function readLevels(audio) {
+      var graph = ensureAudioGraph(audio);
+      if (graph && graph.ctx.state === 'suspended') {
+        graph.ctx.resume().catch(function() {});
+      }
+      if (graph) {
+        graph.analyser.getByteFrequencyData(graph.data);
+        var bass = avgRange(graph.data, 0, 6);
+        var mid = avgRange(graph.data, 6, 24);
+        var treble = avgRange(graph.data, 24, 64);
+        var energy = avgRange(graph.data, 0, graph.data.length);
+        var pulse = Math.min(1, bass * 1.35 + energy * 0.35);
+        return { pulse: pulse, bass: bass, mid: mid, treble: treble, energy: energy };
+      }
+      // 无频谱时用有机律动兜底，避免背景完全静止
+      var t = performance.now() / 1000;
+      var organicBass = 0.35 + 0.35 * Math.sin(t * 2.2) + 0.15 * Math.sin(t * 4.1);
+      var organicMid = 0.3 + 0.3 * Math.sin(t * 3.4 + 1.2);
+      var organicTreble = 0.22 + 0.28 * Math.sin(t * 5.6 + 0.4);
+      var energy = (organicBass + organicMid + organicTreble) / 3;
+      return {
+        pulse: Math.max(0, Math.min(1, organicBass)),
+        bass: Math.max(0, Math.min(1, organicBass)),
+        mid: Math.max(0, Math.min(1, organicMid)),
+        treble: Math.max(0, Math.min(1, organicTreble)),
+        energy: Math.max(0, Math.min(1, energy))
+      };
+    }
+
+    function writeCssLevels() {
+      flowEl.style.setProperty('--pulse', levels.pulse.toFixed(3));
+      flowEl.style.setProperty('--bass', levels.bass.toFixed(3));
+      flowEl.style.setProperty('--mid', levels.mid.toFixed(3));
+      flowEl.style.setProperty('--treble', levels.treble.toFixed(3));
+      flowEl.style.setProperty('--energy', levels.energy.toFixed(3));
+    }
+
+    function tickReactive(audio) {
+      if (!playing) return;
+      var next = readLevels(audio);
+      levels.pulse = smooth(levels.pulse, next.pulse, 0.28);
+      levels.bass = smooth(levels.bass, next.bass, 0.24);
+      levels.mid = smooth(levels.mid, next.mid, 0.22);
+      levels.treble = smooth(levels.treble, next.treble, 0.2);
+      levels.energy = smooth(levels.energy, next.energy, 0.2);
+      writeCssLevels();
+      rafId = requestAnimationFrame(function() {
+        tickReactive(audio);
+      });
+    }
+
+    function settleDown() {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      var step = function() {
+        levels.pulse = smooth(levels.pulse, 0, 0.08);
+        levels.bass = smooth(levels.bass, 0, 0.08);
+        levels.mid = smooth(levels.mid, 0, 0.08);
+        levels.treble = smooth(levels.treble, 0, 0.08);
+        levels.energy = smooth(levels.energy, 0, 0.08);
+        writeCssLevels();
+        if (levels.energy > 0.01) {
+          rafId = requestAnimationFrame(step);
+        }
+      };
+      rafId = requestAnimationFrame(step);
+    }
+
+    function setPlaying(isPlaying, audio) {
+      playing = !!isPlaying;
+      $flow.toggleClass('light-flow--playing', playing);
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      if (playing) {
+        tickReactive(audio || null);
+      } else {
+        settleDown();
+      }
+    }
+
+    function rgbToStr(c) {
+      return [c.r, c.g, c.b].join(',');
+    }
+
+    function sampleCoverPalette(picUrl, done) {
+      if (!picUrl || /nopic\.jpg/i.test(picUrl)) {
+        done(null);
+        return;
+      }
+      var img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function() {
+        try {
+          var canvas = document.createElement('canvas');
+          var size = 32;
+          canvas.width = size;
+          canvas.height = size;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, size, size);
+          var data = ctx.getImageData(0, 0, size, size).data;
+          var buckets = {};
+          for (var i = 0; i < data.length; i += 16) {
+            var r = data[i];
+            var g = data[i + 1];
+            var b = data[i + 2];
+            var a = data[i + 3];
+            if (a < 200) continue;
+            var max = Math.max(r, g, b);
+            var min = Math.min(r, g, b);
+            if (max < 40 || min > 220) continue;
+            if (max - min < 18) continue;
+            var key =
+              (r >> 4) + ',' + (g >> 4) + ',' + (b >> 4);
+            if (!buckets[key]) buckets[key] = { r: 0, g: 0, b: 0, n: 0 };
+            buckets[key].r += r;
+            buckets[key].g += g;
+            buckets[key].b += b;
+            buckets[key].n += 1;
+          }
+          var colors = Object.keys(buckets)
+            .map(function(k) {
+              var x = buckets[k];
+              return {
+                r: Math.round(x.r / x.n),
+                g: Math.round(x.g / x.n),
+                b: Math.round(x.b / x.n),
+                n: x.n
+              };
+            })
+            .sort(function(a, b) {
+              return b.n - a.n;
+            });
+          if (colors.length < 2) {
+            done(null);
+            return;
+          }
+          done({
+            orbs: [
+              rgbToStr(colors[0]),
+              rgbToStr(colors[1]),
+              rgbToStr(colors[2] || colors[0])
+            ],
+            beam: [rgbToStr(colors[0]), rgbToStr(colors[1])],
+            opacity: 0.62
+          });
+        } catch (e) {
+          done(null);
+        }
+      };
+      img.onerror = function() {
+        done(null);
+      };
+      img.src = picUrl;
+    }
+
+    function setCover(picUrl) {
+      sampleCoverPalette(picUrl, function(palette) {
+        if (!palette) return;
+        if (paletteTimer) clearTimeout(paletteTimer);
+        applyPalette(palette);
+        paletteTimer = setTimeout(nextIdlePalette, playing ? 12000 : 8000);
+      });
+    }
+
+    function bindPlayer(playerInstance, getTrackData) {
+      if (!playerInstance || playerInstance._ambientBound) return;
+      playerInstance._ambientBound = true;
+      playerInstance.on('play', function() {
+        var track = getTrackData ? getTrackData() : null;
+        if (track && track.pic) setCover(track.pic);
+        setPlaying(true, playerInstance.audio);
+      });
+      playerInstance.on('pause', function() {
+        setPlaying(false);
+      });
+      playerInstance.on('ended', function() {
+        setPlaying(false);
+      });
+    }
+
+    nextIdlePalette();
+    writeCssLevels();
 
     $(window).on('beforeunload', function() {
-      if (timer) clearTimeout(timer);
+      if (paletteTimer) clearTimeout(paletteTimer);
+      cancelAnimationFrame(rafId);
     });
+
+    return {
+      setPlaying: setPlaying,
+      setCover: setCover,
+      bindPlayer: bindPlayer
+    };
   }
 
-  initLightFlowCycle();
+  var ambientGlow = initLightFlowCycle();
 
   // Tab 切换
   $('#j-nav').on('click', 'li', function() {
@@ -893,6 +1164,14 @@ $(function() {
                     setValue,
                     siteTitle
                   );
+                  if (ambientGlow) {
+                    ambientGlow.bindPlayer(player, function() {
+                      return playerList[player.playIndex];
+                    });
+                    if (playerList[0] && playerList[0].pic) {
+                      ambientGlow.setCover(playerList[0].pic);
+                    }
+                  }
                   movePlayButton();
                   tunePlayerStudio(player);
 
