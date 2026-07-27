@@ -11,6 +11,27 @@
 | `maicong-music/template/` | 前端页面模板 |
 | `maicong-music/static/` | 前端 CSS / JS / 图片 |
 | `maicong-music/docker-compose.yml` | Docker 部署 |
+| `macos/` | macOS 轻量启动器与一键安装脚本 |
+
+## macOS 一键安装（推荐）
+
+在终端执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/macos/install.sh | bash
+```
+
+脚本会：检测/安装 PHP → 拉取源码 → 打包 `RyanMusic.app` → 安装到 `/Applications`。
+
+安装后双击 **应用程序 / RyanMusic** 即可，无需再手动开服务。
+
+本地已有仓库时也可：
+
+```bash
+./macos/install.sh
+# 或只打包不安装：
+./macos/build-app.sh && open dist/RyanMusic.app
+```
 
 ## 本地运行（Docker）
 
@@ -19,7 +40,7 @@ cd maicong-music
 docker compose up -d
 ```
 
-浏览器访问：**http://localhost:8080**
+浏览器访问：**http://localhost:8088**
 
 ## 同步代码到容器
 
