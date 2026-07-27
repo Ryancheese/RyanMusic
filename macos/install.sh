@@ -76,9 +76,13 @@ ensure_swiftc() {
 }
 
 resolve_repo_root() {
-  # 若在本仓库内执行，直接使用当前仓库
+  # curl | bash 时 BASH_SOURCE 可能未设置，不能当本地仓库用
+  local src="${BASH_SOURCE[0]:-}"
+  if [[ -z "$src" || "$src" == "bash" || "$src" == "-bash" || "$src" == "/dev/fd/"* ]]; then
+    return 1
+  fi
   local script_dir
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  script_dir="$(cd "$(dirname "$src")" && pwd)"
   if [[ -f "$script_dir/build-app.sh" && -d "$script_dir/../maicong-music" ]]; then
     echo "$(cd "$script_dir/.." && pwd)"
     return 0
@@ -89,10 +93,10 @@ resolve_repo_root() {
 fetch_repo() {
   mkdir -p "$WORK_DIR"
   if command -v git >/dev/null 2>&1; then
-    echo "==> 克隆仓库"
-    git clone --depth 1 --branch main "$REPO_URL" "$WORK_DIR/RyanMusic"
+    echo "==> 克隆仓库" >&2
+    git clone --depth 1 --branch main "$REPO_URL" "$WORK_DIR/RyanMusic" >&2
   else
-    echo "==> 下载仓库 zip"
+    echo "==> 下载仓库 zip" >&2
     local zip="$WORK_DIR/repo.zip"
     curl -fsSL -o "$zip" "https://github.com/Ryancheese/RyanMusic/archive/refs/heads/main.zip"
     if ! command -v unzip >/dev/null 2>&1; then
@@ -102,7 +106,8 @@ fetch_repo() {
     unzip -q "$zip" -d "$WORK_DIR"
     mv "$WORK_DIR"/RyanMusic-main "$WORK_DIR/RyanMusic"
   fi
-  echo "$WORK_DIR/RyanMusic"
+  # 只把路径打到 stdout，供 root="$(fetch_repo)" 捕获
+  printf '%s\n' "$WORK_DIR/RyanMusic"
 }
 
 build_and_install() {
