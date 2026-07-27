@@ -11,7 +11,7 @@
 | `maicong-music/template/` | 前端页面模板 |
 | `maicong-music/static/` | 前端 CSS / JS / 图片 |
 | `maicong-music/docker-compose.yml` | Docker 部署 |
-| `macos/` | macOS 轻量启动器与一键安装脚本 |
+| `macos/` | macOS 原生窗口 App（WKWebView）与一键安装脚本 |
 
 ## macOS 一键安装（推荐）
 
@@ -21,9 +21,11 @@
 curl -fsSL https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/macos/install.sh | bash
 ```
 
-脚本会：检测/安装 PHP → 拉取源码 → 打包 `RyanMusic.app` → 安装到 `/Applications`。
+脚本会：检测 PHP / Swift 编译器 → 拉取源码 → 编译带内嵌网页窗口的 `RyanMusic.app` → 安装到 `/Applications`。
 
-安装后双击 **应用程序 / RyanMusic** 即可，无需再手动开服务。
+安装后双击 **应用程序 / RyanMusic** 即可（独立窗口，关掉窗口即停止服务）。
+
+依赖：本机 PHP（可用 Homebrew）、Xcode Command Line Tools（`xcode-select --install`）。
 
 本地已有仓库时也可：
 

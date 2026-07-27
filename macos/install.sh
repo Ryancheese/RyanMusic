@@ -66,6 +66,15 @@ ensure_php() {
   green "PHP 安装完成：$(find_php)"
 }
 
+ensure_swiftc() {
+  if command -v swiftc >/dev/null 2>&1; then
+    return 0
+  fi
+  red "未找到 swiftc。请先安装 Xcode Command Line Tools："
+  red "  xcode-select --install"
+  exit 1
+}
+
 resolve_repo_root() {
   # 若在本仓库内执行，直接使用当前仓库
   local script_dir
@@ -98,7 +107,7 @@ fetch_repo() {
 
 build_and_install() {
   local root="$1"
-  chmod +x "$root/macos/build-app.sh" "$root/macos/launcher.sh"
+  chmod +x "$root/macos/build-app.sh" "$root/macos/install.sh"
   echo "==> 打包 App"
   "$root/macos/build-app.sh"
 
@@ -121,6 +130,7 @@ build_and_install() {
 main() {
   require_macos
   ensure_php
+  ensure_swiftc
 
   local root
   if root="$(resolve_repo_root)"; then

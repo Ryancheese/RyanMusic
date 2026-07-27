@@ -9,17 +9,32 @@ CONTENTS="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS/MacOS"
 RESOURCES_DIR="$CONTENTS/Resources"
 SRC_MUSIC="$ROOT/maicong-music"
+SRC_SWIFT="$ROOT/macos/AppMain.swift"
+
+if ! command -v swiftc >/dev/null 2>&1; then
+  echo "需要 swiftc（安装 Xcode Command Line Tools：xcode-select --install）" >&2
+  exit 1
+fi
+
+if [[ ! -f "$SRC_SWIFT" ]]; then
+  echo "找不到 $SRC_SWIFT" >&2
+  exit 1
+fi
 
 echo "==> 清理旧包"
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
+echo "==> 编译原生窗口 App（WKWebView）"
+swiftc -O \
+  -framework Cocoa \
+  -framework WebKit \
+  -o "$MACOS_DIR/RyanMusic" \
+  "$SRC_SWIFT"
+chmod +x "$MACOS_DIR/RyanMusic"
+
 echo "==> 写入 Info.plist"
 cp "$ROOT/macos/Info.plist" "$CONTENTS/Info.plist"
-
-echo "==> 写入启动脚本"
-cp "$ROOT/macos/launcher.sh" "$MACOS_DIR/RyanMusic"
-chmod +x "$MACOS_DIR/RyanMusic"
 
 echo "==> 复制站点文件"
 rsync -a \
@@ -29,7 +44,6 @@ rsync -a \
   --exclude 'node_modules/' \
   "$SRC_MUSIC/" "$RESOURCES_DIR/maicong-music/"
 
-# 确保缓存目录可写
 mkdir -p "$RESOURCES_DIR/maicong-music/core/cache"
 
 echo
