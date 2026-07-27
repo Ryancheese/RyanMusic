@@ -178,19 +178,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         decidePolicyFor navigationResponse: WKNavigationResponse,
         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
     ) {
+        // 仅对显式附件走下载；audio/mpeg 等交给 <audio> 播放，
+        // 否则 canShowMIMEType=false 时会误触发下载，导致网易曲目 00:00。
         if let http = navigationResponse.response as? HTTPURLResponse {
             let cd = (http.value(forHTTPHeaderField: "Content-Disposition") ?? "").lowercased()
-            let mime = (http.mimeType ?? "").lowercased()
-            let isAttachment = cd.contains("attachment")
-            let isAudio = mime.hasPrefix("audio/") || mime.contains("mpeg") || mime.contains("mp4")
-            if isAttachment || (isAudio && !navigationResponse.canShowMIMEType) {
+            if cd.contains("attachment") {
                 decisionHandler(.download)
                 return
             }
-        }
-        if !navigationResponse.canShowMIMEType {
-            decisionHandler(.download)
-            return
         }
         decisionHandler(.allow)
     }

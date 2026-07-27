@@ -27,6 +27,10 @@ curl -fsSL https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/macos/ins
 
 依赖：本机 PHP（可用 Homebrew）、Xcode Command Line Tools（`xcode-select --install`）。
 
+### 更新
+
+朋友或本机需要更新到最新版时，**再执行一次上面的安装命令**即可（会重新编译并覆盖 `/Applications/RyanMusic.app`）。更新前请先完全退出 RyanMusic。
+
 本地已有仓库时也可：
 
 ```bash

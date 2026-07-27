@@ -436,7 +436,7 @@ $(function() {
       var img = new Image();
       img.src = data.pic;
       img.onerror = function() {
-        $('.aplayer-pic').css('background-image', 'url(' + nopic + ')');
+        $('.aplayer-pic').css('background-image', "url('" + nopic + "')");
       };
       document.title = '正在播放: ' + data.title + ' - ' + data.author;
       setValue(data);

@@ -1185,29 +1185,6 @@ function mc_get_song_by_id($songid, $site = 'netease', $multi = false)
         break;
         case 'netease':
         default:
-            if (MC_INTERNAL) {
-                $radio_streams                   = [
-                    'method'      => 'POST',
-                    'url'         => 'http://music.163.com/api/linux/forward',
-                    'referer'     => 'http://music.163.com/',
-                    'proxy'       => false,
-                    'body'        => encode_netease_data([
-                        'method'  => 'POST',
-                        'url'     => 'http://music.163.com/api/song/enhance/player/url',
-                        'params'  => [
-                            'ids' => is_array($songid) ? $songid : [$songid],
-                            'br'  => 320000,
-                        ]
-                    ])
-                ];
-                $radio_info                      = json_decode(mc_curl($radio_streams), true);
-                $radio_urls                      = [];
-                if (!empty($radio_info['data'])) {
-                    foreach ($radio_info['data'] as $val) {
-                        $radio_urls[$val['id']]  = $val['url'];
-                    }
-                }
-            }
             foreach ($radio_result as $val) {
                 $radio_json                  = json_decode($val, true);
                 $radio_data                  = $radio_json['songs'];
@@ -1220,32 +1197,21 @@ function mc_get_song_by_id($songid, $site = 'netease', $multi = false)
                         }
                         $radio_author        = implode(',', $radio_authors);
                         $radio_lrc_urls      = mc_song_urls($radio_song_id, 'lrc', $site);
+                        $radio_lrc           = [];
                         if ($radio_lrc_urls) {
                             $radio_lrc       = json_decode(mc_curl($radio_lrc_urls), true);
                         }
-                        $radio_music         = MC_INTERNAL ? $radio_urls[$radio_song_id] : 'http://music.163.com/song/media/outer/url?id=' . $radio_song_id . '.mp3';
-                        $myhkw_song          = mc_get_myhkw_song($radio_song_id, 'netease');
-                        if (!empty($myhkw_song['url'])) {
-                            $radio_music     = (stripos($myhkw_song['url'], 'http') === 0)
-                                ? $myhkw_song['url']
-                                : 'https://s.myhkw.cn/' . ltrim($myhkw_song['url'], '/');
-                        }
                         $radio_pic           = $value['album']['picUrl'] . '?param=300x300';
-                        if (!empty($myhkw_song['cover'])) {
-                            $radio_pic       = (stripos($myhkw_song['cover'], 'http') === 0)
-                                ? $myhkw_song['cover']
-                                : 'https://s.myhkw.cn/' . ltrim($myhkw_song['cover'], '/');
-                        }
-                        $radio_songs[]       = [
+                        $radio_songs[]       = mc_netease_wrap_track([
                             'type'   => 'netease',
                             'link'   => 'http://music.163.com/#/song?id=' . $radio_song_id,
                             'songid' => $radio_song_id,
-                            'title'  => !empty($myhkw_song['name']) ? $myhkw_song['name'] : $value['name'],
-                            'author' => !empty($myhkw_song['artist']) ? $myhkw_song['artist'] : $radio_author,
+                            'title'  => $value['name'],
+                            'author' => $radio_author,
                             'lrc'    => !empty($radio_lrc['lrc']) ? $radio_lrc['lrc']['lyric'] : '',
-                            'url'    => $radio_music,
+                            'url'    => '',
                             'pic'    => $radio_pic
-                        ];
+                        ]);
                     }
                 }
             }
@@ -1752,6 +1718,130 @@ function mc_qq_wrap_track($song)
     return $song;
 }
 
+function mc_netease_play_cache_get($songid)
+{
+    $path = mc_qq_cache_file('netease_play', $songid);
+    if (!is_file($path)) {
+        return null;
+    }
+    $data = json_decode(file_get_contents($path), true);
+    if (empty($data['url']) || empty($data['expires']) || $data['expires'] < time()) {
+        return null;
+    }
+    return $data['url'];
+}
+
+function mc_netease_play_cache_set($songid, $url, $ttl = 600)
+{
+    file_put_contents(mc_qq_cache_file('netease_play', $songid), json_encode([
+        'url'     => $url,
+        'expires' => time() + $ttl,
+    ]));
+}
+
+function mc_netease_https_url($url)
+{
+    if (!$url) {
+        return $url;
+    }
+    if (stripos($url, 'http://') === 0 && preg_match('#(126\.net|163\.com)#i', $url)) {
+        return 'https://' . substr($url, 7);
+    }
+    return $url;
+}
+
+function mc_netease_official_play_url($songid)
+{
+    $streams = [
+        'method'  => 'POST',
+        'url'     => 'http://music.163.com/api/linux/forward',
+        'referer' => 'http://music.163.com/',
+        'proxy'   => false,
+        'body'    => encode_netease_data([
+            'method' => 'POST',
+            'url'    => 'http://music.163.com/api/song/enhance/player/url',
+            'params' => [
+                'ids' => [(int) $songid],
+                'br'  => 320000,
+            ],
+        ]),
+    ];
+    $info = json_decode(mc_curl($streams), true);
+    $url = $info['data'][0]['url'] ?? null;
+    if ($url && !mc_is_error($url)) {
+        return $url;
+    }
+    return null;
+}
+
+function mc_netease_bootstrap_play_url($songid)
+{
+    $base = mc_qq_bootstrap_base();
+    if (!$base) {
+        return null;
+    }
+    $resp = mc_curl([
+        'method'  => 'POST',
+        'url'     => $base . '/',
+        'referer' => $base . '/',
+        'headers' => [
+            'X-Requested-With: XMLHttpRequest',
+            'Content-Type: application/x-www-form-urlencoded',
+        ],
+        'body'    => http_build_query([
+            'input'  => $songid,
+            'filter' => 'id',
+            'type'   => 'netease',
+            'page'   => 1,
+        ]),
+    ]);
+    $json = json_decode($resp, true);
+    if (empty($json['data'][0]['url'])) {
+        return null;
+    }
+    $api = $base . '/' . ltrim($json['data'][0]['url'], '/');
+    $loc = mc_qq_curl_redirect($api, $base . '/');
+    if (!$loc) {
+        return null;
+    }
+    if (preg_match('#(126\.net|163\.com|music\.163)#i', $loc)) {
+        return $loc;
+    }
+    return mc_qq_curl_redirect($loc, $base . '/') ?: $loc;
+}
+
+function mc_netease_resolve_play_url($songid)
+{
+    $cached = mc_netease_play_cache_get($songid);
+    if ($cached) {
+        return $cached;
+    }
+
+    $url = mc_netease_official_play_url($songid);
+    if (!$url) {
+        $url = mc_netease_bootstrap_play_url($songid);
+    }
+    if ($url && !mc_is_error($url) && stripos($url, '/404') === false) {
+        $url = mc_netease_https_url($url);
+        mc_netease_play_cache_set($songid, $url);
+        return $url;
+    }
+    return null;
+}
+
+function mc_netease_wrap_track($song)
+{
+    if (($song['type'] ?? '') !== 'netease' || empty($song['songid'])) {
+        return $song;
+    }
+    $id = $song['songid'];
+    $song['url'] = mc_api_proxy_url('url', 'netease', $id);
+    if (!empty($song['pic'])) {
+        $song['pic'] = mc_netease_https_url($song['pic']);
+    }
+    return $song;
+}
+
 function mc_api_handle_request()
 {
     $get = isset($_GET['get']) ? trim($_GET['get']) : '';
@@ -1768,18 +1858,27 @@ function mc_api_handle_request()
         header('HTTP/1.1 403 Forbidden');
         exit('非法请求');
     }
-    if ($type !== 'qq') {
+    if (!in_array($type, ['qq', 'netease', 'wy'], true)) {
         header('HTTP/1.1 400 Bad Request');
         exit('暂不支持该音源');
     }
-    if (!preg_match('/^[a-zA-Z0-9]+$/', $id)) {
+    if ($type === 'wy') {
+        $type = 'netease';
+    }
+    if ($type === 'qq' && !preg_match('/^[a-zA-Z0-9]+$/', $id)) {
+        header('HTTP/1.1 400 Bad Request');
+        exit('Invalid id');
+    }
+    if ($type === 'netease' && !preg_match('/^\d+$/', $id)) {
         header('HTTP/1.1 400 Bad Request');
         exit('Invalid id');
     }
 
     switch ($get) {
         case 'url':
-            $play_url = mc_qq_resolve_play_url($id);
+            $play_url = ($type === 'qq')
+                ? mc_qq_resolve_play_url($id)
+                : mc_netease_resolve_play_url($id);
             if (!$play_url) {
                 header('HTTP/1.1 502 Bad Gateway');
                 exit('无法获取播放地址');
@@ -1795,6 +1894,10 @@ function mc_api_handle_request()
             header('Location: ' . $play_url, true, 302);
             exit;
         case 'pic':
+            if ($type !== 'qq') {
+                header('HTTP/1.1 400 Bad Request');
+                exit('该音源封面无需代理');
+            }
             $pic = mc_qq_resolve_pic_url($id);
             if (!$pic) {
                 header('HTTP/1.1 404 Not Found');
@@ -1803,6 +1906,10 @@ function mc_api_handle_request()
             header('Location: ' . $pic, true, 302);
             exit;
         case 'lrc':
+            if ($type !== 'qq') {
+                header('HTTP/1.1 400 Bad Request');
+                exit('该音源歌词无需代理');
+            }
             header('Content-Type: text/plain; charset=utf-8');
             echo mc_qq_resolve_lrc_text($id);
             exit;

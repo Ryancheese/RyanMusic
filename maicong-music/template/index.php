@@ -19,6 +19,7 @@ if (!defined('MC_CORE')) {
     <meta charset="UTF-8">
     <title>RyanMusic - 网易云 · QQ 音乐搜索</title>
     <meta name="renderer" content="webkit">
+    <meta name="referrer" content="no-referrer">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta http-equiv="Cache-Control" content="no-transform">
     <meta http-equiv="Cache-Control" content="no-siteapp">
