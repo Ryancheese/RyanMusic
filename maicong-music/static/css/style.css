@@ -955,7 +955,6 @@ a:hover {
   margin: 0 !important;
   border-radius: 18px !important;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.12) !important;
-  cursor: pointer;
 }
 
 .result-player--studio .aplayer-pic .aplayer-button {

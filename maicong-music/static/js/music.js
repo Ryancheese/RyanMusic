@@ -169,7 +169,24 @@ $(function() {
     return lines.length ? lines.join('\n') : '[00:00.00] 暂无歌词';
   }
 
+  function resolveMediaUrl(url) {
+    if (!url) return url;
+    if (/^https?:\/\//i.test(url)) return url;
+    return getUrl() + url.replace(/^\//, '');
+  }
+
+  function normalizeTrackMedia(track) {
+    if (!track) return track;
+    track.url = resolveMediaUrl(track.url);
+    track.pic = resolveMediaUrl(track.pic);
+    return track;
+  }
+
   function buildDownloadUrl(url, name) {
+    if (/api\.php\?/i.test(url)) {
+      var sep = url.indexOf('?') >= 0 ? '&' : '?';
+      return url + sep + 'dl=1&name=' + encodeURIComponent(name);
+    }
     return (
       getUrl() +
       '?download=1&url=' +
@@ -771,6 +788,7 @@ $(function() {
                     v.lrc = '[00:00.00] 暂无歌词';
                   }
                   v.lrc = stripLrcMeta(v.lrc);
+                  normalizeTrackMedia(v);
                 });
                 var setValue = function setValue(data) {
                   var name = data.title + '-' + data.author;

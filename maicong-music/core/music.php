@@ -945,64 +945,36 @@ function mc_get_song_by_id($songid, $site = 'netease', $multi = false)
             }
             break;
         case 'qq':
-            $radio_vkey = json_decode(mc_curl([
-                'method'     => 'GET',
-                'url'        => 'http://base.music.qq.com/fcgi-bin/fcg_musicexpress.fcg',
-                'referer'    => 'http://y.qq.com',
-                'proxy'      => false,
-                'body'       => [
-                    'json'   => 3,
-                    'guid'   => 5150825362,
-                    'format' => 'json'
-                ]
-            ]), true);
             foreach ($radio_result as $val) {
                 $radio_json                  = json_decode($val, true);
                 $radio_data                  = $radio_json['data'];
-                $radio_url                   = $radio_json['url'];
-                if (!empty($radio_data) && !empty($radio_url)) {
-                    foreach ($radio_data as $value) {
-                        $radio_song_id       = $value['mid'];
-                        $radio_authors       = [];
-                        foreach ($value['singer'] as $singer) {
-                            $radio_authors[] = $singer['title'];
-                        }
-                        $radio_author        = implode(',', $radio_authors);
-                        $radio_lrc_urls      = mc_song_urls($radio_song_id, 'lrc', $site);
-                        if ($radio_lrc_urls) {
-                            $radio_lrc       = jsonp2json(mc_curl($radio_lrc_urls));
-                        }
-                        $radio_music         = 'http://' . str_replace('ws', 'dl', $radio_url[$value['id']]);
-                        if (!empty($radio_vkey['key'])) {
-                            $radio_music     = generate_qqmusic_url(
-                                $radio_song_id,
-                                $radio_vkey['key']
-                            ) ?: $radio_music;
-                        }
-                        $radio_album_id      = $value['album']['mid'];
-                        $myhkw_song          = mc_get_myhkw_song($radio_song_id, 'qq');
-                        if (!empty($myhkw_song['url'])) {
-                            $radio_music     = (stripos($myhkw_song['url'], 'http') === 0)
-                                ? $myhkw_song['url']
-                                : 'https://s.myhkw.cn/' . ltrim($myhkw_song['url'], '/');
-                        }
-                        $radio_pic           = 'http://y.gtimg.cn/music/photo_new/T002R300x300M000' . $radio_album_id . '.jpg';
-                        if (!empty($myhkw_song['cover'])) {
-                            $radio_pic       = (stripos($myhkw_song['cover'], 'http') === 0)
-                                ? $myhkw_song['cover']
-                                : 'https://s.myhkw.cn/' . ltrim($myhkw_song['cover'], '/');
-                        }
-                        $radio_songs[]       = [
-                            'type'   => 'qq',
-                            'link'   => 'http://y.qq.com/n/yqq/song/' . $radio_song_id . '.html',
-                            'songid' => $radio_song_id,
-                            'title'  => !empty($myhkw_song['name']) ? $myhkw_song['name'] : $value['title'],
-                            'author' => !empty($myhkw_song['artist']) ? $myhkw_song['artist'] : $radio_author,
-                            'lrc'    => str_decode($radio_lrc['lyric']),
-                            'url'    => $radio_music,
-                            'pic'    => $radio_pic
-                        ];
+                if (empty($radio_data)) {
+                    continue;
+                }
+                foreach ($radio_data as $value) {
+                    $radio_song_id       = $value['mid'];
+                    $radio_authors       = [];
+                    foreach ($value['singer'] as $singer) {
+                        $radio_authors[] = $singer['title'];
                     }
+                    $radio_author        = implode(',', $radio_authors);
+                    $radio_lrc_urls      = mc_song_urls($radio_song_id, 'lrc', $site);
+                    $radio_lrc           = [];
+                    if ($radio_lrc_urls) {
+                        $radio_lrc       = jsonp2json(mc_curl($radio_lrc_urls));
+                    }
+                    $radio_album_id      = $value['album']['mid'];
+                    $radio_pic           = 'http://y.gtimg.cn/music/photo_new/T002R300x300M000' . $radio_album_id . '.jpg';
+                    $radio_songs[]       = mc_qq_wrap_track([
+                        'type'   => 'qq',
+                        'link'   => 'https://y.qq.com/n/ryqq/songDetail/' . $radio_song_id,
+                        'songid' => $radio_song_id,
+                        'title'  => $value['title'],
+                        'author' => $radio_author,
+                        'lrc'    => str_decode($radio_lrc['lyric'] ?? ''),
+                        'url'    => '',
+                        'pic'    => $radio_pic,
+                    ]);
                 }
             }
             break;
@@ -1461,6 +1433,383 @@ function str_decode($str) {
     $str = str_replace(['&#13;', '&#10;'], ['', "\n"], $str);
     $str = html_entity_decode($str, ENT_QUOTES, 'UTF-8');
     return $str;
+}
+
+// --- QQ 资源代理（签名 api.php + fcg_pyq_play 取链） ---
+
+function mc_api_secret()
+{
+    if (defined('MC_API_SECRET') && MC_API_SECRET !== '') {
+        return MC_API_SECRET;
+    }
+    return hash('sha256', MC_CORE_DIR . '|' . MC_VERSION);
+}
+
+function mc_api_sign($get, $type, $id, $t)
+{
+    $payload = $get . '|' . $type . '|' . $id . '|' . $t;
+    $raw = hash_hmac('sha256', $payload, mc_api_secret(), true);
+    return substr(strtr(base64_encode($raw), '+/=', '._-'), 0, 13);
+}
+
+function mc_api_verify_sign($get, $type, $id, $t, $sign)
+{
+    if (!$sign || !$t) {
+        return false;
+    }
+    if (abs(time() - (int) $t) > 86400) {
+        return false;
+    }
+    return hash_equals(mc_api_sign($get, $type, $id, $t), $sign);
+}
+
+function mc_api_proxy_url($get, $type, $id)
+{
+    $t = time();
+    return 'api.php?' . http_build_query([
+        'get'   => $get,
+        'type'  => $type,
+        'id'    => $id,
+        'sign'  => mc_api_sign($get, $type, $id, $t),
+        't'     => $t,
+    ]);
+}
+
+function mc_qq_cache_dir($subdir)
+{
+    $dir = MC_CORE_DIR . '/cache/' . $subdir;
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+    return $dir;
+}
+
+function mc_qq_cache_file($subdir, $key)
+{
+    return mc_qq_cache_dir($subdir) . '/' . preg_replace('/[^a-zA-Z0-9]/', '_', $key) . '.json';
+}
+
+function mc_qq_pyq_cache_get($songmid)
+{
+    $path = mc_qq_cache_file('qq_pyq', $songmid);
+    if (!is_file($path)) {
+        return null;
+    }
+    $data = json_decode(file_get_contents($path), true);
+    if (empty($data['code'])) {
+        return null;
+    }
+    if (!empty($data['expires']) && $data['expires'] < time()) {
+        return null;
+    }
+    return $data['code'];
+}
+
+function mc_qq_pyq_cache_set($songmid, $code)
+{
+    file_put_contents(mc_qq_cache_file('qq_pyq', $songmid), json_encode([
+        'code'    => $code,
+        'expires' => time() + 7 * 86400,
+    ]));
+}
+
+function mc_qq_play_cache_get($songmid)
+{
+    $path = mc_qq_cache_file('qq_play', $songmid);
+    if (!is_file($path)) {
+        return null;
+    }
+    $data = json_decode(file_get_contents($path), true);
+    if (empty($data['url']) || empty($data['expires']) || $data['expires'] < time()) {
+        return null;
+    }
+    return $data['url'];
+}
+
+function mc_qq_play_cache_set($songmid, $url, $ttl = 1800)
+{
+    file_put_contents(mc_qq_cache_file('qq_play', $songmid), json_encode([
+        'url'     => $url,
+        'expires' => time() + $ttl,
+    ]));
+}
+
+function mc_qq_bootstrap_base()
+{
+    if (!defined('MC_QQ_PYQ_BOOTSTRAP') || !MC_QQ_PYQ_BOOTSTRAP) {
+        return null;
+    }
+    return rtrim(MC_QQ_PYQ_BOOTSTRAP, '/');
+}
+
+function mc_qq_bootstrap_pyq_code($songmid)
+{
+    $base = mc_qq_bootstrap_base();
+    if (!$base) {
+        return null;
+    }
+    $resp = mc_curl([
+        'method'  => 'POST',
+        'url'     => $base . '/',
+        'referer' => $base . '/',
+        'headers' => [
+            'X-Requested-With: XMLHttpRequest',
+            'Content-Type: application/x-www-form-urlencoded',
+        ],
+        'body'    => http_build_query([
+            'input'  => $songmid,
+            'filter' => 'id',
+            'type'   => 'qq',
+            'page'   => 1,
+        ]),
+    ]);
+    $json = json_decode($resp, true);
+    if (empty($json['data'][0]['url'])) {
+        return null;
+    }
+    $api = $base . '/' . ltrim($json['data'][0]['url'], '/');
+    $ch = curl_init($api);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HEADER       => true,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_HTTPHEADER   => [
+            'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'Referer: ' . $base . '/',
+        ],
+    ]);
+    $raw = curl_exec($ch);
+    curl_close($ch);
+    if (preg_match('/[?&]code=([^&\s\'"]+)/', $raw, $m)) {
+        return $m[1];
+    }
+    return null;
+}
+
+function mc_qq_get_pyq_code($songmid)
+{
+    $cached = mc_qq_pyq_cache_get($songmid);
+    if ($cached) {
+        return $cached;
+    }
+    $code = mc_qq_bootstrap_pyq_code($songmid);
+    if ($code) {
+        mc_qq_pyq_cache_set($songmid, $code);
+    }
+    return $code;
+}
+
+function mc_qq_curl_redirect($url, $referer = 'https://y.qq.com/')
+{
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HEADER         => true,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_HTTPHEADER     => [
+            'Referer: ' . $referer,
+            'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        ],
+    ]);
+    $resp = curl_exec($ch);
+    $loc = curl_getinfo($ch, CURLINFO_REDIRECT_URL);
+    curl_close($ch);
+    if (!$loc && preg_match('/^Location:\s*(.+)$/mi', $resp, $m)) {
+        $loc = trim($m[1]);
+    }
+    return $loc ?: null;
+}
+
+function mc_qq_pyq_follow($songmid, $code)
+{
+    $play = 'https://c6.y.qq.com/rsc/fcgi-bin/fcg_pyq_play.fcg?' . http_build_query([
+        'songid'   => '',
+        'songmid'  => $songmid,
+        'songtype' => 1,
+        'fromtag'  => 'myhkw.cn',
+        'uin'      => '10001',
+        'code'     => $code,
+        'cache'    => date('mdHis'),
+    ]);
+    $loc = mc_qq_curl_redirect($play);
+    if (!$loc) {
+        return null;
+    }
+    if (stripos($loc, 'stream.qqmusic.qq.com') !== false || stripos($loc, 'aqqmusic.tc.qq.com') !== false) {
+        return $loc;
+    }
+    return mc_qq_curl_redirect($loc) ?: $loc;
+}
+
+function mc_qq_bootstrap_play_url($songmid)
+{
+    $base = mc_qq_bootstrap_base();
+    if (!$base) {
+        return null;
+    }
+    $resp = mc_curl([
+        'method'  => 'POST',
+        'url'     => $base . '/',
+        'referer' => $base . '/',
+        'headers' => [
+            'X-Requested-With: XMLHttpRequest',
+            'Content-Type: application/x-www-form-urlencoded',
+        ],
+        'body'    => http_build_query([
+            'input'  => $songmid,
+            'filter' => 'id',
+            'type'   => 'qq',
+            'page'   => 1,
+        ]),
+    ]);
+    $json = json_decode($resp, true);
+    if (empty($json['data'][0]['url'])) {
+        return null;
+    }
+    $api = $base . '/' . ltrim($json['data'][0]['url'], '/');
+    $loc = mc_qq_curl_redirect($api, $base . '/');
+    if (!$loc) {
+        return null;
+    }
+    if (stripos($loc, 'stream.qqmusic.qq.com') !== false || stripos($loc, 'aqqmusic.tc.qq.com') !== false) {
+        return $loc;
+    }
+    return mc_qq_curl_redirect($loc) ?: $loc;
+}
+
+function mc_qq_resolve_play_url($songmid)
+{
+    $cached = mc_qq_play_cache_get($songmid);
+    if ($cached) {
+        return $cached;
+    }
+
+    $code = mc_qq_get_pyq_code($songmid);
+    if ($code) {
+        $url = mc_qq_pyq_follow($songmid, $code);
+        if ($url && !mc_is_error($url)) {
+            mc_qq_play_cache_set($songmid, $url);
+            return $url;
+        }
+    }
+
+    $url = mc_qq_bootstrap_play_url($songmid);
+    if ($url && !mc_is_error($url)) {
+        mc_qq_play_cache_set($songmid, $url);
+        return $url;
+    }
+    return null;
+}
+
+function mc_qq_song_detail($songmid)
+{
+    static $cache = [];
+    if (isset($cache[$songmid])) {
+        return $cache[$songmid];
+    }
+    $raw = mc_curl([
+        'url'        => 'http://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg?songmid=' . urlencode($songmid) . '&format=json',
+        'referer'    => 'https://y.qq.com/',
+        'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+    ]);
+    $json = json_decode($raw, true);
+    $cache[$songmid] = $json['data'][0] ?? null;
+    return $cache[$songmid];
+}
+
+function mc_qq_resolve_pic_url($songmid)
+{
+    $detail = mc_qq_song_detail($songmid);
+    $album_mid = $detail['album']['mid'] ?? '';
+    if (!$album_mid) {
+        return null;
+    }
+    return 'https://y.gtimg.cn/music/photo_new/T002R300x300M000' . $album_mid . '.jpg';
+}
+
+function mc_qq_resolve_lrc_text($songmid)
+{
+    $raw = mc_curl([
+        'url'        => 'https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=' . urlencode($songmid) . '&format=json&nobase64=1',
+        'referer'    => 'https://y.qq.com/',
+        'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+    ]);
+    $json = json_decode($raw, true);
+    if (empty($json['lyric'])) {
+        return "[00:00.00] 暂无歌词\n";
+    }
+    return str_decode($json['lyric']);
+}
+
+function mc_qq_wrap_track($song)
+{
+    if (($song['type'] ?? '') !== 'qq' || empty($song['songid'])) {
+        return $song;
+    }
+    $id = $song['songid'];
+    $song['url'] = mc_api_proxy_url('url', 'qq', $id);
+    $song['pic'] = mc_api_proxy_url('pic', 'qq', $id);
+    return $song;
+}
+
+function mc_api_handle_request()
+{
+    $get = isset($_GET['get']) ? trim($_GET['get']) : '';
+    $type = isset($_GET['type']) ? trim($_GET['type']) : '';
+    $id = isset($_GET['id']) ? trim($_GET['id']) : '';
+    $sign = isset($_GET['sign']) ? trim($_GET['sign']) : '';
+    $t = isset($_GET['t']) ? trim($_GET['t']) : '';
+
+    if (!$get || !$type || !$id || !$sign || !$t) {
+        header('HTTP/1.1 400 Bad Request');
+        exit('缺少请求参数');
+    }
+    if (!mc_api_verify_sign($get, $type, $id, $t, $sign)) {
+        header('HTTP/1.1 403 Forbidden');
+        exit('非法请求');
+    }
+    if ($type !== 'qq') {
+        header('HTTP/1.1 400 Bad Request');
+        exit('暂不支持该音源');
+    }
+    if (!preg_match('/^[a-zA-Z0-9]+$/', $id)) {
+        header('HTTP/1.1 400 Bad Request');
+        exit('Invalid id');
+    }
+
+    switch ($get) {
+        case 'url':
+            $play_url = mc_qq_resolve_play_url($id);
+            if (!$play_url) {
+                header('HTTP/1.1 502 Bad Gateway');
+                exit('无法获取播放地址');
+            }
+            if (!empty($_GET['dl'])) {
+                $name = isset($_GET['name']) ? $_GET['name'] : 'RyanMusic';
+                $name = preg_replace('/[\\\\\/:*?"<>|\x00-\x1F]/u', '_', $name);
+                if (!preg_match('/\.mp3$/i', $name)) {
+                    $name .= '.mp3';
+                }
+                header('Content-Disposition: attachment; filename="' . $name . '"');
+            }
+            header('Location: ' . $play_url, true, 302);
+            exit;
+        case 'pic':
+            $pic = mc_qq_resolve_pic_url($id);
+            if (!$pic) {
+                header('HTTP/1.1 404 Not Found');
+                exit('封面不存在');
+            }
+            header('Location: ' . $pic, true, 302);
+            exit;
+        case 'lrc':
+            header('Content-Type: text/plain; charset=utf-8');
+            echo mc_qq_resolve_lrc_text($id);
+            exit;
+        default:
+            header('HTTP/1.1 400 Bad Request');
+            exit('未知资源类型');
+    }
 }
 
 // Server

@@ -13,7 +13,7 @@
 define('MC_CORE', true);
 
 // 定义版本
-define('MC_VERSION', '1.6.2');
+define('MC_VERSION', '1.6.3');
 
 // 核心文件目录
 define('MC_CORE_DIR', __DIR__ . '/core');
@@ -32,6 +32,12 @@ define('MC_PROXYUSERPWD', false);
 
 // 服务器是否在国内
 define('MC_INTERNAL', 1);
+
+// QQ 播放 pyq code 引导源（用于首次解析 partner code，留空则仅使用本地缓存）
+define('MC_QQ_PYQ_BOOTSTRAP', 'https://music.90svip.cn/');
+
+// 资源代理签名密钥（留空则基于 core 目录自动生成）
+define('MC_API_SECRET', '');
 
 // PHP 版本判断
 if (version_compare(phpversion(), '5.4', '<')) {

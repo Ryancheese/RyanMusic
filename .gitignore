@@ -6,3 +6,4 @@ node_modules/
 .npm-cache/
 web/.next/
 .vercel
+maicong-music/core/cache/
