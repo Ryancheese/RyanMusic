@@ -196,6 +196,53 @@ $(function() {
     );
   }
 
+  function canNativeSave() {
+    return !!(
+      window.webkit &&
+      window.webkit.messageHandlers &&
+      window.webkit.messageHandlers.ryanSave
+    );
+  }
+
+  function nativeSave(payload) {
+    if (!canNativeSave()) return false;
+    try {
+      window.webkit.messageHandlers.ryanSave.postMessage(payload);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function bindNativeDownloadButtons() {
+    if (!canNativeSave()) return;
+    var $src = $('#j-src-btn');
+    var $lrc = $('#j-lrc-btn');
+    $src.off('click.ryanNative').on('click.ryanNative', function(e) {
+      var href = $(this).attr('href') || '';
+      var name = ($(this).data('save-name') || 'RyanMusic') + '';
+      if (!href || href === '#') return;
+      if (!/\.mp3$/i.test(name) && !/\.m4a$/i.test(name)) {
+        name += '.mp3';
+      }
+      if (nativeSave({ url: href, filename: name })) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    });
+    $lrc.off('click.ryanNative').on('click.ryanNative', function(e) {
+      var text = $('#j-lrc').text() || '';
+      var name = ($(this).data('save-name') || 'RyanMusic') + '';
+      if (!/\.lrc$/i.test(name)) {
+        name += '.lrc';
+      }
+      if (nativeSave({ text: text, filename: name })) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    });
+  }
+
   function forceLrcLineHeight(playerInstance) {
     if (!playerInstance || !playerInstance.lrcContents) return;
     var ps = playerInstance.lrcContents.getElementsByTagName('p');
@@ -795,6 +842,7 @@ $(function() {
                   $('#j-src').val(data.url);
                   $('#j-src-btn')
                     .attr('href', buildDownloadUrl(data.url, name))
+                    .attr('data-save-name', name)
                     .removeAttr('target download');
                   $('#j-lrc').text(data.lrc);
                   $('#j-lrc-btn').attr(
@@ -803,12 +851,14 @@ $(function() {
                       btoa(unescape(encodeURIComponent(data.lrc)))
                   );
                   $('#j-lrc-btn').attr('download', name + '.lrc');
+                  $('#j-lrc-btn').attr('data-save-name', name);
                   $('#j-src-btn-icon')
                     .addClass('am-icon-download')
                     .removeClass('am-icon-external-link');
                   $('#j-lrc-btn-icon')
                     .addClass('am-icon-download')
                     .removeClass('am-icon-external-link');
+                  bindNativeDownloadButtons();
                 };
 
                 if (page === 1) {

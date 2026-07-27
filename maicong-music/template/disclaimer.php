@@ -11,7 +11,7 @@ if (!defined('MC_CORE')) {
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
     <meta name="robots" content="noindex">
     <link rel="shortcut icon" href="favicon.ico">
-    <link rel="stylesheet" href="//cdn.staticfile.org/amazeui/2.3.0/css/amazeui.min.css">
+    <link rel="stylesheet" href="static/vendor/amazeui/amazeui.min.css">
     <link rel="stylesheet" href="static/css/style.css?v=<?php echo MC_VERSION; ?>">
 </head>
 <body class="theme-apple-glass help-page">
@@ -35,6 +35,6 @@ if (!defined('MC_CORE')) {
     <footer class="footer">
         <p class="am-text-sm">v<?php echo MC_VERSION; ?>&nbsp;&copy;&nbsp;<?php echo date('Y'); ?>&nbsp;<a href="./">RyanMusic</a>&nbsp;·&nbsp;<a href="help.php">使用帮助</a></p>
     </footer>
-    <script src="//cdn.staticfile.org/jquery/1.11.1/jquery.min.js"></script>
+    <script src="static/vendor/jquery/jquery.min.js"></script>
 </body>
 </html>

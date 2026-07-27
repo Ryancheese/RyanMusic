@@ -36,6 +36,13 @@ chmod +x "$MACOS_DIR/RyanMusic"
 echo "==> 写入 Info.plist"
 cp "$ROOT/macos/Info.plist" "$CONTENTS/Info.plist"
 
+echo "==> 写入 App 图标"
+if [[ -f "$ROOT/macos/AppIcon.icns" ]]; then
+  cp "$ROOT/macos/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+else
+  echo "警告：未找到 macos/AppIcon.icns" >&2
+fi
+
 echo "==> 复制站点文件"
 rsync -a \
   --exclude '.git/' \

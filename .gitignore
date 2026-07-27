@@ -8,3 +8,4 @@ web/.next/
 .vercel
 maicong-music/core/cache/
 dist/
+macos/AppIcon.iconset/
