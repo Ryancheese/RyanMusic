@@ -4,4 +4,6 @@
         <domain includeSubdomains="false">127.0.0.1</domain>
         <domain includeSubdomains="false">localhost</domain>
     </domain-config>
+    <!-- 允许连接局域网电脑上的 RyanMusic -->
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

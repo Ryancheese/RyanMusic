@@ -3,6 +3,17 @@
     <string name="app_name">RyanMusic</string>
     <string name="starting">正在启动 RyanMusic…</string>
     <string name="start_failed">启动失败：%1$s</string>
+    <string name="local_php_failed">本机 PHP 启动失败（部分华为机型会拦截）：\n%1$s</string>
+    <string name="toast_use_remote">可改为连接电脑上的 RyanMusic</string>
+    <string name="fallback_title">连接电脑版 RyanMusic</string>
+    <string name="fallback_help">1. 电脑打开 RyanMusic（Mac/Windows）\n2. 手机与电脑同一 Wi‑Fi\n3. 填写电脑地址，例如 http://192.168.1.8:18765/\n（电脑 RyanMusic 窗口/日志里可看到端口）</string>
+    <string name="hint_remote_url">http://192.168.x.x:18765/</string>
+    <string name="btn_connect">连接</string>
+    <string name="btn_retry_local">重试本机启动</string>
+    <string name="connecting_remote">正在连接远程服务…</string>
+    <string name="remote_failed">连接失败：%1$s</string>
+    <string name="menu_change_server">更换服务器</string>
+    <string name="menu_exit">退出</string>
     <string name="download_ok">下载成功：%1$s</string>
     <string name="download_fail">下载失败：%1$s</string>
 </resources>

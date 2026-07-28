@@ -9,7 +9,7 @@ import java.io.FileOutputStream
 object SiteInstaller {
     private const val TAG = "RyanMusic.Site"
     private const val MARKER = ".site_version"
-    private const val VERSION = "1.7.6"
+    private const val VERSION = "1.7.7"
 
     fun ensureInstalled(context: Context): File {
         val www = File(context.filesDir, "www")
