@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="Theme.RyanMusic" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="android:statusBarColor">#08080E</item>
-        <item name="android:navigationBarColor">#08080E</item>
-        <item name="android:windowBackground">#08080E</item>
-        <item name="colorPrimary">#4FC3F7</item>
-    </style>
-</resources>
