@@ -1,4 +1,4 @@
-# RyanMusic Windows 一键安装脚本
+﻿# RyanMusic Windows 一键安装脚本
 # 用法：
 #   irm https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/windows/install.ps1 | iex
 # 或在仓库内：
@@ -52,8 +52,7 @@ function Ensure-Php {
   }
 
   winget install --id PHP.PHP.8.3 -e --accept-package-agreements --accept-source-agreements
-  $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
-              [System.Environment]::GetEnvironmentVariable("Path", "User")
+  Refresh-Path
 
   $php = Find-Php
   if (-not $php) {
@@ -63,24 +62,77 @@ function Ensure-Php {
   Write-Green "PHP 安装完成：$php"
 }
 
+function Refresh-Path {
+  $machine = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+  $user = [System.Environment]::GetEnvironmentVariable("Path", "User")
+  $extra = @(
+    "${env:ProgramFiles}\dotnet",
+    "${env:ProgramFiles(x86)}\dotnet",
+    "$env:USERPROFILE\.dotnet\tools",
+    "$env:LOCALAPPDATA\Microsoft\WinGet\Links"
+  ) | Where-Object { $_ -and (Test-Path $_) }
+  $env:Path = (@($machine, $user) + $extra) -join ";"
+}
+
+function Test-DotnetSdk {
+  Refresh-Path
+  $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
+  if (-not $dotnet) { return $false }
+  try {
+    $sdks = & dotnet --list-sdks 2>$null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    if (-not $sdks) { return $false }
+    # 至少有一个 SDK 行，形如：8.0.423 [C:\Program Files\dotnet\sdk\...]
+    return ($sdks | Where-Object { $_ -match '^\d+\.\d+\.\d+' }).Count -gt 0
+  } catch {
+    return $false
+  }
+}
+
+function Get-DotnetSdkVersion {
+  $sdks = & dotnet --list-sdks 2>$null
+  if (-not $sdks) { return $null }
+  $first = ($sdks | Where-Object { $_ -match '^\d+\.\d+\.\d+' } | Select-Object -First 1)
+  if ($first -match '^(\d+\.\d+\.\d+)') { return $Matches[1] }
+  return $null
+}
+
 function Ensure-Dotnet {
-  if (Get-Command dotnet -ErrorAction SilentlyContinue) {
-    Write-Green "已检测到 .NET SDK：$((dotnet --version))"
+  Refresh-Path
+  if (Test-DotnetSdk) {
+    Write-Green "已检测到 .NET SDK：$(Get-DotnetSdkVersion)"
     return
   }
-  Write-Yellow "未检测到 .NET SDK，尝试通过 winget 安装…"
+
+  Write-Yellow "未检测到 .NET SDK（仅有 runtime 不够），尝试通过 winget 安装…"
   if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Write-Red "请安装 .NET 8 SDK：https://dotnet.microsoft.com/download"
+    Write-Red "或：winget install --id Microsoft.DotNet.SDK.8 -e"
     exit 1
   }
+
   winget install --id Microsoft.DotNet.SDK.8 -e --accept-package-agreements --accept-source-agreements
-  $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
-              [System.Environment]::GetEnvironmentVariable("Path", "User")
-  if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    Write-Red ".NET SDK 安装后仍不可用，请重新打开终端后再试。"
+  Refresh-Path
+
+  # winget 装完后有时 PATH 还没刷到，主动探测常见路径
+  $dotnetCandidates = @(
+    "${env:ProgramFiles}\dotnet\dotnet.exe",
+    "${env:ProgramFiles(x86)}\dotnet\dotnet.exe"
+  )
+  foreach ($c in $dotnetCandidates) {
+    if (Test-Path $c) {
+      $env:Path = (Split-Path $c -Parent) + ";" + $env:Path
+      break
+    }
+  }
+
+  if (-not (Test-DotnetSdk)) {
+    Write-Red ".NET SDK 安装后仍不可用。"
+    Write-Yellow "请关闭终端，重新打开 PowerShell 后再执行安装命令。"
+    Write-Yellow "也可手动确认：dotnet --list-sdks"
     exit 1
   }
-  Write-Green ".NET SDK 安装完成：$((dotnet --version))"
+  Write-Green ".NET SDK 安装完成：$(Get-DotnetSdkVersion)"
 }
 
 function Resolve-RepoRoot {
