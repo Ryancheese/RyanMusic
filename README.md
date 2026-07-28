@@ -17,7 +17,7 @@
 
 ## Android 安装（APK）
 
-从 GitHub [Releases](https://github.com/Ryancheese/RyanMusic/releases) 下载最新 `app-release.apk`（或到 Actions 工作流 **Android APK** 的 Artifacts），安装到手机即可，**无需电脑开服务**。
+从 GitHub [Releases](https://github.com/Ryancheese/RyanMusic/releases/tag/v1.7.6-android) 下载 `RyanMusic-android.apk`（或到 Actions 工作流 **Android APK** 的 Artifacts），安装到手机即可，**无需电脑开服务**。
 
 - 需允许「安装未知应用」
 - 目前支持 **arm64** 真机（主流安卓手机）
