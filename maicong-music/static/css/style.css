@@ -88,55 +88,75 @@ body::after {
   background:
     radial-gradient(
       ellipse 70% 55% at 50% 40%,
-      rgba(var(--bloom-r, 250), var(--bloom-g, 45), var(--bloom-b, 85), calc(0.12 + var(--energy) * 0.28)) 0%,
+      rgba(var(--bloom-r, 250), var(--bloom-g, 45), var(--bloom-b, 85), calc(0.07 + var(--energy) * 0.1)) 0%,
       transparent 62%
     ),
     radial-gradient(
       ellipse 55% 45% at 20% 70%,
-      rgba(var(--bloom2-r, 88), var(--bloom2-g, 86), var(--bloom2-b, 214), calc(0.08 + var(--bass) * 0.22)) 0%,
+      rgba(var(--bloom2-r, 88), var(--bloom2-g, 86), var(--bloom2-b, 214), calc(0.05 + var(--bass) * 0.08)) 0%,
       transparent 60%
     ),
     radial-gradient(
       ellipse 50% 40% at 80% 25%,
-      rgba(var(--bloom3-r, 255), var(--bloom3-g, 120), var(--bloom3-b, 160), calc(0.06 + var(--mid) * 0.2)) 0%,
+      rgba(var(--bloom3-r, 255), var(--bloom3-g, 120), var(--bloom3-b, 160), calc(0.04 + var(--mid) * 0.07)) 0%,
       transparent 58%
     );
-  filter: blur(8px);
-  opacity: 0.85;
-  transform: scale(calc(1 + var(--pulse) * 0.08));
-  transition: opacity 0.6s ease;
+  filter: blur(14px);
+  opacity: 0.55;
+  transform: scale(calc(1 + var(--pulse) * 0.03));
+  transition: opacity 0.8s ease;
   will-change: transform, opacity;
 }
 
 .light-flow--playing .light-flow__bloom {
-  opacity: 1;
+  opacity: 0.72;
 }
 
 .light-flow__orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(72px);
+  filter: blur(80px);
   opacity: 0;
   will-change: left, top, transform, opacity, background, filter;
   transition:
-    left 9s cubic-bezier(0.45, 0.05, 0.2, 1),
-    top 9s cubic-bezier(0.45, 0.05, 0.2, 1),
-    opacity 1.2s ease,
-    background 1.2s ease;
-  transform: scale(calc(var(--orb-base-scale, 1) * (1 + var(--pulse) * 0.18 + var(--bass) * 0.12)));
+    left 12s cubic-bezier(0.45, 0.05, 0.2, 1),
+    top 12s cubic-bezier(0.45, 0.05, 0.2, 1),
+    opacity 1.6s ease,
+    background 1.6s ease;
+  transform: scale(calc(var(--orb-base-scale, 1) * (1 + var(--pulse) * 0.06 + var(--bass) * 0.04)));
 }
 
 .light-flow--playing .light-flow__orb {
-  filter: blur(calc(64px - var(--energy) * 18px));
+  filter: blur(calc(76px - var(--energy) * 6px));
   transition:
-    left 7s cubic-bezier(0.45, 0.05, 0.2, 1),
-    top 7s cubic-bezier(0.45, 0.05, 0.2, 1),
-    opacity 0.8s ease,
-    background 0.8s ease;
+    left 10s cubic-bezier(0.45, 0.05, 0.2, 1),
+    top 10s cubic-bezier(0.45, 0.05, 0.2, 1),
+    opacity 1s ease,
+    background 1s ease;
 }
 
 .light-flow__orb.is-visible {
-  opacity: calc(var(--orb-opacity, 0.52) * (0.85 + var(--energy) * 0.55));
+  opacity: calc(var(--orb-opacity, 0.38) * (0.9 + var(--energy) * 0.2));
+}
+
+.light-flow.light-flow--reactive-off .light-flow__bloom {
+  opacity: 0.4;
+  transform: none;
+}
+
+.light-flow.light-flow--reactive-off .light-flow__orb {
+  transform: scale(var(--orb-base-scale, 1));
+  filter: blur(80px);
+}
+
+.light-flow.light-flow--reactive-off .light-flow__orb.is-visible {
+  opacity: var(--orb-opacity, 0.38);
+}
+
+.light-flow.light-flow--reactive-off .light-flow__beam {
+  animation-duration: var(--beam-duration, 12s);
+  opacity: calc(var(--beam-opacity, 0.55) * 0.7);
+  transform: none;
 }
 
 .light-flow__orb--1 {
@@ -173,12 +193,12 @@ body::after {
     transparent 68%
   );
   background-size: 220% 100%;
-  animation: flow-beam var(--beam-duration, 9s) linear infinite;
-  animation-duration: calc(var(--beam-duration, 9s) / (1 + var(--energy) * 0.85));
+  animation: flow-beam var(--beam-duration, 12s) linear infinite;
+  animation-duration: calc(var(--beam-duration, 12s) / (1 + var(--energy) * 0.25));
   mix-blend-mode: screen;
-  opacity: calc(var(--beam-opacity, 0.85) * (0.75 + var(--energy) * 0.45));
-  transform: translateY(calc(var(--bass) * -12px)) scaleY(calc(1 + var(--pulse) * 0.06));
-  transition: opacity 0.4s ease;
+  opacity: calc(var(--beam-opacity, 0.55) * (0.85 + var(--energy) * 0.15));
+  transform: translateY(calc(var(--bass) * -4px)) scaleY(calc(1 + var(--pulse) * 0.02));
+  transition: opacity 0.6s ease;
 }
 
 @keyframes flow-beam {
@@ -1583,6 +1603,133 @@ a:hover {
   z-index: 1;
   margin-top: 24px;
   background: transparent;
+}
+
+.footer__tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 14px 22px;
+  padding: 0 16px 10px;
+}
+
+.ambient-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.ambient-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.ambient-toggle__ui {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  transition: background 0.2s ease, border-color 0.2s ease;
+  flex: 0 0 auto;
+}
+
+.ambient-toggle__ui::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s ease;
+}
+
+.ambient-toggle input:checked + .ambient-toggle__ui {
+  background: rgba(250, 45, 85, 0.45);
+  border-color: rgba(250, 45, 85, 0.55);
+}
+
+.ambient-toggle input:checked + .ambient-toggle__ui::after {
+  transform: translateX(18px);
+}
+
+.ambient-toggle input:focus-visible + .ambient-toggle__ui {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ambient-toggle__text {
+  color: var(--text-tertiary);
+}
+
+.ambient-toggle:hover .ambient-toggle__text {
+  color: var(--text-secondary);
+}
+
+.ambient-intensity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  user-select: none;
+}
+
+.ambient-intensity.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.ambient-intensity__label {
+  flex: 0 0 auto;
+}
+
+.ambient-intensity__range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: min(140px, 32vw);
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  outline: none;
+  cursor: pointer;
+}
+
+.ambient-intensity__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ff7a93;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 1px 6px rgba(250, 45, 85, 0.35);
+}
+
+.ambient-intensity__range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ff7a93;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+}
+
+.ambient-intensity__val {
+  min-width: 36px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
 }
 
 .footer p {

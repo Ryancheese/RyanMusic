@@ -160,6 +160,27 @@ if (!defined('MC_CORE')) {
         </div>
     </section>
     <footer class="footer">
+        <div class="footer__tools">
+            <label class="ambient-toggle" title="播放时背景随音乐轻微律动">
+                <input type="checkbox" id="j-ambient-toggle" checked>
+                <span class="ambient-toggle__ui" aria-hidden="true"></span>
+                <span class="ambient-toggle__text">光影律动</span>
+            </label>
+            <label class="ambient-intensity" title="律动幅度">
+                <span class="ambient-intensity__label">幅度</span>
+                <input
+                    type="range"
+                    id="j-ambient-intensity"
+                    class="ambient-intensity__range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value="40"
+                    aria-label="光影律动幅度"
+                >
+                <span id="j-ambient-intensity-val" class="ambient-intensity__val">40%</span>
+            </label>
+        </div>
         <p class="am-text-sm">v<?php echo MC_VERSION; ?>&nbsp;&copy;&nbsp;<?php echo date('Y'); ?>&nbsp;<a href="help.php">使用帮助</a>&nbsp;·&nbsp;<a href="disclaimer.php">免责声明</a>&nbsp;·&nbsp;<a href="mailto:17625416243@163.com">联系站长</a></p>
     </footer>
     <script src="static/vendor/jquery/jquery.min.js"></script>

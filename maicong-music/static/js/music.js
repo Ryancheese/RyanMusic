@@ -624,13 +624,23 @@ $(function() {
     var $flow = $('.light-flow');
     if (!$flow.length) return null;
 
+    var STORAGE_KEY = 'ryanmusic-ambient-reactive';
+    var INTENSITY_KEY = 'ryanmusic-ambient-intensity';
     var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduced) {
       $flow.find('.light-flow__orb').addClass('is-visible');
       return {
         setPlaying: function() {},
         setCover: function() {},
-        bindPlayer: function() {}
+        bindPlayer: function() {},
+        setReactiveEnabled: function() {},
+        isReactiveEnabled: function() {
+          return false;
+        },
+        setIntensity: function() {},
+        getIntensity: function() {
+          return 0.4;
+        }
       };
     }
 
@@ -641,31 +651,48 @@ $(function() {
       {
         orbs: ['250,45,85', '88,86,214', '255,120,160'],
         beam: ['250,45,85', '136,132,255'],
-        opacity: 0.55
+        opacity: 0.36
       },
       {
         orbs: ['88,86,214', '48,209,88', '250,45,85'],
         beam: ['88,86,214', '48,209,88'],
-        opacity: 0.48
+        opacity: 0.32
       },
       {
         orbs: ['255,149,64', '250,45,85', '136,132,255'],
         beam: ['255,149,64', '250,45,85'],
-        opacity: 0.5
+        opacity: 0.34
       },
       {
         orbs: ['64,156,255', '88,86,214', '250,45,85'],
         beam: ['64,156,255', '136,132,255'],
-        opacity: 0.52
+        opacity: 0.34
       }
     ];
     var lastScheme = -1;
     var paletteTimer = null;
     var playing = false;
+    var lastAudio = null;
     var rafId = 0;
     var levels = { pulse: 0, bass: 0, mid: 0, treble: 0, energy: 0 };
     var audioGraph = null;
     var boundAudio = null;
+    var reactiveEnabled = true;
+    var intensity = 0.4;
+    try {
+      var saved = localStorage.getItem(STORAGE_KEY);
+      if (saved === '0') reactiveEnabled = false;
+      if (saved === '1') reactiveEnabled = true;
+      var savedIntensity = localStorage.getItem(INTENSITY_KEY);
+      if (savedIntensity !== null) {
+        var parsed = parseInt(savedIntensity, 10);
+        if (!isNaN(parsed)) {
+          intensity = Math.max(0, Math.min(1, parsed / 100));
+        }
+      }
+    } catch (e) {
+      /* ignore */
+    }
 
     function rand(min, max) {
       return min + Math.random() * (max - min);
@@ -675,9 +702,9 @@ $(function() {
       return (
         'radial-gradient(circle, rgba(' +
         rgb +
-        ', 0.78) 0%, rgba(' +
+        ', 0.55) 0%, rgba(' +
         rgb +
-        ', 0) 68%)'
+        ', 0) 70%)'
       );
     }
 
@@ -696,8 +723,8 @@ $(function() {
         var rgb = scheme.orbs[i % scheme.orbs.length];
         $orb.css({
           background: orbGradient(rgb),
-          '--orb-opacity': (scheme.opacity * rand(0.88, 1.08)).toFixed(2),
-          '--orb-base-scale': rand(0.92, 1.12).toFixed(2),
+          '--orb-opacity': (scheme.opacity * rand(0.9, 1.05)).toFixed(2),
+          '--orb-base-scale': rand(0.95, 1.08).toFixed(2),
           left: rand(-12, 72) + '%',
           top: rand(-12, 72) + '%'
         });
@@ -715,8 +742,8 @@ $(function() {
         '--beam-br': beamB[0],
         '--beam-bg': beamB[1],
         '--beam-bb': beamB[2],
-        '--beam-duration': (playing ? rand(5.5, 9) : rand(7, 13)).toFixed(1) + 's',
-        '--beam-opacity': rand(0.7, 0.95).toFixed(2)
+        '--beam-duration': (playing && reactiveEnabled ? rand(8, 12) : rand(11, 16)).toFixed(1) + 's',
+        '--beam-opacity': rand(0.45, 0.65).toFixed(2)
       });
       $flow.css({
         '--bloom-r': c0.r,
@@ -738,7 +765,7 @@ $(function() {
       } while (idx === lastScheme && schemes.length > 1);
       lastScheme = idx;
       applyPalette(schemes[idx]);
-      paletteTimer = setTimeout(nextIdlePalette, playing ? rand(9000, 14000) : rand(5200, 8800));
+      paletteTimer = setTimeout(nextIdlePalette, playing ? rand(12000, 18000) : rand(8000, 14000));
     }
 
     function avgRange(data, from, to) {
@@ -753,11 +780,6 @@ $(function() {
 
     function smooth(curr, next, factor) {
       return curr + (next - curr) * factor;
-    }
-
-    function detachAudioGraph() {
-      audioGraph = null;
-      boundAudio = null;
     }
 
     function ensureAudioGraph(audio) {
@@ -775,7 +797,7 @@ $(function() {
         var src = ctx.createMediaElementSource(audio);
         var analyser = ctx.createAnalyser();
         analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.72;
+        analyser.smoothingTimeConstant = 0.86;
         src.connect(analyser);
         analyser.connect(ctx.destination);
         audioGraph = {
@@ -787,7 +809,8 @@ $(function() {
         boundAudio = audio;
         return audioGraph;
       } catch (e) {
-        detachAudioGraph();
+        audioGraph = null;
+        boundAudio = null;
         return null;
       }
     }
@@ -799,44 +822,44 @@ $(function() {
       }
       if (graph) {
         graph.analyser.getByteFrequencyData(graph.data);
-        var bass = avgRange(graph.data, 0, 6);
-        var mid = avgRange(graph.data, 6, 24);
-        var treble = avgRange(graph.data, 24, 64);
-        var energy = avgRange(graph.data, 0, graph.data.length);
-        var pulse = Math.min(1, bass * 1.35 + energy * 0.35);
+        var bass = avgRange(graph.data, 0, 6) * 0.55;
+        var mid = avgRange(graph.data, 6, 24) * 0.5;
+        var treble = avgRange(graph.data, 24, 64) * 0.45;
+        var energy = avgRange(graph.data, 0, graph.data.length) * 0.5;
+        var pulse = Math.min(0.7, bass * 0.9 + energy * 0.25);
         return { pulse: pulse, bass: bass, mid: mid, treble: treble, energy: energy };
       }
-      // 无频谱时用有机律动兜底，避免背景完全静止
       var t = performance.now() / 1000;
-      var organicBass = 0.35 + 0.35 * Math.sin(t * 2.2) + 0.15 * Math.sin(t * 4.1);
-      var organicMid = 0.3 + 0.3 * Math.sin(t * 3.4 + 1.2);
-      var organicTreble = 0.22 + 0.28 * Math.sin(t * 5.6 + 0.4);
+      var organicBass = 0.18 + 0.12 * Math.sin(t * 1.4) + 0.06 * Math.sin(t * 2.6);
+      var organicMid = 0.14 + 0.1 * Math.sin(t * 1.9 + 1.2);
+      var organicTreble = 0.1 + 0.08 * Math.sin(t * 2.8 + 0.4);
       var energy = (organicBass + organicMid + organicTreble) / 3;
       return {
-        pulse: Math.max(0, Math.min(1, organicBass)),
-        bass: Math.max(0, Math.min(1, organicBass)),
-        mid: Math.max(0, Math.min(1, organicMid)),
-        treble: Math.max(0, Math.min(1, organicTreble)),
-        energy: Math.max(0, Math.min(1, energy))
+        pulse: Math.max(0, Math.min(0.55, organicBass)),
+        bass: Math.max(0, Math.min(0.55, organicBass)),
+        mid: Math.max(0, Math.min(0.5, organicMid)),
+        treble: Math.max(0, Math.min(0.45, organicTreble)),
+        energy: Math.max(0, Math.min(0.5, energy))
       };
     }
 
     function writeCssLevels() {
-      flowEl.style.setProperty('--pulse', levels.pulse.toFixed(3));
-      flowEl.style.setProperty('--bass', levels.bass.toFixed(3));
-      flowEl.style.setProperty('--mid', levels.mid.toFixed(3));
-      flowEl.style.setProperty('--treble', levels.treble.toFixed(3));
-      flowEl.style.setProperty('--energy', levels.energy.toFixed(3));
+      var gain = reactiveEnabled ? intensity : 0;
+      flowEl.style.setProperty('--pulse', (levels.pulse * gain).toFixed(3));
+      flowEl.style.setProperty('--bass', (levels.bass * gain).toFixed(3));
+      flowEl.style.setProperty('--mid', (levels.mid * gain).toFixed(3));
+      flowEl.style.setProperty('--treble', (levels.treble * gain).toFixed(3));
+      flowEl.style.setProperty('--energy', (levels.energy * gain).toFixed(3));
     }
 
     function tickReactive(audio) {
-      if (!playing) return;
+      if (!playing || !reactiveEnabled) return;
       var next = readLevels(audio);
-      levels.pulse = smooth(levels.pulse, next.pulse, 0.28);
-      levels.bass = smooth(levels.bass, next.bass, 0.24);
-      levels.mid = smooth(levels.mid, next.mid, 0.22);
-      levels.treble = smooth(levels.treble, next.treble, 0.2);
-      levels.energy = smooth(levels.energy, next.energy, 0.2);
+      levels.pulse = smooth(levels.pulse, next.pulse, 0.14);
+      levels.bass = smooth(levels.bass, next.bass, 0.12);
+      levels.mid = smooth(levels.mid, next.mid, 0.11);
+      levels.treble = smooth(levels.treble, next.treble, 0.1);
+      levels.energy = smooth(levels.energy, next.energy, 0.1);
       writeCssLevels();
       rafId = requestAnimationFrame(function() {
         tickReactive(audio);
@@ -847,29 +870,65 @@ $(function() {
       cancelAnimationFrame(rafId);
       rafId = 0;
       var step = function() {
-        levels.pulse = smooth(levels.pulse, 0, 0.08);
-        levels.bass = smooth(levels.bass, 0, 0.08);
-        levels.mid = smooth(levels.mid, 0, 0.08);
-        levels.treble = smooth(levels.treble, 0, 0.08);
-        levels.energy = smooth(levels.energy, 0, 0.08);
+        levels.pulse = smooth(levels.pulse, 0, 0.06);
+        levels.bass = smooth(levels.bass, 0, 0.06);
+        levels.mid = smooth(levels.mid, 0, 0.06);
+        levels.treble = smooth(levels.treble, 0, 0.06);
+        levels.energy = smooth(levels.energy, 0, 0.06);
         writeCssLevels();
-        if (levels.energy > 0.01) {
+        if (levels.energy > 0.008) {
           rafId = requestAnimationFrame(step);
         }
       };
       rafId = requestAnimationFrame(step);
     }
 
+    function syncReactiveClass() {
+      $flow.toggleClass('light-flow--reactive-off', !reactiveEnabled);
+      $flow.toggleClass('light-flow--playing', playing && reactiveEnabled);
+    }
+
     function setPlaying(isPlaying, audio) {
       playing = !!isPlaying;
-      $flow.toggleClass('light-flow--playing', playing);
+      if (audio) lastAudio = audio;
+      syncReactiveClass();
       cancelAnimationFrame(rafId);
       rafId = 0;
-      if (playing) {
-        tickReactive(audio || null);
+      if (playing && reactiveEnabled) {
+        tickReactive(audio || lastAudio || null);
       } else {
         settleDown();
       }
+    }
+
+    function setReactiveEnabled(enabled) {
+      reactiveEnabled = !!enabled;
+      try {
+        localStorage.setItem(STORAGE_KEY, reactiveEnabled ? '1' : '0');
+      } catch (e) {
+        /* ignore */
+      }
+      syncReactiveClass();
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      if (playing && reactiveEnabled) {
+        tickReactive(lastAudio);
+      } else {
+        settleDown();
+      }
+    }
+
+    function setIntensity(value) {
+      var n = typeof value === 'number' ? value : parseFloat(value);
+      if (isNaN(n)) n = 40;
+      // 允许传入 0-100 或 0-1
+      intensity = n > 1 ? Math.max(0, Math.min(1, n / 100)) : Math.max(0, Math.min(1, n));
+      try {
+        localStorage.setItem(INTENSITY_KEY, String(Math.round(intensity * 100)));
+      } catch (e) {
+        /* ignore */
+      }
+      writeCssLevels();
     }
 
     function rgbToStr(c) {
@@ -903,8 +962,7 @@ $(function() {
             var min = Math.min(r, g, b);
             if (max < 40 || min > 220) continue;
             if (max - min < 18) continue;
-            var key =
-              (r >> 4) + ',' + (g >> 4) + ',' + (b >> 4);
+            var key = (r >> 4) + ',' + (g >> 4) + ',' + (b >> 4);
             if (!buckets[key]) buckets[key] = { r: 0, g: 0, b: 0, n: 0 };
             buckets[key].r += r;
             buckets[key].g += g;
@@ -935,7 +993,7 @@ $(function() {
               rgbToStr(colors[2] || colors[0])
             ],
             beam: [rgbToStr(colors[0]), rgbToStr(colors[1])],
-            opacity: 0.62
+            opacity: 0.4
           });
         } catch (e) {
           done(null);
@@ -952,7 +1010,7 @@ $(function() {
         if (!palette) return;
         if (paletteTimer) clearTimeout(paletteTimer);
         applyPalette(palette);
-        paletteTimer = setTimeout(nextIdlePalette, playing ? 12000 : 8000);
+        paletteTimer = setTimeout(nextIdlePalette, playing ? 16000 : 12000);
       });
     }
 
@@ -972,6 +1030,7 @@ $(function() {
       });
     }
 
+    syncReactiveClass();
     nextIdlePalette();
     writeCssLevels();
 
@@ -983,11 +1042,51 @@ $(function() {
     return {
       setPlaying: setPlaying,
       setCover: setCover,
-      bindPlayer: bindPlayer
+      bindPlayer: bindPlayer,
+      setReactiveEnabled: setReactiveEnabled,
+      isReactiveEnabled: function() {
+        return reactiveEnabled;
+      },
+      setIntensity: setIntensity,
+      getIntensity: function() {
+        return intensity;
+      }
     };
   }
 
   var ambientGlow = initLightFlowCycle();
+  (function bindAmbientControls() {
+    var $toggle = $('#j-ambient-toggle');
+    var $range = $('#j-ambient-intensity');
+    var $val = $('#j-ambient-intensity-val');
+    var $wrap = $range.closest('.ambient-intensity');
+    if (!$toggle.length || !ambientGlow) return;
+
+    function syncIntensityUi(pct) {
+      if ($range.length) $range.val(String(pct));
+      if ($val.length) $val.text(pct + '%');
+    }
+
+    function syncDisabled() {
+      var on = ambientGlow.isReactiveEnabled();
+      if ($wrap.length) $wrap.toggleClass('is-disabled', !on);
+      if ($range.length) $range.prop('disabled', !on);
+    }
+
+    $toggle.prop('checked', ambientGlow.isReactiveEnabled());
+    syncIntensityUi(Math.round(ambientGlow.getIntensity() * 100));
+    syncDisabled();
+
+    $toggle.on('change', function() {
+      ambientGlow.setReactiveEnabled($toggle.prop('checked'));
+      syncDisabled();
+    });
+    $range.on('input change', function() {
+      var pct = parseInt($range.val(), 10) || 0;
+      ambientGlow.setIntensity(pct);
+      syncIntensityUi(pct);
+    });
+  })();
 
   // Tab 切换
   $('#j-nav').on('click', 'li', function() {
