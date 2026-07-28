@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RyanMusic</string>
+    <string name="starting">正在启动 RyanMusic…</string>
+    <string name="start_failed">启动失败：%1$s</string>
+    <string name="download_ok">下载成功：%1$s</string>
+    <string name="download_fail">下载失败：%1$s</string>
+</resources>

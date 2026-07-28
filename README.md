@@ -13,6 +13,22 @@
 | `maicong-music/docker-compose.yml` | Docker 部署 |
 | `macos/` | macOS 原生窗口 App（WKWebView）与一键安装脚本 |
 | `windows/` | Windows 原生窗口 App（WebView2）与一键安装脚本 |
+| `android/` | Android 独立 APK（内嵌 PHP + WebView） |
+
+## Android 安装（APK）
+
+从 GitHub [Releases](https://github.com/Ryancheese/RyanMusic/releases) 下载最新 `app-release.apk`（或到 Actions 工作流 **Android APK** 的 Artifacts），安装到手机即可，**无需电脑开服务**。
+
+- 需允许「安装未知应用」
+- 目前支持 **arm64** 真机（主流安卓手机）
+- 详细说明见 [`android/README.md`](android/README.md)
+
+本地打包：
+
+```bash
+bash android/scripts/fetch-php.sh
+cd android && ./gradlew assembleRelease
+```
 
 ## macOS 一键安装（推荐）
 
