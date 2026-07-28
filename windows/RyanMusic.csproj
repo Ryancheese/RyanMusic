@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon></ApplicationIcon>
+    <AssemblyName>RyanMusic</AssemblyName>
+    <RootNamespace>RyanMusic</RootNamespace>
+    <Version>1.7.5</Version>
+    <Product>RyanMusic</Product>
+    <Description>RyanMusic Windows 客户端</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+  </ItemGroup>
+</Project>

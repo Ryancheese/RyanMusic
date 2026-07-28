@@ -9,3 +9,6 @@ web/.next/
 maicong-music/core/cache/
 dist/
 macos/AppIcon.iconset/
+windows/bin/
+windows/obj/
+windows/*.user

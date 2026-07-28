@@ -12,6 +12,7 @@
 | `maicong-music/static/` | 前端 CSS / JS / 图片 |
 | `maicong-music/docker-compose.yml` | Docker 部署 |
 | `macos/` | macOS 原生窗口 App（WKWebView）与一键安装脚本 |
+| `windows/` | Windows 原生窗口 App（WebView2）与一键安装脚本 |
 
 ## macOS 一键安装（推荐）
 
@@ -37,6 +38,34 @@ curl -fsSL https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/macos/ins
 ./macos/install.sh
 # 或只打包不安装：
 ./macos/build-app.sh && open dist/RyanMusic.app
+```
+
+## Windows 一键安装
+
+在 **PowerShell** 执行：
+
+```powershell
+irm https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/windows/install.ps1 | iex
+```
+
+脚本会：检测/安装 PHP 与 .NET 8 SDK → 拉取源码 → 编译 WebView2 窗口程序 → 安装到 `%LOCALAPPDATA%\RyanMusic` 并创建桌面快捷方式。
+
+依赖：Windows 10/11、PHP、.NET 8 SDK（脚本可用 winget 自动装）、系统自带的 WebView2（Win11 通常已有）。
+
+本地已有仓库时也可：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\install.ps1
+# 或只打包：
+powershell -ExecutionPolicy Bypass -File windows\build-app.ps1
+```
+
+若 `irm` / GitHub raw 连不上，可改用：
+
+```powershell
+git clone --depth 1 https://github.com/Ryancheese/RyanMusic.git
+cd RyanMusic
+powershell -ExecutionPolicy Bypass -File windows\install.ps1
 ```
 
 ## 本地运行（Docker）
