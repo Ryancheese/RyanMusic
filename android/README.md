@@ -1,37 +1,26 @@
 # RyanMusic Android
 
-独立 APK：内嵌 PHP（arm64）+ 站点，安装即可用，无需电脑开服务。
+独立 APK：内嵌 PHP（arm64）+ 站点。多数机型安装即可用。
 
-## 给用户：安装 APK
+## 安装
 
-1. 打开 GitHub [Releases](https://github.com/Ryancheese/RyanMusic/releases) 或 Actions 产物，下载 `app-release.apk`
-2. 手机允许「安装未知应用」
-3. 安装并打开 **RyanMusic**
+1. 打开 [Releases](https://github.com/Ryancheese/RyanMusic/releases) 下载 `RyanMusic-android.apk`
+2. 允许「安装未知应用」后安装
 
-要求：arm64 手机（2017 年后主流机型）。首次启动会解压站点并拉起本地 PHP，稍等几秒。
+## 华为等机型本机 PHP 失败时
 
-## 开发者：本地打包
+部分华为 / HarmonyOS 会拦截应用内启动 PHP，出现「PHP 进程已退出」。请：
 
-依赖：JDK 17、Android SDK（`ANDROID_HOME`）。
+1. 电脑打开 RyanMusic（Mac / Windows）
+2. 手机与电脑连同一 Wi‑Fi
+3. 在手机失败页填写电脑地址，例如 `http://192.168.1.8:18765/`
+4. 点「连接」
+
+电脑 IP 可在系统网络设置里查看；端口一般为 `18765`（若被占用会自动顺延）。
+
+## 开发者打包
 
 ```bash
-# 1) 拉取内嵌 PHP
 bash android/scripts/fetch-php.sh
-
-# 2) 打包
-cd android
-chmod +x gradlew
-./gradlew assembleRelease
+cd android && gradle assembleRelease
 ```
-
-APK 路径：
-
-`android/app/build/outputs/apk/release/app-release.apk`
-
-也可用 Android Studio 打开 `android/` 目录后 Build → Build APK(s)。
-
-## 说明
-
-- PHP 来自 [pmmp/PHP-Binaries](https://github.com/pmmp/PHP-Binaries)（静态 arm64），构建时下载，不进 Git
-- 站点在构建时从仓库根目录 `maicong-music/` 同步到 assets
-- 下载歌曲/歌词成功后会 Toast「下载成功」
