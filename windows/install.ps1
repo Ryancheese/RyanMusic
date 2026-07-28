@@ -291,6 +291,68 @@ function Fetch-Repo {
   exit 1
 }
 
+function Stop-RunningApp {
+  Write-Host "==> 结束正在运行的 RyanMusic（避免占用安装目录）"
+  $names = @("RyanMusic")
+  foreach ($n in $names) {
+    Get-Process -Name $n -ErrorAction SilentlyContinue | ForEach-Object {
+      try {
+        Write-Yellow "结束进程：$($_.ProcessName) (PID $($_.Id))"
+        Stop-Process -Id $_.Id -Force -ErrorAction Stop
+      } catch {
+        Write-Yellow "无法结束 $($_.Id)：$($_.Exception.Message)"
+      }
+    }
+  }
+
+  # 结束占用安装目录的内嵌 PHP（命令行含 InstallDir）
+  try {
+    $installLower = $InstallDir.ToLowerInvariant()
+    Get-CimInstance Win32_Process -Filter "Name='php.exe'" -ErrorAction SilentlyContinue | ForEach-Object {
+      $cmd = $_.CommandLine
+      if (-not $cmd) { return }
+      $cmdLower = $cmd.ToLowerInvariant()
+      if ($cmdLower.Contains($installLower) -or $cmdLower.Contains('ryanmusic\maicong-music')) {
+        try {
+          Write-Yellow "结束 PHP (PID $($_.ProcessId))"
+          Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
+        } catch { }
+      }
+    }
+  } catch { }
+
+  Start-Sleep -Seconds 1
+}
+
+function Clear-InstallDir {
+  if (-not (Test-Path $InstallDir)) { return }
+
+  for ($i = 1; $i -le 5; $i++) {
+    try {
+      Remove-Item -Recurse -Force $InstallDir -ErrorAction Stop
+      if (-not (Test-Path $InstallDir)) { return }
+    } catch {
+      Write-Yellow "清理安装目录失败（第 $i 次）：$($_.Exception.Message)"
+      Stop-RunningApp
+      Start-Sleep -Seconds 1
+    }
+  }
+
+  # 删不干净时改为清空内容，尽量继续覆盖安装
+  try {
+    Get-ChildItem -LiteralPath $InstallDir -Force -ErrorAction SilentlyContinue | ForEach-Object {
+      Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  } catch { }
+
+  if (Test-Path (Join-Path $InstallDir "RyanMusic.exe")) {
+    Write-Red "安装目录仍被占用：$InstallDir"
+    Write-Red "请先完全退出 RyanMusic（任务栏/托盘也关掉），再重新运行安装命令。"
+    Write-Yellow "或任务管理器结束 RyanMusic.exe / php.exe 后重试。"
+    exit 1
+  }
+}
+
 function Build-And-Install([string]$root) {
   $build = Join-Path $root "windows\build-app.ps1"
   if (-not (Test-Path $build)) {
@@ -311,9 +373,8 @@ function Build-And-Install([string]$root) {
   }
 
   Write-Host "==> 安装到 $InstallDir"
-  if (Test-Path $InstallDir) {
-    Remove-Item -Recurse -Force $InstallDir
-  }
+  Stop-RunningApp
+  Clear-InstallDir
   New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
   robocopy $built $InstallDir /E /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
   if ($LASTEXITCODE -ge 8) {
