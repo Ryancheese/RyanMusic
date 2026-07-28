@@ -94,25 +94,105 @@ function Resolve-RepoRoot {
   return $null
 }
 
+function Download-File([string]$Uri, [string]$OutFile) {
+  # 优先 curl.exe（常比 Invoke-WebRequest 稳），失败再回退
+  $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+  if ($curl) {
+    & curl.exe -L --retry 3 --connect-timeout 20 --max-time 300 -o $OutFile $Uri
+    if ($LASTEXITCODE -eq 0 -and (Test-Path $OutFile) -and ((Get-Item $OutFile).Length -gt 1000)) {
+      return $true
+    }
+  }
+  try {
+    Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing -TimeoutSec 300
+    return ((Test-Path $OutFile) -and ((Get-Item $OutFile).Length -gt 1000))
+  } catch {
+    return $false
+  }
+}
+
+function Expand-RepoZip([string]$ZipPath) {
+  Expand-Archive -Path $ZipPath -DestinationPath $WorkDir -Force
+  $extracted = Get-ChildItem $WorkDir -Directory | Where-Object { $_.Name -like "RyanMusic*" } | Select-Object -First 1
+  if (-not $extracted) {
+    throw "解压后未找到 RyanMusic 目录"
+  }
+  $target = Join-Path $WorkDir "RyanMusic"
+  if ($extracted.FullName -ne $target) {
+    if (Test-Path $target) { Remove-Item -Recurse -Force $target }
+    Rename-Item $extracted.FullName $target
+  }
+  return $target
+}
+
 function Fetch-Repo {
   New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
+  $dest = Join-Path $WorkDir "RyanMusic"
+  $zip = Join-Path $WorkDir "repo.zip"
+
+  $gitUrls = @(
+    $RepoUrl,
+    "https://ghproxy.net/https://github.com/Ryancheese/RyanMusic.git",
+    "https://mirror.ghproxy.com/https://github.com/Ryancheese/RyanMusic.git"
+  )
+  $zipUrls = @(
+    "https://github.com/Ryancheese/RyanMusic/archive/refs/heads/main.zip",
+    "https://ghproxy.net/https://github.com/Ryancheese/RyanMusic/archive/refs/heads/main.zip",
+    "https://mirror.ghproxy.com/https://github.com/Ryancheese/RyanMusic/archive/refs/heads/main.zip",
+    "https://codeload.github.com/Ryancheese/RyanMusic/zip/refs/heads/main"
+  )
+
   if (Get-Command git -ErrorAction SilentlyContinue) {
-    Write-Host "==> 克隆仓库"
-    git clone --depth 1 --branch main $RepoUrl (Join-Path $WorkDir "RyanMusic")
-  } else {
-    Write-Host "==> 下载仓库 zip"
-    $zip = Join-Path $WorkDir "repo.zip"
-    Invoke-WebRequest -Uri "https://github.com/Ryancheese/RyanMusic/archive/refs/heads/main.zip" -OutFile $zip
-    Expand-Archive -Path $zip -DestinationPath $WorkDir -Force
-    Rename-Item (Join-Path $WorkDir "RyanMusic-main") (Join-Path $WorkDir "RyanMusic")
+    foreach ($url in $gitUrls) {
+      Write-Host "==> 尝试克隆：$url"
+      if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+      & git clone --depth 1 --branch main $url $dest
+      if ($LASTEXITCODE -eq 0 -and (Test-Path (Join-Path $dest "windows\build-app.ps1"))) {
+        Write-Green "仓库克隆成功"
+        return $dest
+      }
+      Write-Yellow "克隆失败，尝试下一个源…"
+    }
   }
-  return (Join-Path $WorkDir "RyanMusic")
+
+  foreach ($url in $zipUrls) {
+    Write-Host "==> 尝试下载 zip：$url"
+    if (Test-Path $zip) { Remove-Item -Force $zip }
+    if (Download-File $url $zip) {
+      try {
+        $path = Expand-RepoZip $zip
+        if (Test-Path (Join-Path $path "windows\build-app.ps1")) {
+          Write-Green "仓库下载成功"
+          return $path
+        }
+      } catch {
+        Write-Yellow "解压失败：$($_.Exception.Message)"
+      }
+    } else {
+      Write-Yellow "下载失败，尝试下一个源…"
+    }
+  }
+
+  Write-Red "无法从 GitHub 获取源码（SSL/网络问题）。"
+  Write-Yellow "请换网络/开代理后重试，或手动执行："
+  Write-Host "  git clone --depth 1 https://github.com/Ryancheese/RyanMusic.git"
+  Write-Host "  cd RyanMusic"
+  Write-Host "  powershell -ExecutionPolicy Bypass -File windows\install.ps1"
+  exit 1
 }
 
 function Build-And-Install([string]$root) {
   $build = Join-Path $root "windows\build-app.ps1"
+  if (-not (Test-Path $build)) {
+    Write-Red "找不到打包脚本：$build"
+    exit 1
+  }
   Write-Host "==> 打包 App"
   powershell -ExecutionPolicy Bypass -File $build
+  if ($LASTEXITCODE -ne 0) {
+    Write-Red "打包脚本执行失败"
+    exit 1
+  }
 
   $built = Join-Path $root "dist\RyanMusic-win"
   if (-not (Test-Path (Join-Path $built "RyanMusic.exe"))) {
