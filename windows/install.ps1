@@ -1,4 +1,4 @@
-﻿# RyanMusic Windows 一键安装脚本
+# RyanMusic Windows 一键安装脚本
 # 用法：
 #   irm https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/windows/install.ps1 | iex
 # 或在仓库内：
@@ -87,6 +87,10 @@ function Enable-PhpExtensions([string]$phpExe) {
   } else {
     $ini = Get-Content $iniPath -Raw -ErrorAction SilentlyContinue
     if ($null -eq $ini) { $ini = "" }
+    # 去掉可能存在的 UTF-8 BOM，避免 PHP 解析异常
+    if ($ini.Length -gt 0 -and [int][char]$ini[0] -eq 0xFEFF) {
+      $ini = $ini.Substring(1)
+    }
 
     # extension_dir
     if ($ini -notmatch '(?m)^\s*extension_dir\s*=') {
@@ -96,21 +100,20 @@ function Enable-PhpExtensions([string]$phpExe) {
     }
 
     foreach ($ext in @('curl', 'openssl', 'mbstring', 'fileinfo')) {
-      if ($ini -match "(?m)^\s*extension\s*=\s*$ext\b") {
-        continue
-      }
-      if ($ini -match "(?m)^\s*;\s*extension\s*=\s*$ext\b") {
-        $ini = [regex]::Replace($ini, "(?m)^\s*;\s*extension\s*=\s*$ext\b.*$", "extension=$ext")
-      } else {
-        $ini = $ini.TrimEnd() + "`r`nextension=$ext`r`n"
-      }
+      # 清掉重复项（含 php_xxx.dll / 注释行），再写唯一启用行
+      $ini = [regex]::Replace($ini, "(?m)^\s*;?\s*extension\s*=\s*(php_)?$ext(\.dll)?\s*.*\r?\n?", "")
+      $ini = $ini.TrimEnd() + "`r`nextension=$ext`r`n"
     }
 
-    Set-Content -Path $iniPath -Value $ini -Encoding UTF8
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($iniPath, $ini, $utf8NoBom)
   }
 
-  $mods = & $phpExe -m 2>$null
-  if ($mods -match '(?i)^curl$') {
+  $prevEap = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $mods = (& $phpExe -m 2>&1 | ForEach-Object { "$_" }) -join "`n"
+  $ErrorActionPreference = $prevEap
+  if ($mods -match '(?im)^\s*curl\s*$') {
     Write-Green "PHP curl 扩展已启用"
   } else {
     Write-Yellow "php.ini 已尝试启用 curl，若仍失败请重启终端后再装一次。"

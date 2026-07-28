@@ -48,6 +48,12 @@ curl -fsSL https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/macos/ins
 irm https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/windows/install.ps1 | iex
 ```
 
+若提示无法识别 `﻿#`，改用（去掉 BOM）：
+
+```powershell
+iex ((irm https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/windows/install.ps1) -replace '^\uFEFF','')
+```
+
 脚本会：检测/安装 PHP 与 .NET 8 SDK → 拉取源码 → 编译 WebView2 窗口程序 → 安装到 `%LOCALAPPDATA%\RyanMusic` 并创建桌面快捷方式。
 
 依赖：Windows 10/11、PHP、.NET 8 SDK（脚本可用 winget 自动装）、系统自带的 WebView2（Win11 通常已有）。
