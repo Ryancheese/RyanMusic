@@ -389,6 +389,7 @@ function Build-And-Install([string]$root) {
   $sc.TargetPath = $exe
   $sc.WorkingDirectory = $InstallDir
   $sc.Description = "RyanMusic"
+  $sc.IconLocation = "$exe,0"
   $sc.Save()
 
   Write-Green "安装完成：$exe"

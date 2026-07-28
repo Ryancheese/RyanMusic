@@ -5,10 +5,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
-    <ApplicationIcon></ApplicationIcon>
+    <ApplicationIcon>AppIcon.ico</ApplicationIcon>
     <AssemblyName>RyanMusic</AssemblyName>
     <RootNamespace>RyanMusic</RootNamespace>
-    <Version>1.7.5</Version>
+    <Version>1.7.6</Version>
     <Product>RyanMusic</Product>
     <Description>RyanMusic Windows 客户端</Description>
   </PropertyGroup>

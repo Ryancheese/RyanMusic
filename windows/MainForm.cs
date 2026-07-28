@@ -27,12 +27,44 @@ public sealed class MainForm : Form
         MinimumSize = new Size(980, 700);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Color.FromArgb(8, 8, 14);
+        TrySetAppIcon();
 
         _webView.Dock = DockStyle.Fill;
         Controls.Add(_webView);
 
         Load += async (_, _) => await BootstrapAsync();
         FormClosed += (_, _) => StopPhp();
+    }
+
+    private void TrySetAppIcon()
+    {
+        try
+        {
+            var exe = Environment.ProcessPath ?? Application.ExecutablePath;
+            var icon = Icon.ExtractAssociatedIcon(exe);
+            if (icon != null)
+            {
+                Icon = icon;
+                return;
+            }
+        }
+        catch
+        {
+            // fall through
+        }
+
+        try
+        {
+            var icoPath = Path.Combine(AppContext.BaseDirectory, "AppIcon.ico");
+            if (File.Exists(icoPath))
+            {
+                Icon = new Icon(icoPath);
+            }
+        }
+        catch
+        {
+            // ignore
+        }
     }
 
     private async Task BootstrapAsync()
@@ -152,6 +184,7 @@ public sealed class MainForm : Form
             if (root.TryGetProperty("text", out var textEl) && textEl.ValueKind == JsonValueKind.String)
             {
                 await File.WriteAllTextAsync(dialog.FileName, textEl.GetString() ?? "", Encoding.UTF8);
+                ShowDownloadSuccess(dialog.FileName);
                 return;
             }
 
@@ -173,11 +206,41 @@ public sealed class MainForm : Form
                 resp.EnsureSuccessStatusCode();
                 await using var fs = File.Create(dialog.FileName);
                 await resp.Content.CopyToAsync(fs);
+                ShowDownloadSuccess(dialog.FileName);
             }
         }
         catch (Exception ex)
         {
             MessageBox.Show($"保存失败：{ex.Message}", "RyanMusic", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private void ShowDownloadSuccess(string path)
+    {
+        var name = Path.GetFileName(path);
+        var result = MessageBox.Show(
+            this,
+            $"下载成功：{name}\n\n是否打开所在文件夹？",
+            "RyanMusic",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Information);
+        if (result != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{path}\"",
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            // ignore
         }
     }
 
