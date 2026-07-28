@@ -39,27 +39,82 @@ function Find-Php {
 
 function Ensure-Php {
   $php = Find-Php
-  if ($php) {
-    Write-Green "已检测到 PHP：$php"
-    return
-  }
-
-  Write-Yellow "未检测到 PHP，尝试通过 winget 安装…"
-  if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-    Write-Red "未找到 winget。请手动安装 PHP：https://windows.php.net/download/"
-    Write-Red "或：winget install --id PHP.PHP.8.3 -e"
-    exit 1
-  }
-
-  winget install --id PHP.PHP.8.3 -e --accept-package-agreements --accept-source-agreements
-  Refresh-Path
-
-  $php = Find-Php
   if (-not $php) {
-    Write-Red "PHP 安装后仍不可用，请重新打开终端后再试。"
-    exit 1
+    Write-Yellow "未检测到 PHP，尝试通过 winget 安装…"
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+      Write-Red "未找到 winget。请手动安装 PHP：https://windows.php.net/download/"
+      Write-Red "或：winget install --id PHP.PHP.8.3 -e"
+      exit 1
+    }
+
+    winget install --id PHP.PHP.8.3 -e --accept-package-agreements --accept-source-agreements
+    Refresh-Path
+
+    $php = Find-Php
+    if (-not $php) {
+      Write-Red "PHP 安装后仍不可用，请重新打开终端后再试。"
+      exit 1
+    }
+    Write-Green "PHP 安装完成：$php"
+  } else {
+    Write-Green "已检测到 PHP：$php"
   }
-  Write-Green "PHP 安装完成：$php"
+
+  Enable-PhpExtensions $php
+}
+
+function Enable-PhpExtensions([string]$phpExe) {
+  $phpDir = Split-Path $phpExe -Parent
+  $extDir = Join-Path $phpDir "ext"
+  $iniPath = Join-Path $phpDir "php.ini"
+
+  if (-not (Test-Path $iniPath)) {
+    $candidates = @(
+      (Join-Path $phpDir "php.ini-development"),
+      (Join-Path $phpDir "php.ini-production")
+    )
+    foreach ($c in $candidates) {
+      if (Test-Path $c) {
+        Copy-Item $c $iniPath -Force
+        Write-Yellow "已生成 php.ini（来自 $(Split-Path $c -Leaf)）"
+        break
+      }
+    }
+  }
+
+  if (-not (Test-Path $iniPath)) {
+    Write-Yellow "未找到 php.ini，将在启动参数中强制加载扩展。"
+  } else {
+    $ini = Get-Content $iniPath -Raw -ErrorAction SilentlyContinue
+    if ($null -eq $ini) { $ini = "" }
+
+    # extension_dir
+    if ($ini -notmatch '(?m)^\s*extension_dir\s*=') {
+      $ini = "extension_dir=`"ext`"`r`n" + $ini
+    } else {
+      $ini = [regex]::Replace($ini, '(?m)^\s*;?\s*extension_dir\s*=.*$', 'extension_dir="ext"')
+    }
+
+    foreach ($ext in @('curl', 'openssl', 'mbstring', 'fileinfo')) {
+      if ($ini -match "(?m)^\s*extension\s*=\s*$ext\b") {
+        continue
+      }
+      if ($ini -match "(?m)^\s*;\s*extension\s*=\s*$ext\b") {
+        $ini = [regex]::Replace($ini, "(?m)^\s*;\s*extension\s*=\s*$ext\b.*$", "extension=$ext")
+      } else {
+        $ini = $ini.TrimEnd() + "`r`nextension=$ext`r`n"
+      }
+    }
+
+    Set-Content -Path $iniPath -Value $ini -Encoding UTF8
+  }
+
+  $mods = & $phpExe -m 2>$null
+  if ($mods -match '(?i)^curl$') {
+    Write-Green "PHP curl 扩展已启用"
+  } else {
+    Write-Yellow "php.ini 已尝试启用 curl，若仍失败请重启终端后再装一次。"
+  }
 }
 
 function Refresh-Path {

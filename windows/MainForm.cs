@@ -280,10 +280,26 @@ public sealed class MainForm : Form
     private void StartPhp(string phpPath, string webRoot, int port)
     {
         var log = Path.Combine(Path.GetTempPath(), "ryanmusic-php.log");
+        var phpDir = Path.GetDirectoryName(phpPath) ?? "";
+        var extDir = Path.Combine(phpDir, "ext");
+        EnsurePhpIni(phpDir);
+
+        var args = new StringBuilder();
+        if (Directory.Exists(extDir))
+        {
+            args.Append("-d \"extension_dir=").Append(extDir.Replace("\\", "/")).Append("\" ");
+            args.Append("-d extension=curl ");
+            args.Append("-d extension=openssl ");
+            args.Append("-d extension=mbstring ");
+            args.Append("-d extension=fileinfo ");
+        }
+        args.Append("-S 127.0.0.1:").Append(port);
+        args.Append(" -t \"").Append(webRoot).Append('"');
+
         var psi = new ProcessStartInfo
         {
             FileName = phpPath,
-            Arguments = $"-S 127.0.0.1:{port} -t \"{webRoot}\"",
+            Arguments = args.ToString(),
             WorkingDirectory = webRoot,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -311,6 +327,66 @@ public sealed class MainForm : Form
         }
         _phpProcess.BeginOutputReadLine();
         _phpProcess.BeginErrorReadLine();
+    }
+
+    private static void EnsurePhpIni(string phpDir)
+    {
+        try
+        {
+            var iniPath = Path.Combine(phpDir, "php.ini");
+            if (!File.Exists(iniPath))
+            {
+                foreach (var name in new[] { "php.ini-development", "php.ini-production" })
+                {
+                    var src = Path.Combine(phpDir, name);
+                    if (File.Exists(src))
+                    {
+                        File.Copy(src, iniPath, overwrite: true);
+                        break;
+                    }
+                }
+            }
+            if (!File.Exists(iniPath))
+            {
+                return;
+            }
+
+            var lines = File.ReadAllLines(iniPath).ToList();
+            bool touched = false;
+
+            void Upsert(string keyPattern, string valueLine)
+            {
+                for (var i = 0; i < lines.Count; i++)
+                {
+                    if (System.Text.RegularExpressions.Regex.IsMatch(lines[i], keyPattern))
+                    {
+                        if (!string.Equals(lines[i].Trim(), valueLine, StringComparison.OrdinalIgnoreCase))
+                        {
+                            lines[i] = valueLine;
+                            touched = true;
+                        }
+                        return;
+                    }
+                }
+                lines.Add(valueLine);
+                touched = true;
+            }
+
+            Upsert(@"^\s*;?\s*extension_dir\s*=", "extension_dir=\"ext\"");
+            foreach (var ext in new[] { "curl", "openssl", "mbstring", "fileinfo" })
+            {
+                Upsert($@"^\s*;?\s*extension\s*=\s*{ext}\b", $"extension={ext}");
+            }
+
+            if (touched)
+            {
+                File.WriteAllLines(iniPath, lines);
+            }
+        }
+        catch
+        {
+            // ignore; -d flags still applied
+        }
     }
 
     private void StopPhp()
