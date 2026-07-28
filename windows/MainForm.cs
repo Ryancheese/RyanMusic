@@ -277,9 +277,23 @@ public sealed class MainForm : Form
         return start;
     }
 
+    private string _logPath = "";
+
     private void StartPhp(string phpPath, string webRoot, int port)
     {
-        var log = Path.Combine(Path.GetTempPath(), "ryanmusic-php.log");
+        _logPath = ResolveLogPath();
+        try
+        {
+            File.WriteAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] RyanMusic PHP log\r\nphp={phpPath}\r\nroot={webRoot}\r\nport={port}\r\n\r\n");
+            // 旁路一个易找的说明文件
+            var hint = Path.Combine(AppContext.BaseDirectory, "如何查看日志.txt");
+            File.WriteAllText(hint, $"PHP 运行日志路径：\r\n{_logPath}\r\n\r\n可在资源管理器地址栏粘贴打开：\r\n{_logPath}\r\n", Encoding.UTF8);
+        }
+        catch
+        {
+            // ignore
+        }
+
         var phpDir = Path.GetDirectoryName(phpPath) ?? "";
         var extDir = Path.Combine(phpDir, "ext");
         EnsurePhpIni(phpDir);
@@ -307,26 +321,39 @@ public sealed class MainForm : Form
             RedirectStandardError = true
         };
         _phpProcess = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        _phpProcess.OutputDataReceived += (_, e) =>
-        {
-            if (!string.IsNullOrEmpty(e.Data))
-            {
-                File.AppendAllText(log, e.Data + Environment.NewLine);
-            }
-        };
-        _phpProcess.ErrorDataReceived += (_, e) =>
-        {
-            if (!string.IsNullOrEmpty(e.Data))
-            {
-                File.AppendAllText(log, e.Data + Environment.NewLine);
-            }
-        };
+        _phpProcess.OutputDataReceived += (_, e) => AppendLog(e.Data);
+        _phpProcess.ErrorDataReceived += (_, e) => AppendLog(e.Data);
         if (!_phpProcess.Start())
         {
             throw new InvalidOperationException("无法启动 PHP 进程");
         }
         _phpProcess.BeginOutputReadLine();
         _phpProcess.BeginErrorReadLine();
+    }
+
+    private static string ResolveLogPath()
+    {
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "RyanMusic");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, "ryanmusic-php.log");
+    }
+
+    private void AppendLog(string? line)
+    {
+        if (string.IsNullOrEmpty(line) || string.IsNullOrEmpty(_logPath))
+        {
+            return;
+        }
+        try
+        {
+            File.AppendAllText(_logPath, line + Environment.NewLine);
+        }
+        catch
+        {
+            // ignore
+        }
     }
 
     private static void EnsurePhpIni(string phpDir)
