@@ -782,8 +782,21 @@ $(function() {
       return curr + (next - curr) * factor;
     }
 
+    function isSameOriginAudio(audio) {
+      try {
+        var src = audio.currentSrc || audio.src || '';
+        if (!src) return false;
+        var u = new URL(src, location.href);
+        return u.origin === location.origin;
+      } catch (e) {
+        return false;
+      }
+    }
+
     function ensureAudioGraph(audio) {
       if (!audio) return null;
+      // 跨域 CDN（api 302）接 MediaElementSource 会静音，只做同域代理流分析
+      if (!isSameOriginAudio(audio)) return null;
       if (audioGraph && boundAudio === audio) return audioGraph;
       var Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return null;

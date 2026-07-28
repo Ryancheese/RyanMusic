@@ -295,18 +295,9 @@ public sealed class MainForm : Form
         }
 
         var phpDir = Path.GetDirectoryName(phpPath) ?? "";
-        var extDir = Path.Combine(phpDir, "ext");
-        EnsurePhpIni(phpDir);
+        EnsurePhpIni(phpDir); // 在 php.ini 启用 curl 等，避免再 -d 重复加载
 
         var args = new StringBuilder();
-        if (Directory.Exists(extDir))
-        {
-            args.Append("-d \"extension_dir=").Append(extDir.Replace("\\", "/")).Append("\" ");
-            args.Append("-d extension=curl ");
-            args.Append("-d extension=openssl ");
-            args.Append("-d extension=mbstring ");
-            args.Append("-d extension=fileinfo ");
-        }
         args.Append("-S 127.0.0.1:").Append(port);
         args.Append(" -t \"").Append(webRoot).Append('"');
 

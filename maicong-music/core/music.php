@@ -48,6 +48,8 @@ function mc_curl($args = [])
     $curl->setTimeout(15);
     $curl->setHeader('X-Requested-With', 'XMLHttpRequest');
     $curl->setOpt(CURLOPT_FOLLOWLOCATION, true);
+    $curl->setOpt(CURLOPT_SSL_VERIFYPEER, false);
+    $curl->setOpt(CURLOPT_SSL_VERIFYHOST, false);
     if ($args['proxy'] && MC_PROXY) {
         $curl->setOpt(CURLOPT_HTTPPROXYTUNNEL, 1);
         $curl->setOpt(CURLOPT_PROXY, MC_PROXY);
@@ -238,13 +240,18 @@ function mc_proxy_stream($url, $options = [])
     return (bool) $ok;
 }
 
-// 判断地址是否有误
+// 判断地址是否明显无效（不要用 HEAD 探测 CDN，很多音源不支持 HEAD）
 function mc_is_error($url) {
-    $curl = new Curl();
-    $curl->setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.50 Safari/537.36');
-    $curl->head($url);
-    $curl->close();
-    return $curl->errorCode;
+    if (!$url || !is_string($url)) {
+        return true;
+    }
+    if (!preg_match('#^https?://#i', $url)) {
+        return true;
+    }
+    if (stripos($url, '/404') !== false || stripos($url, 'music.163.com/404') !== false) {
+        return true;
+    }
+    return false;
 }
 
 // 获取明月浩空维护版生成的短时签名资源地址。
@@ -1687,6 +1694,10 @@ function mc_qq_curl_redirect($url, $referer = 'https://y.qq.com/')
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HEADER         => true,
         CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_HTTPHEADER     => [
             'Referer: ' . $referer,
             'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
@@ -1695,7 +1706,7 @@ function mc_qq_curl_redirect($url, $referer = 'https://y.qq.com/')
     $resp = curl_exec($ch);
     $loc = curl_getinfo($ch, CURLINFO_REDIRECT_URL);
     curl_close($ch);
-    if (!$loc && preg_match('/^Location:\s*(.+)$/mi', $resp, $m)) {
+    if (!$loc && is_string($resp) && preg_match('/^Location:\s*(.+)$/mi', $resp, $m)) {
         $loc = trim($m[1]);
     }
     return $loc ?: null;
@@ -2018,6 +2029,7 @@ function mc_api_handle_request()
                 : mc_netease_resolve_play_url($id);
             if (!$play_url) {
                 header('HTTP/1.1 502 Bad Gateway');
+                header('Content-Type: text/plain; charset=utf-8');
                 exit('无法获取播放地址');
             }
             $name = isset($_GET['name']) ? $_GET['name'] : 'RyanMusic';
@@ -2025,16 +2037,22 @@ function mc_api_handle_request()
             if (!preg_match('/\.mp3$/i', $name)) {
                 $name .= '.mp3';
             }
+            // 优先同源流式代理（macOS WKWebView / 光影分析依赖）；失败再 302
             $ok = mc_proxy_stream($play_url, [
                 'download'     => !empty($_GET['dl']),
                 'filename'     => $name,
                 'content_type' => 'audio/mpeg',
             ]);
-            if (!$ok) {
-                header('HTTP/1.1 502 Bad Gateway');
-                exit('无法获取播放地址');
+            if ($ok) {
+                exit;
             }
-            exit;
+            if (empty($_GET['dl'])) {
+                header('Location: ' . $play_url, true, 302);
+                exit;
+            }
+            header('HTTP/1.1 502 Bad Gateway');
+            header('Content-Type: text/plain; charset=utf-8');
+            exit('无法获取播放地址');
         case 'pic':
             $pic = ($type === 'qq')
                 ? mc_qq_resolve_pic_url($id)
