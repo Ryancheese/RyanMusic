@@ -64,141 +64,123 @@ if (!defined('MC_CORE')) {
             })();
         </script>
     <![endif]-->
-    <aside id="j-library" class="local-library local-library--dock glass-panel" aria-label="我的音乐">
-        <div class="local-library__head">
-            <h2 class="local-library__title">我的音乐</h2>
+    <header class="site-chrome" aria-label="RyanMusic">
+        <div class="site-chrome__brand">
+            <h1 class="site-chrome__title">
+                <span class="site-chrome__line">RYAN</span>
+                <span class="site-chrome__line site-chrome__line--accent">MUSIC</span>
+            </h1>
         </div>
-        <div class="local-library__channels" role="tablist" aria-label="音源渠道">
-            <button type="button" class="local-library__chip is-active" data-channel="all">全部</button>
-            <button type="button" class="local-library__chip" data-channel="netease">网易云</button>
-            <button type="button" class="local-library__chip" data-channel="qq">QQ</button>
-        </div>
-        <div class="local-library__tabs" role="tablist" aria-label="本地列表">
-            <button type="button" class="local-library__tab is-active" data-tab="liked">喜欢</button>
-            <button type="button" class="local-library__tab" data-tab="recent">最近</button>
-        </div>
-        <div class="local-library__scroll">
-            <ul id="j-library-list" class="local-library__list"></ul>
-            <p id="j-library-empty" class="local-library__empty">还没有内容。播放后点红心即可收藏。</p>
-        </div>
-    </aside>
+        <label class="ambient-intensity" title="光影律动，0% 为关闭">
+            <span class="ambient-intensity__label">光影</span>
+            <input
+                type="range"
+                id="j-ambient-intensity"
+                class="ambient-intensity__range"
+                min="0"
+                max="100"
+                step="1"
+                value="40"
+                aria-label="光影律动，0% 为关闭"
+            >
+            <span id="j-ambient-intensity-val" class="ambient-intensity__val">40%</span>
+        </label>
+        <p class="site-chrome__links">
+            <span class="site-chrome__ver">v<?php echo MC_VERSION; ?></span>
+            <a href="help.php">帮助</a>
+            <a href="disclaimer.php">声明</a>
+            <a href="mailto:17625416243@163.com">联系</a>
+        </p>
+    </header>
 
-    <section class="am-g about about--with-dock">
-        <div class="am-container am-margin-vertical-xl main-stage">
-            <header class="hero-poster" aria-label="RyanMusic">
-                <div class="hero-poster__bg" aria-hidden="true">
-                    <span class="hero-poster__watermark">听</span>
-                    <span class="hero-poster__watermark hero-poster__watermark--2">乐</span>
+    <section class="app-stage" aria-label="主内容">
+        <div class="app-stage__row">
+            <aside id="j-library" class="local-library glass-panel" aria-label="我的音乐">
+                <div class="local-library__head">
+                    <h2 class="local-library__title">我的音乐</h2>
                 </div>
-                <div class="hero-poster__content">
-                    <h1 class="hero-poster__title">
-                        <span class="hero-poster__stroke" aria-hidden="true">RYAN</span>
-                        <span class="hero-poster__line">RYAN</span>
-                        <span class="hero-poster__line hero-poster__line--accent">MUSIC</span>
-                    </h1>
-                    <div class="hero-poster__ribbon">
-                        <span>搜</span><span>听</span><span>下</span>
-                    </div>
+                <div class="local-library__channels" role="tablist" aria-label="音源渠道">
+                    <button type="button" class="local-library__chip is-active" data-channel="all">全部</button>
+                    <button type="button" class="local-library__chip" data-channel="netease">网易云</button>
+                    <button type="button" class="local-library__chip" data-channel="qq">QQ</button>
                 </div>
-            </header>
-            <div class="am-u-lg-12 am-padding-vertical">
-                <form id="j-validator" class="am-form am-margin-bottom-lg glass-panel" method="post">
-                    <div class="am-u-md-12 am-u-sm-centered">
-                        <div class="search-panel__head">
-                            <h2 class="search-panel__title">搜索</h2>
-                        </div>
-                        <ul id="j-nav" class="am-nav am-nav-pills am-nav-justify am-margin-bottom music-tabs">
-                            <li class="am-active" data-filter="name">
-                                <a>音乐名称</a>
-                            </li>
-                            <li data-filter="id">
-                                <a>音乐 ID</a>
-                            </li>
-                            <li data-filter="url">
-                                <a>音乐地址</a>
-                            </li>
-                        </ul>
-                        <div class="am-form-group">
-                            <input id="j-input" data-filter="name" class="am-form-field am-input-lg am-text-center am-radius" placeholder="例如: 不要说话 陈奕迅" data-am-loading="{loadingText: ' '}" pattern="^.+$" required>
-                            <div class="am-alert am-alert-danger am-animation-shake"></div>
-                        </div>
-                        <div id="j-type" class="am-form-group am-text-center music-type">
-                        <?php foreach ($music_type_list as $key => $val) { ?>
-                            <label class="am-radio-inline">
-                                <input type="radio" name="music_type" value="<?php echo $key; ?>"<?php if ($key === 'netease') echo ' checked'; ?>>
-                                <?php echo $val; ?>
-                            </label>
-                        <?php } ?>
-                        </div>
-                        <button id="j-submit" type="submit" class="am-btn am-btn-primary am-btn-lg am-btn-block am-radius" data-am-loading="{spinner: 'off', loadingText: '搜索中...', resetText: '搜索'}">搜索</button>
-                        <div id="j-search-progress" class="search-progress" aria-hidden="true" role="status" aria-live="polite">
-                            <div class="search-progress__track">
-                                <div id="j-search-progress-bar" class="search-progress__bar"></div>
+                <div class="local-library__tabs" role="tablist" aria-label="本地列表">
+                    <button type="button" class="local-library__tab is-active" data-tab="liked">喜欢</button>
+                    <button type="button" class="local-library__tab" data-tab="recent">最近</button>
+                    <button type="button" class="local-library__tab" data-tab="playlist">播放列表</button>
+                </div>
+                <div class="local-library__scroll">
+                    <ul id="j-library-list" class="local-library__list"></ul>
+                    <p id="j-library-empty" class="local-library__empty">还没有内容。播放后点红心即可收藏。</p>
+                </div>
+            </aside>
+
+            <div class="app-stage__main">
+                <div class="stage-shell glass-panel">
+                    <form id="j-validator" class="am-form stage-shell__search" method="post">
+                        <div class="am-u-md-12 am-u-sm-centered">
+                            <div class="am-form-group search-bar-group">
+                                <div class="search-bar" id="j-search-bar">
+                                    <span class="search-bar__icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="11" cy="11" r="7"></circle>
+                                            <path d="M20 20l-3.5-3.5"></path>
+                                        </svg>
+                                    </span>
+                                    <input id="j-input" data-filter="name" class="am-form-field am-input-lg search-bar__input" placeholder="搜索音乐，歌手" data-am-loading="{loadingText: ' '}" pattern="^.+$" required aria-label="搜索音乐，歌手">
+                                    <div id="j-type" class="search-bar__source">
+                                        <input type="radio" name="music_type" value="netease" checked class="is-visually-hidden" tabindex="-1">
+                                        <input type="radio" name="music_type" value="qq" class="is-visually-hidden" tabindex="-1">
+                                        <button type="button" id="j-source-toggle" class="source-toggle is-netease" title="当前网易，点击切换到 QQ" aria-label="切换音源">
+                                            <span class="source-toggle__text">网易</span>
+                                        </button>
+                                    </div>
+                                    <button id="j-submit" type="submit" class="am-btn am-btn-primary search-bar__submit" data-am-loading="{spinner: 'off', loadingText: '…', resetText: '搜索'}">搜索</button>
+                                </div>
+                                <div class="am-alert am-alert-danger am-animation-shake"></div>
                             </div>
-                            <p class="search-progress__meta">
-                                <span id="j-search-progress-label">正在搜索…</span>
-                                <span id="j-search-progress-time" class="search-progress__time">已等待 0 秒</span>
-                            </p>
-                            <p id="j-search-progress-hint" class="search-progress__hint">通常需要 5–15 秒，请稍候</p>
+                            <div id="j-search-progress" class="search-progress" aria-hidden="true" role="status" aria-live="polite">
+                                <div class="search-progress__track">
+                                    <div id="j-search-progress-bar" class="search-progress__bar"></div>
+                                </div>
+                                <p class="search-progress__meta">
+                                    <span id="j-search-progress-label">正在搜索…</span>
+                                    <span id="j-search-progress-time" class="search-progress__time">已等待 0 秒</span>
+                                </p>
+                                <p id="j-search-progress-hint" class="search-progress__hint">通常需要 5–15 秒，请稍候</p>
+                            </div>
+                        </div>
+                    </form>
+
+                    <div id="j-main" class="music-main stage-shell__result">
+                        <div class="result-toolbar">
+                            <button type="button" id="j-like-btn" class="like-btn" aria-pressed="false" title="喜欢">
+                                <span class="like-btn__icon" aria-hidden="true">♡</span>
+                                <span class="like-btn__text">喜欢</span>
+                            </button>
+                            <button type="button" id="j-add-playlist-btn" class="like-btn like-btn--playlist" title="加入播放列表">
+                                <span class="like-btn__icon" aria-hidden="true">＋</span>
+                                <span class="like-btn__text">加入播放列表</span>
+                            </button>
+                            <span id="j-track-channel" class="track-channel" hidden></span>
+                        </div>
+
+                        <div id="j-show" class="result-player result-player--studio">
+                            <div class="player-dl-actions">
+                                <a id="j-src-btn" class="player-dl-btn" href="#" title="下载歌曲">下载歌曲</a>
+                                <a id="j-lrc-btn" class="player-dl-btn" href="#" title="下载歌词">下载歌词</a>
+                            </div>
+                            <div id="j-player" class="aplayer"></div>
+                            <p id="j-load-status" class="playlist-load-status" hidden aria-live="polite"></p>
+                            <!-- 供下载逻辑读写，不展示 -->
+                            <input id="j-src" type="hidden" value="">
+                            <pre id="j-lrc" class="is-visually-hidden" hidden></pre>
                         </div>
                     </div>
-                </form>
-                <form id="j-main" class="am-form am-u-md-12 am-u-sm-centered music-main glass-panel">
-                    <button type="button" id="j-back" class="result-back" aria-label="返回继续搜索">
-                        <span class="result-back__spinner" aria-hidden="true"></span>
-                        <span class="result-back__label">
-                            <span class="result-back__icon" aria-hidden="true">←</span>
-                            <span class="result-back__text">继续搜索</span>
-                        </span>
-                    </button>
-
-                    <div class="result-toolbar">
-                        <button type="button" id="j-like-btn" class="like-btn" aria-pressed="false" title="喜欢">
-                            <span class="like-btn__icon" aria-hidden="true">♡</span>
-                            <span class="like-btn__text">喜欢</span>
-                        </button>
-                        <span id="j-track-channel" class="track-channel" hidden></span>
-                    </div>
-
-                    <div id="j-show" class="result-player result-player--studio">
-                        <div class="player-dl-actions">
-                            <a id="j-src-btn" class="player-dl-btn" href="#" title="下载歌曲">下载歌曲</a>
-                            <a id="j-lrc-btn" class="player-dl-btn" href="#" title="下载歌词">下载歌词</a>
-                        </div>
-                        <div id="j-player" class="aplayer"></div>
-                        <!-- 供下载逻辑读写，不展示 -->
-                        <input id="j-src" type="hidden" value="">
-                        <pre id="j-lrc" class="is-visually-hidden" hidden></pre>
-                    </div>
-                    <button type="button" id="j-load-more" class="result-load-more" hidden>加载更多</button>
-                </form>
+                </div>
             </div>
         </div>
     </section>
-    <footer class="footer">
-        <div class="footer__tools">
-            <label class="ambient-toggle" title="播放时背景随音乐轻微律动">
-                <input type="checkbox" id="j-ambient-toggle" checked>
-                <span class="ambient-toggle__ui" aria-hidden="true"></span>
-                <span class="ambient-toggle__text">光影律动</span>
-            </label>
-            <label class="ambient-intensity" title="律动幅度">
-                <span class="ambient-intensity__label">幅度</span>
-                <input
-                    type="range"
-                    id="j-ambient-intensity"
-                    class="ambient-intensity__range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value="40"
-                    aria-label="光影律动幅度"
-                >
-                <span id="j-ambient-intensity-val" class="ambient-intensity__val">40%</span>
-            </label>
-        </div>
-        <p class="am-text-sm">v<?php echo MC_VERSION; ?>&nbsp;&copy;&nbsp;<?php echo date('Y'); ?>&nbsp;<a href="help.php">使用帮助</a>&nbsp;·&nbsp;<a href="disclaimer.php">免责声明</a>&nbsp;·&nbsp;<a href="mailto:17625416243@163.com">联系站长</a></p>
-    </footer>
     <script src="static/vendor/jquery/jquery.min.js"></script>
     <script src="static/vendor/amazeui/amazeui.min.js"></script>
     <script src="static/vendor/aplayer/APlayer.min.js"></script>

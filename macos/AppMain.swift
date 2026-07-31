@@ -171,6 +171,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         task.resume()
     }
 
+    // MARK: - Navigation
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+        let scheme = (url.scheme ?? "").lowercased()
+        if scheme == "mailto" || scheme == "tel" {
+            NSWorkspace.shared.open(url)
+            decisionHandler(.cancel)
+            return
+        }
+        if scheme == "http" || scheme == "https" {
+            let host = (url.host ?? "").lowercased()
+            if host != "127.0.0.1" && host != "localhost" {
+                NSWorkspace.shared.open(url)
+                decisionHandler(.cancel)
+                return
+            }
+        }
+        decisionHandler(.allow)
+    }
+
     // MARK: - WKDownload（附件导航兜底）
 
     func webView(

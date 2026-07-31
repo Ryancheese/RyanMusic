@@ -51,7 +51,5 @@ if (!defined('MC_CORE')) {
     <footer class="footer">
         <p class="am-text-sm">v<?php echo MC_VERSION; ?>&nbsp;&copy;&nbsp;<?php echo date('Y'); ?>&nbsp;<a href="./">RyanMusic</a>&nbsp;·&nbsp;<a href="disclaimer.php">免责声明</a></p>
     </footer>
-    <script src="static/vendor/jquery/jquery.min.js"></script>
-    <script src="static/js/music.js?v=<?php echo MC_VERSION; ?>"></script>
 </body>
 </html>
