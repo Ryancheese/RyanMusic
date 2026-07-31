@@ -14,25 +14,34 @@
 | `macos/` | macOS 原生窗口 App（WKWebView）与一键安装脚本 |
 | `windows/` | Windows 原生窗口 App（WebView2）与一键安装脚本 |
 
-## 下载 Windows 绿色免安装包（推荐发给朋友）
+## 下载绿色安装包（推荐发给朋友）
 
-从 GitHub Releases 下载最新 **`RyanMusic-win-x64.zip`**：
+从 GitHub Releases 下载：
 
 **https://github.com/Ryancheese/RyanMusic/releases**
 
-解压后双击 `RyanMusic.exe` 即可（已内置便携 PHP，无需安装 .NET / PHP）。  
-需要系统已有 **WebView2**（Windows 10/11 通常自带）；若提示缺少，安装：[WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。
+| 平台 | 文件 | 说明 |
+|------|------|------|
+| Windows | `RyanMusic-win-x64.zip` | 解压后双击 `RyanMusic.exe`（已内嵌 PHP；需 WebView2） |
+| macOS Apple Silicon | `RyanMusic-mac-arm64.dmg` | 拖到「应用程序」；首次请右键 → 打开 |
+| macOS Intel | `RyanMusic-mac-x64.dmg` | 同上 |
 
-也可在仓库 **Actions → Windows Release Package** 中下载构建产物 Artifact。
+也可在 **Actions** 里下载对应 Artifact。
 
-本地在 Windows 上打包：
+本地打包：
 
 ```powershell
+# Windows
 powershell -ExecutionPolicy Bypass -File windows\build-app.ps1 -BundlePhp
-# 产物：dist\RyanMusic-win\ 与 dist\RyanMusic-win-x64.zip
 ```
 
-## macOS 一键安装（推荐）
+```bash
+# macOS（需本机已 brew install php）
+./macos/build-app.sh --bundle-php --dmg
+# 产物：dist/RyanMusic-mac-arm64.dmg 或 dist/RyanMusic-mac-x64.dmg
+```
+
+## macOS 一键安装（从源码编译）
 
 在终端执行：
 

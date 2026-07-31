@@ -11,7 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let php = Self.findPHP() else {
-            Self.alert("未找到 PHP。请先执行：brew install php")
+            Self.alert("未找到 PHP。\n请使用官方 DMG（已内嵌 PHP），或执行：brew install php")
             NSApp.terminate(nil)
             return
         }
@@ -258,7 +258,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private func startPHP(phpPath: String, webRoot: String, port: Int) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: phpPath)
-        process.arguments = ["-S", "127.0.0.1:\(port)", "-t", webRoot]
+
+        var args = [String]()
+        let iniBeside = (phpPath as NSString).deletingLastPathComponent + "/php.ini"
+        let iniResource = (Bundle.main.resourcePath ?? "") + "/php/php.ini"
+        if FileManager.default.fileExists(atPath: iniBeside) {
+            args.append(contentsOf: ["-c", iniBeside])
+        } else if FileManager.default.fileExists(atPath: iniResource) {
+            args.append(contentsOf: ["-c", iniResource])
+        }
+        args.append(contentsOf: ["-S", "127.0.0.1:\(port)", "-t", webRoot])
+        process.arguments = args
+
+        // 保证内嵌 PHP 能找到同目录 dylib（部分环境仍需要）
+        var env = ProcessInfo.processInfo.environment
+        let phpDir = (phpPath as NSString).deletingLastPathComponent
+        let libDir = (phpDir as NSString).appendingPathComponent("../lib")
+        if FileManager.default.fileExists(atPath: libDir) {
+            let resolved = (libDir as NSString).standardizingPath
+            if let existing = env["DYLD_FALLBACK_LIBRARY_PATH"], !existing.isEmpty {
+                env["DYLD_FALLBACK_LIBRARY_PATH"] = "\(resolved):\(existing)"
+            } else {
+                env["DYLD_FALLBACK_LIBRARY_PATH"] = resolved
+            }
+        }
+        if let resourcePath = Bundle.main.resourcePath {
+            let ca = (resourcePath as NSString).appendingPathComponent("php/cacert.pem")
+            if FileManager.default.fileExists(atPath: ca) {
+                env["SSL_CERT_FILE"] = ca
+                env["CURL_CA_BUNDLE"] = ca
+            }
+        }
+        process.environment = env
+
         let log = FileManager.default.temporaryDirectory.appendingPathComponent("ryanmusic-php.log")
         FileManager.default.createFile(atPath: log.path, contents: nil)
         let handle = try FileHandle(forWritingTo: log)
@@ -290,6 +322,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     static func findPHP() -> String? {
+        let bundle = Bundle.main.bundlePath as NSString
+        let bundled = [
+            bundle.appendingPathComponent("Contents/Resources/php/bin/php"),
+            bundle.appendingPathComponent("Contents/Resources/runtime/php/bin/php"),
+            bundle.appendingPathComponent("Contents/Resources/php/php")
+        ]
+        for path in bundled where FileManager.default.isExecutableFile(atPath: path) {
+            return path
+        }
+
         let candidates = [
             "/opt/homebrew/bin/php",
             "/usr/local/bin/php"
