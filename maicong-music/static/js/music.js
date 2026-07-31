@@ -1441,21 +1441,16 @@ $(function() {
                   $('#j-src-btn')
                     .attr('href', buildDownloadUrl(data.url, name))
                     .attr('data-save-name', name)
-                    .removeAttr('target download');
+                    .removeAttr('target');
                   $('#j-lrc').text(data.lrc);
-                  $('#j-lrc-btn').attr(
-                    'href',
-                    'data:application/octet-stream;base64,' +
-                      btoa(unescape(encodeURIComponent(data.lrc)))
-                  );
-                  $('#j-lrc-btn').attr('download', name + '.lrc');
-                  $('#j-lrc-btn').attr('data-save-name', name);
-                  $('#j-src-btn-icon')
-                    .addClass('am-icon-download')
-                    .removeClass('am-icon-external-link');
-                  $('#j-lrc-btn-icon')
-                    .addClass('am-icon-download')
-                    .removeClass('am-icon-external-link');
+                  $('#j-lrc-btn')
+                    .attr(
+                      'href',
+                      'data:application/octet-stream;base64,' +
+                        btoa(unescape(encodeURIComponent(data.lrc)))
+                    )
+                    .attr('download', name + '.lrc')
+                    .attr('data-save-name', name);
                   bindNativeDownloadButtons();
                   syncLikeButton(data);
                 };
@@ -1474,8 +1469,7 @@ $(function() {
 
                   $('#j-validator').slideUp();
                   // 左侧悬浮库保持显示
-
-
+                  $('#j-player').empty();
                   player = new APlayer({
                     element: $('#j-player')[0],
                     autoplay: false,
@@ -1487,7 +1481,7 @@ $(function() {
                     theme: '#fa2d55',
                     music: result.data
                   });
-
+                  player._playbackBound = false;
                   bindPlayerStudio(player);
                   bindPlayerPlayback(
                     player,
@@ -1638,15 +1632,16 @@ $(function() {
           $('#j-src-btn')
             .attr('href', buildDownloadUrl(data.url, name))
             .attr('data-save-name', name)
-            .removeAttr('target download');
+            .removeAttr('target');
           $('#j-lrc').text(data.lrc);
-          $('#j-lrc-btn').attr(
-            'href',
-            'data:application/octet-stream;base64,' +
-              btoa(unescape(encodeURIComponent(data.lrc)))
-          );
-          $('#j-lrc-btn').attr('download', name + '.lrc');
-          $('#j-lrc-btn').attr('data-save-name', name);
+          $('#j-lrc-btn')
+            .attr(
+              'href',
+              'data:application/octet-stream;base64,' +
+                btoa(unescape(encodeURIComponent(data.lrc)))
+            )
+            .attr('download', name + '.lrc')
+            .attr('data-save-name', name);
           bindNativeDownloadButtons();
           syncLikeButton(data);
         };

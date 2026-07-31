@@ -161,30 +161,16 @@ if (!defined('MC_CORE')) {
                     </div>
 
                     <div id="j-show" class="result-player result-player--studio">
+                        <div class="player-dl-actions">
+                            <a id="j-src-btn" class="player-dl-btn" href="#" title="下载歌曲">下载歌曲</a>
+                            <a id="j-lrc-btn" class="player-dl-btn" href="#" title="下载歌词">下载歌词</a>
+                        </div>
                         <div id="j-player" class="aplayer"></div>
+                        <!-- 供下载逻辑读写，不展示 -->
+                        <input id="j-src" type="hidden" value="">
+                        <pre id="j-lrc" class="is-visually-hidden" hidden></pre>
                     </div>
                     <button type="button" id="j-load-more" class="result-load-more" hidden>加载更多</button>
-
-                    <section class="result-meta" aria-label="曲目详情">
-                        <div class="meta-card">
-                            <span class="meta-card__label"><i class="am-icon-download am-icon-fw"></i>下载地址</span>
-                            <div class="meta-card__body">
-                                <input id="j-src" class="meta-card__input" readonly>
-                                <a id="j-src-btn" class="meta-card__action" title="下载音频">
-                                    <i id="j-src-btn-icon" class="am-icon-download"></i>
-                                </a>
-                            </div>
-                        </div>
-                        <div class="meta-card meta-card--lrc">
-                            <span class="meta-card__label"><i class="am-icon-file-text-o am-icon-fw"></i>歌词</span>
-                            <div class="meta-card__body meta-card__body--lrc">
-                                <pre id="j-lrc" class="meta-card__lrc-text"></pre>
-                                <a id="j-lrc-btn" class="meta-card__action" target="_blank" rel="noopener" title="下载歌词">
-                                    <i id="j-lrc-btn-icon" class="am-icon-external-link"></i>
-                                </a>
-                            </div>
-                        </div>
-                    </section>
                 </form>
             </div>
         </div>

@@ -853,14 +853,61 @@ a:hover {
 
 /* 播放器区域 */
 .result-player {
+  position: relative;
   margin-bottom: 20px;
 }
 
-/* 元数据卡片网格 */
+.player-dl-actions {
+  position: absolute;
+  top: 34px;
+  right: 36px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.player-dl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary) !important;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-decoration: none !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.player-dl-btn:hover {
+  background: rgba(250, 45, 85, 0.35);
+  border-color: rgba(250, 45, 85, 0.7);
+  color: #fff !important;
+}
+
+.is-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* 元数据卡片网格（已改为右上角按钮，保留兼容样式） */
 .result-meta {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  display: none;
 }
 
 .meta-card {
@@ -1050,7 +1097,7 @@ a:hover {
   align-items: flex-start !important;
   float: none !important;
   margin: 0 !important;
-  padding: 0 !important;
+  padding: 0 210px 0 0 !important;
   height: auto !important;
   white-space: normal !important;
   overflow: visible !important;
@@ -1874,12 +1921,23 @@ a:hover {
     max-height: none;
   }
 
-  .result-meta {
-    grid-template-columns: 1fr;
+  .result-player--studio .aplayer-info .aplayer-music {
+    padding-right: 0 !important;
   }
 
-  .meta-card--half {
-    grid-column: 1;
+  .player-dl-actions {
+    top: 16px;
+    right: 16px;
+  }
+
+  .player-dl-btn {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .result-meta {
+    display: none;
   }
 }
 
