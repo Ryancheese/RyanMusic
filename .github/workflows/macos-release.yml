@@ -8,15 +8,9 @@ on:
 
 jobs:
   build-macos:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-14
-            arch: arm64
-          - os: macos-13
-            arch: x64
-    runs-on: ${{ matrix.os }}
+    # GitHub macos-13 (Intel) 队列经常长时间无 runner；当前优先提供 Apple Silicon DMG。
+    # Intel Mac 可用 README 中的 install.sh 从源码安装。
+    runs-on: macos-14
     permissions:
       contents: write
     steps:
@@ -38,7 +32,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RyanMusic-mac-${{ matrix.arch }}
+          name: RyanMusic-mac-arm64
           path: dist/RyanMusic-mac-*.dmg
           if-no-files-found: error
           retention-days: 30

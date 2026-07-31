@@ -24,7 +24,8 @@
 |------|------|------|
 | Windows | `RyanMusic-win-x64.zip` | 解压后双击 `RyanMusic.exe`（已内嵌 PHP；需 WebView2） |
 | macOS Apple Silicon | `RyanMusic-mac-arm64.dmg` | 拖到「应用程序」；首次请右键 → 打开 |
-| macOS Intel | `RyanMusic-mac-x64.dmg` | 同上 |
+
+> Intel Mac 暂请使用下方「一键安装」脚本编译安装。
 
 也可在 **Actions** 里下载对应 Artifact。
 
