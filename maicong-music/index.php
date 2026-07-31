@@ -13,7 +13,7 @@
 define('MC_CORE', true);
 
 // 定义版本
-define('MC_VERSION', '1.7.9');
+define('MC_VERSION', '1.8.0');
 
 // 核心文件目录
 define('MC_CORE_DIR', __DIR__ . '/core');
@@ -58,6 +58,22 @@ if (!extension_loaded('curl')) {
 
 
 include_once MC_CORE_DIR . '/music.php';
+
+// 本地库封面（按 type+id 现签，避免 localStorage 里旧端口/过期签名）
+if (isset($_GET['cover']) && isset($_GET['type']) && isset($_GET['id'])) {
+    $cover_type = trim($_GET['type']);
+    $cover_id = trim($_GET['id']);
+    if ($cover_type === 'wy') {
+        $cover_type = 'netease';
+    }
+    if (!in_array($cover_type, ['netease', 'qq'], true) || $cover_id === '') {
+        header('HTTP/1.1 400 Bad Request');
+        exit('Invalid cover');
+    }
+    header('Cache-Control: public, max-age=3600');
+    header('Location: ' . mc_api_proxy_url('pic', $cover_type, $cover_id), true, 302);
+    exit;
+}
 
 // 代理下载音频
 if (isset($_GET['download']) && isset($_GET['url'])) {

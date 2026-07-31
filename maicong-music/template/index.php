@@ -67,7 +67,6 @@ if (!defined('MC_CORE')) {
     <aside id="j-library" class="local-library local-library--dock glass-panel" aria-label="我的音乐">
         <div class="local-library__head">
             <h2 class="local-library__title">我的音乐</h2>
-            <p class="local-library__hint">仅存本机 · 按音源区分</p>
         </div>
         <div class="local-library__channels" role="tablist" aria-label="音源渠道">
             <button type="button" class="local-library__chip is-active" data-channel="all">全部</button>

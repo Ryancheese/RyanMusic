@@ -116,13 +116,26 @@ $(function() {
     }
   }
 
+  function libCoverUrl(item) {
+    if (!item || !item.type || item.songid == null || item.songid === '') {
+      return nopic;
+    }
+    return (
+      getUrl() +
+      '?cover=1&type=' +
+      encodeURIComponent(item.type) +
+      '&id=' +
+      encodeURIComponent(String(item.songid))
+    );
+  }
+
   function toLibItem(track) {
     return {
       type: track.type,
       songid: String(track.songid),
       title: track.title || '暂无',
       author: track.author || '暂无',
-      pic: track.pic || nopic,
+      pic: '',
       link: track.link || '',
       savedAt: Date.now()
     };
@@ -249,7 +262,12 @@ $(function() {
           '</div>' +
           '</li>'
       );
-      $li.find('.local-library__cover').attr('src', item.pic || nopic);
+      $li.find('.local-library__cover')
+        .attr('src', libCoverUrl(item))
+        .on('error', function() {
+          this.onerror = null;
+          this.src = nopic;
+        });
       $li.find('.local-library__name').text(item.title || '暂无');
       $li
         .find('.local-library__sub')
@@ -1592,8 +1610,8 @@ $(function() {
       },
       dataType: 'json',
       beforeSend: function() {
+        $('#j-library').addClass('is-loading');
         startSearchProgress();
-        $('#j-submit').button('loading');
       },
       success: function(result) {
         if (!(result.code === 200 && result.data && result.data.length)) {
@@ -1601,9 +1619,9 @@ $(function() {
           return;
         }
         result.data.map(function(v) {
-          if (!v.title) v.title = '暂无';
-          if (!v.author) v.author = '暂无';
-          if (!v.pic) v.pic = nopic;
+          if (!v.title) v.title = item.title || '暂无';
+          if (!v.author) v.author = item.author || '暂无';
+          if (!v.pic) v.pic = libCoverUrl(item);
           if (!v.lrc) v.lrc = '[00:00.00] 暂无歌词';
           if (!/\[\d{1,2}:\d{2}/.test(v.lrc)) {
             v.lrc = '[00:00.00] 暂无歌词';
@@ -1634,14 +1652,17 @@ $(function() {
         };
 
         if (player) {
-          player.pause();
+          try {
+            player.pause();
+          } catch (e) {}
         }
         playerList = result.data;
         setValue(playerList[0]);
         addRecent(playerList[0]);
         renderLibrary();
 
-        $('#j-validator').slideUp();
+        $('#j-validator').hide();
+        $('#j-player').empty();
         player = new APlayer({
           element: $('#j-player')[0],
           autoplay: true,
@@ -1653,6 +1674,8 @@ $(function() {
           theme: '#fa2d55',
           music: result.data
         });
+        // 新实例需重新绑定
+        player._playbackBound = false;
         bindPlayerStudio(player);
         bindPlayerPlayback(
           player,
@@ -1672,7 +1695,7 @@ $(function() {
         }
         movePlayButton();
         tunePlayerStudio(player);
-        $('#j-main').slideDown(320);
+        $('#j-main').show();
         updateLoadMoreButton(false, 'id');
         setMusicType(item.type);
         pushState(
@@ -1684,8 +1707,8 @@ $(function() {
         alert('加载失败，请稍后重试');
       },
       complete: function() {
+        $('#j-library').removeClass('is-loading');
         stopSearchProgress(true);
-        $('#j-submit').button('reset');
       }
     });
   }

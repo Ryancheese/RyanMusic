@@ -238,9 +238,9 @@ a:hover {
 
 @media (min-width: 1100px) {
   .about--with-dock .main-stage {
-    margin-left: 320px;
+    margin-left: 340px;
     margin-right: auto;
-    max-width: min(920px, calc(100vw - 360px));
+    max-width: min(920px, calc(100vw - 380px));
   }
 }
 
@@ -1911,8 +1911,8 @@ a:hover {
   left: 18px;
   top: 50%;
   transform: translateY(-50%);
-  width: 288px;
-  max-height: min(720px, calc(100vh - 56px));
+  width: 300px;
+  max-height: min(760px, calc(100vh - 48px));
   display: flex;
   flex-direction: column;
   padding: 1.15rem 1rem 1rem;
@@ -1932,25 +1932,22 @@ a:hover {
 
 .local-library__title {
   margin: 0;
-  font-size: 1.35rem;
-  font-weight: 750;
+  font-size: 1.55rem;
+  font-weight: 780;
   letter-spacing: 0.03em;
   color: var(--text-primary);
 }
 
 .local-library__hint {
-  margin: 0.4rem 0 0;
-  font-size: 0.88rem;
-  line-height: 1.4;
-  color: var(--text-secondary);
+  display: none;
 }
 
 .local-library__channels,
 .local-library__tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-bottom: 0.7rem;
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
   flex: 0 0 auto;
 }
 
@@ -1961,9 +1958,9 @@ a:hover {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
   border-radius: var(--radius-pill);
-  padding: 0.42rem 0.85rem;
-  font-size: 0.9rem;
-  font-weight: 560;
+  padding: 0.5rem 0.95rem;
+  font-size: 1rem;
+  font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
@@ -2003,10 +2000,10 @@ a:hover {
 
 .local-library__item {
   display: grid;
-  grid-template-columns: 48px 1fr auto;
-  gap: 0.75rem;
+  grid-template-columns: 56px 1fr auto;
+  gap: 0.8rem;
   align-items: center;
-  padding: 0.65rem 0.4rem;
+  padding: 0.7rem 0.4rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   cursor: pointer;
   border-radius: var(--radius-sm);
@@ -2021,9 +2018,9 @@ a:hover {
 }
 
 .local-library__cover {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
   object-fit: cover;
   background: #1a1a22;
 }
@@ -2034,8 +2031,8 @@ a:hover {
 
 .local-library__name {
   margin: 0;
-  font-size: 1rem;
-  font-weight: 650;
+  font-size: 1.12rem;
+  font-weight: 680;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -2043,8 +2040,8 @@ a:hover {
 }
 
 .local-library__sub {
-  margin: 0.28rem 0 0;
-  font-size: 0.86rem;
+  margin: 0.35rem 0 0;
+  font-size: 0.95rem;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -2053,11 +2050,11 @@ a:hover {
 
 .local-library__badge {
   display: inline-block;
-  margin-right: 0.4rem;
-  padding: 0.12rem 0.45rem;
+  margin-right: 0.45rem;
+  padding: 0.15rem 0.5rem;
   border-radius: var(--radius-pill);
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.8rem;
+  font-weight: 650;
   vertical-align: middle;
 }
 
@@ -2071,9 +2068,9 @@ a:hover {
   background: rgba(49, 194, 124, 0.3);
 }
 
-.local-library__actions {
-  display: flex;
-  gap: 0.2rem;
+.local-library--dock.is-loading {
+  opacity: 0.72;
+  pointer-events: none;
 }
 
 .local-library__action {
@@ -2081,7 +2078,7 @@ a:hover {
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 1.15rem;
+  font-size: 1.3rem;
   line-height: 1;
   padding: 0.4rem;
   cursor: pointer;
@@ -2093,7 +2090,7 @@ a:hover {
 
 .local-library__empty {
   margin: 0.5rem 0 0;
-  font-size: 0.92rem;
+  font-size: 1.02rem;
   line-height: 1.55;
   color: var(--text-secondary);
   text-align: center;
