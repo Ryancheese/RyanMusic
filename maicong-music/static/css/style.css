@@ -1891,3 +1891,234 @@ a:hover {
     transition: none !important;
   }
 }
+
+/* —— 本地音乐库（按音源分渠道） —— */
+.local-library {
+  margin-bottom: 1.25rem;
+  padding: 1.1rem 1.15rem 1rem;
+}
+
+.local-library__head {
+  margin-bottom: 0.75rem;
+}
+
+.local-library__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.local-library__hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+
+.local-library__channels,
+.local-library__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+}
+
+.local-library__chip,
+.local-library__tab {
+  appearance: none;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  border-radius: var(--radius-pill);
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.local-library__chip.is-active,
+.local-library__tab.is-active {
+  color: #fff;
+  border-color: rgba(250, 45, 85, 0.55);
+  background: rgba(250, 45, 85, 0.28);
+}
+
+.local-library__chip[data-channel="netease"].is-active {
+  border-color: rgba(236, 65, 65, 0.65);
+  background: rgba(236, 65, 65, 0.28);
+}
+
+.local-library__chip[data-channel="qq"].is-active {
+  border-color: rgba(49, 194, 124, 0.65);
+  background: rgba(49, 194, 124, 0.25);
+}
+
+.local-library__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.local-library__item {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.55rem 0.35rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.local-library__item:last-child {
+  border-bottom: none;
+}
+
+.local-library__item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-sm);
+}
+
+.local-library__cover {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #1a1a22;
+}
+
+.local-library__meta {
+  min-width: 0;
+}
+
+.local-library__name {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.local-library__sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.local-library__badge {
+  display: inline-block;
+  margin-right: 0.35rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.65rem;
+  vertical-align: middle;
+}
+
+.local-library__badge--netease {
+  color: #ffd0d0;
+  background: rgba(236, 65, 65, 0.3);
+}
+
+.local-library__badge--qq {
+  color: #c8ffe0;
+  background: rgba(49, 194, 124, 0.28);
+}
+
+.local-library__actions {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.local-library__action {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.35rem;
+  cursor: pointer;
+}
+
+.local-library__action:hover {
+  color: #fff;
+}
+
+.local-library__empty {
+  margin: 0.4rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: 0.8rem 0.5rem;
+}
+
+.search-panel__head {
+  margin-bottom: 0.65rem;
+}
+
+.search-panel__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.result-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.like-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border-radius: var(--radius-pill);
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.like-btn.is-liked {
+  color: #fff;
+  border-color: rgba(250, 45, 85, 0.7);
+  background: rgba(250, 45, 85, 0.35);
+}
+
+.like-btn__icon {
+  font-size: 1rem;
+}
+
+.track-channel {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.track-channel.is-netease {
+  color: #ffd0d0;
+  background: rgba(236, 65, 65, 0.22);
+}
+
+.track-channel.is-qq {
+  color: #c8ffe0;
+  background: rgba(49, 194, 124, 0.2);
+}
+
+@media (max-width: 640px) {
+  .local-library__list {
+    max-height: 220px;
+  }
+}

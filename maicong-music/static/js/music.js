@@ -75,6 +75,197 @@ $(function() {
   var player = null;
   var playerList = [];
   var nopic = 'static/img/nopic.jpg';
+  var CHANNEL_LABELS = {
+    netease: '网易云',
+    qq: 'QQ 音乐'
+  };
+  var LIB = {
+    likedKey: 'ryanmusic-liked-v1',
+    recentKey: 'ryanmusic-recent-v1',
+    recentMax: 80,
+    channel: 'all',
+    tab: 'liked'
+  };
+
+  function channelLabel(type) {
+    return CHANNEL_LABELS[type] || type || '未知';
+  }
+
+  function libTrackKey(track) {
+    if (!track || !track.type || track.songid == null || track.songid === '') {
+      return '';
+    }
+    return String(track.type) + ':' + String(track.songid);
+  }
+
+  function readLibList(storageKey) {
+    try {
+      var raw = localStorage.getItem(storageKey);
+      var list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function writeLibList(storageKey, list) {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(list));
+    } catch (e) {
+      // quota / private mode
+    }
+  }
+
+  function toLibItem(track) {
+    return {
+      type: track.type,
+      songid: String(track.songid),
+      title: track.title || '暂无',
+      author: track.author || '暂无',
+      pic: track.pic || nopic,
+      link: track.link || '',
+      savedAt: Date.now()
+    };
+  }
+
+  function isLiked(track) {
+    var key = libTrackKey(track);
+    if (!key) return false;
+    return readLibList(LIB.likedKey).some(function(item) {
+      return libTrackKey(item) === key;
+    });
+  }
+
+  function toggleLike(track) {
+    var key = libTrackKey(track);
+    if (!key) return false;
+    var list = readLibList(LIB.likedKey);
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) {
+      if (libTrackKey(list[i]) === key) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx >= 0) {
+      list.splice(idx, 1);
+      writeLibList(LIB.likedKey, list);
+      return false;
+    }
+    list.unshift(toLibItem(track));
+    writeLibList(LIB.likedKey, list);
+    return true;
+  }
+
+  function removeLiked(track) {
+    var key = libTrackKey(track);
+    if (!key) return;
+    writeLibList(
+      LIB.likedKey,
+      readLibList(LIB.likedKey).filter(function(item) {
+        return libTrackKey(item) !== key;
+      })
+    );
+  }
+
+  function addRecent(track) {
+    var key = libTrackKey(track);
+    if (!key) return;
+    var list = readLibList(LIB.recentKey).filter(function(item) {
+      return libTrackKey(item) !== key;
+    });
+    list.unshift(toLibItem(track));
+    if (list.length > LIB.recentMax) {
+      list = list.slice(0, LIB.recentMax);
+    }
+    writeLibList(LIB.recentKey, list);
+  }
+
+  function filterLibByChannel(list, channel) {
+    if (!channel || channel === 'all') return list;
+    return list.filter(function(item) {
+      return item.type === channel;
+    });
+  }
+
+  function syncLikeButton(track) {
+    var $btn = $('#j-like-btn');
+    var $channel = $('#j-track-channel');
+    if (!$btn.length) return;
+    if (!track || !libTrackKey(track)) {
+      $btn.prop('disabled', true).removeClass('is-liked').attr('aria-pressed', 'false');
+      $btn.find('.like-btn__icon').text('♡');
+      $btn.find('.like-btn__text').text('喜欢');
+      $channel.prop('hidden', true).text('');
+      return;
+    }
+    var liked = isLiked(track);
+    $btn.prop('disabled', false);
+    $btn.toggleClass('is-liked', liked).attr('aria-pressed', liked ? 'true' : 'false');
+    $btn.find('.like-btn__icon').text(liked ? '♥' : '♡');
+    $btn.find('.like-btn__text').text(liked ? '已喜欢' : '喜欢');
+    $channel
+      .prop('hidden', false)
+      .removeClass('is-netease is-qq')
+      .addClass(track.type === 'qq' ? 'is-qq' : 'is-netease')
+      .text(channelLabel(track.type));
+  }
+
+  function renderLibrary() {
+    var $list = $('#j-library-list');
+    var $empty = $('#j-library-empty');
+    if (!$list.length) return;
+    var source =
+      LIB.tab === 'recent'
+        ? readLibList(LIB.recentKey)
+        : readLibList(LIB.likedKey);
+    var items = filterLibByChannel(source, LIB.channel);
+    $list.empty();
+    if (!items.length) {
+      $empty.show().text(
+        LIB.tab === 'recent'
+          ? '还没有最近播放。听过的歌会按「网易云 / QQ」分别记在这里。'
+          : '还没有喜欢的歌。搜索播放后点红心，会按音源分别收藏。'
+      );
+      return;
+    }
+    $empty.hide();
+    items.forEach(function(item) {
+      var badgeClass =
+        item.type === 'qq'
+          ? 'local-library__badge local-library__badge--qq'
+          : 'local-library__badge local-library__badge--netease';
+      var $li = $(
+        '<li class="local-library__item">' +
+          '<img class="local-library__cover" alt="">' +
+          '<div class="local-library__meta">' +
+          '<p class="local-library__name"></p>' +
+          '<p class="local-library__sub"></p>' +
+          '</div>' +
+          '<div class="local-library__actions">' +
+          (LIB.tab === 'liked'
+            ? '<button type="button" class="local-library__action" data-act="unlike" title="取消喜欢">♥</button>'
+            : '<button type="button" class="local-library__action" data-act="like" title="喜欢">♡</button>') +
+          '</div>' +
+          '</li>'
+      );
+      $li.find('.local-library__cover').attr('src', item.pic || nopic);
+      $li.find('.local-library__name').text(item.title || '暂无');
+      $li
+        .find('.local-library__sub')
+        .html(
+          '<span class="' +
+            badgeClass +
+            '">' +
+            channelLabel(item.type) +
+            '</span>' +
+            (item.author || '')
+        );
+      $li.data('track', item);
+      $list.append($li);
+    });
+  }
+
   var qName = q('name');
   var qId = q('id');
   var qUrl = q('url');
@@ -443,6 +634,9 @@ $(function() {
       }
       document.title = '正在播放: ' + data.title + ' - ' + data.author;
       setValue(data);
+      addRecent(data);
+      syncLikeButton(data);
+      renderLibrary();
     });
 
     playerInstance.on('ended', function() {
@@ -1200,6 +1394,7 @@ $(function() {
                 $('#j-submit').button('loading');
                 updateLoadMoreButton(false, filter);
                 startSearchProgress();
+                $('#j-library').slideUp(160);
               } else {
                 $more.text('请稍后...');
               }
@@ -1218,6 +1413,9 @@ $(function() {
                     v.lrc = '[00:00.00] 暂无歌词';
                   }
                   v.lrc = stripLrcMeta(v.lrc);
+                  if (!v.type && type && type !== '_') {
+                    v.type = type;
+                  }
                   normalizeTrackMedia(v);
                 });
                 var setValue = function setValue(data) {
@@ -1242,6 +1440,7 @@ $(function() {
                     .addClass('am-icon-download')
                     .removeClass('am-icon-external-link');
                   bindNativeDownloadButtons();
+                  syncLikeButton(data);
                 };
 
                 if (page === 1) {
@@ -1252,8 +1451,12 @@ $(function() {
                   playerList = result.data;
 
                   setValue(playerList[0]);
+                  addRecent(playerList[0]);
+                  syncLikeButton(playerList[0]);
+                  renderLibrary();
 
                   $('#j-validator').slideUp();
+                  $('#j-library').slideUp(200);
 
                   player = new APlayer({
                     element: $('#j-player')[0],
@@ -1362,10 +1565,186 @@ $(function() {
     if ($btn.hasClass('is-loading')) return;
     $btn.addClass('is-loading');
     $('#j-validator').slideDown(320);
+    $('#j-library').slideDown(320);
     $('#j-main').slideUp(320, function() {
       $('#j-main input, #j-main textarea').val('');
       resetSearchState();
+      syncLikeButton(null);
+      renderLibrary();
       $btn.removeClass('is-loading');
     });
   });
+
+  function playLibraryItem(item) {
+    if (!item || !item.type || !item.songid) return;
+    if (item.type !== 'netease' && item.type !== 'qq') {
+      alert('暂不支持该音源：' + item.type);
+      return;
+    }
+    $.ajax({
+      type: 'POST',
+      url: getUrl(),
+      timeout: 30000,
+      data: {
+        input: String(item.songid),
+        filter: 'id',
+        type: item.type,
+        page: 1
+      },
+      dataType: 'json',
+      beforeSend: function() {
+        startSearchProgress();
+        $('#j-submit').button('loading');
+      },
+      success: function(result) {
+        if (!(result.code === 200 && result.data && result.data.length)) {
+          alert(result.error || '无法播放该歌曲，可能已失效');
+          return;
+        }
+        result.data.map(function(v) {
+          if (!v.title) v.title = '暂无';
+          if (!v.author) v.author = '暂无';
+          if (!v.pic) v.pic = nopic;
+          if (!v.lrc) v.lrc = '[00:00.00] 暂无歌词';
+          if (!/\[\d{1,2}:\d{2}/.test(v.lrc)) {
+            v.lrc = '[00:00.00] 暂无歌词';
+          }
+          v.lrc = stripLrcMeta(v.lrc);
+          if (!v.type) v.type = item.type;
+          if (!v.songid) v.songid = item.songid;
+          normalizeTrackMedia(v);
+        });
+
+        var setValue = function setValue(data) {
+          var name = data.title + '-' + data.author;
+          $('#j-src').val(data.url);
+          $('#j-src-btn')
+            .attr('href', buildDownloadUrl(data.url, name))
+            .attr('data-save-name', name)
+            .removeAttr('target download');
+          $('#j-lrc').text(data.lrc);
+          $('#j-lrc-btn').attr(
+            'href',
+            'data:application/octet-stream;base64,' +
+              btoa(unescape(encodeURIComponent(data.lrc)))
+          );
+          $('#j-lrc-btn').attr('download', name + '.lrc');
+          $('#j-lrc-btn').attr('data-save-name', name);
+          bindNativeDownloadButtons();
+          syncLikeButton(data);
+        };
+
+        if (player) {
+          player.pause();
+        }
+        playerList = result.data;
+        setValue(playerList[0]);
+        addRecent(playerList[0]);
+        renderLibrary();
+
+        $('#j-validator').slideUp();
+        $('#j-library').slideUp(200);
+        player = new APlayer({
+          element: $('#j-player')[0],
+          autoplay: true,
+          narrow: false,
+          showlrc: 1,
+          mutex: false,
+          mode: 'circulation',
+          preload: 'metadata',
+          theme: '#fa2d55',
+          music: result.data
+        });
+        bindPlayerStudio(player);
+        bindPlayerPlayback(
+          player,
+          function() {
+            return playerList[player.playIndex];
+          },
+          setValue,
+          siteTitle
+        );
+        if (ambientGlow) {
+          ambientGlow.bindPlayer(player, function() {
+            return playerList[player.playIndex];
+          });
+          if (playerList[0] && playerList[0].pic) {
+            ambientGlow.setCover(playerList[0].pic);
+          }
+        }
+        movePlayButton();
+        tunePlayerStudio(player);
+        $('#j-main').slideDown(320);
+        updateLoadMoreButton(false, 'id');
+        setMusicType(item.type);
+        pushState(
+          document.title,
+          getUrl('?id=' + encodeURIComponent(item.songid) + '&type=' + item.type)
+        );
+      },
+      error: function() {
+        alert('加载失败，请稍后重试');
+      },
+      complete: function() {
+        stopSearchProgress(true);
+        $('#j-submit').button('reset');
+      }
+    });
+  }
+
+  $('#j-like-btn').on('click', function() {
+    if (!player || !playerList.length) return;
+    var track = playerList[player.playIndex];
+    if (!track) return;
+    var liked = toggleLike(track);
+    syncLikeButton(track);
+    renderLibrary();
+    $(this).attr('title', liked ? '取消喜欢' : '喜欢');
+  });
+
+  $('#j-library').on('click', '.local-library__chip', function() {
+    LIB.channel = $(this).data('channel') || 'all';
+    $(this)
+      .addClass('is-active')
+      .siblings('.local-library__chip')
+      .removeClass('is-active');
+    renderLibrary();
+  });
+
+  $('#j-library').on('click', '.local-library__tab', function() {
+    LIB.tab = $(this).data('tab') || 'liked';
+    $(this)
+      .addClass('is-active')
+      .siblings('.local-library__tab')
+      .removeClass('is-active');
+    renderLibrary();
+  });
+
+  $('#j-library-list').on('click', '.local-library__item', function(e) {
+    var $target = $(e.target);
+    var item = $(this).data('track');
+    if (!item) return;
+    if ($target.closest('[data-act="unlike"]').length) {
+      e.stopPropagation();
+      removeLiked(item);
+      renderLibrary();
+      if (player && playerList[player.playIndex]) {
+        syncLikeButton(playerList[player.playIndex]);
+      }
+      return;
+    }
+    if ($target.closest('[data-act="like"]').length) {
+      e.stopPropagation();
+      toggleLike(item);
+      renderLibrary();
+      if (player && playerList[player.playIndex]) {
+        syncLikeButton(playerList[player.playIndex]);
+      }
+      return;
+    }
+    playLibraryItem(item);
+  });
+
+  renderLibrary();
+  syncLikeButton(null);
 });

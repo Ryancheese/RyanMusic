@@ -83,8 +83,29 @@ if (!defined('MC_CORE')) {
                 </div>
             </header>
             <div class="am-u-lg-12 am-padding-vertical">
+                <section id="j-library" class="local-library glass-panel" aria-label="我的音乐">
+                    <div class="local-library__head">
+                        <h2 class="local-library__title">我的音乐</h2>
+                        <p class="local-library__hint">仅保存在本机，按音源区分</p>
+                    </div>
+                    <div class="local-library__channels" role="tablist" aria-label="音源渠道">
+                        <button type="button" class="local-library__chip is-active" data-channel="all">全部</button>
+                        <button type="button" class="local-library__chip" data-channel="netease">网易云</button>
+                        <button type="button" class="local-library__chip" data-channel="qq">QQ 音乐</button>
+                    </div>
+                    <div class="local-library__tabs" role="tablist" aria-label="本地列表">
+                        <button type="button" class="local-library__tab is-active" data-tab="liked">我喜欢的</button>
+                        <button type="button" class="local-library__tab" data-tab="recent">最近播放</button>
+                    </div>
+                    <ul id="j-library-list" class="local-library__list"></ul>
+                    <p id="j-library-empty" class="local-library__empty">还没有内容。搜索歌曲后点红心，即可收藏到对应音源。</p>
+                </section>
+
                 <form id="j-validator" class="am-form am-margin-bottom-lg glass-panel" method="post">
                     <div class="am-u-md-12 am-u-sm-centered">
+                        <div class="search-panel__head">
+                            <h2 class="search-panel__title">搜索</h2>
+                        </div>
                         <ul id="j-nav" class="am-nav am-nav-pills am-nav-justify am-margin-bottom music-tabs">
                             <li class="am-active" data-filter="name">
                                 <a>音乐名称</a>
@@ -129,6 +150,14 @@ if (!defined('MC_CORE')) {
                             <span class="result-back__text">继续搜索</span>
                         </span>
                     </button>
+
+                    <div class="result-toolbar">
+                        <button type="button" id="j-like-btn" class="like-btn" aria-pressed="false" title="喜欢">
+                            <span class="like-btn__icon" aria-hidden="true">♡</span>
+                            <span class="like-btn__text">喜欢</span>
+                        </button>
+                        <span id="j-track-channel" class="track-channel" hidden></span>
+                    </div>
 
                     <div id="j-show" class="result-player result-player--studio">
                         <div id="j-player" class="aplayer"></div>
