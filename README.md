@@ -14,6 +14,24 @@
 | `macos/` | macOS 原生窗口 App（WKWebView）与一键安装脚本 |
 | `windows/` | Windows 原生窗口 App（WebView2）与一键安装脚本 |
 
+## 下载 Windows 绿色免安装包（推荐发给朋友）
+
+从 GitHub Releases 下载最新 **`RyanMusic-win-x64.zip`**：
+
+**https://github.com/Ryancheese/RyanMusic/releases**
+
+解压后双击 `RyanMusic.exe` 即可（已内置便携 PHP，无需安装 .NET / PHP）。  
+需要系统已有 **WebView2**（Windows 10/11 通常自带）；若提示缺少，安装：[WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。
+
+也可在仓库 **Actions → Windows Release Package** 中下载构建产物 Artifact。
+
+本地在 Windows 上打包：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\build-app.ps1 -BundlePhp
+# 产物：dist\RyanMusic-win\ 与 dist\RyanMusic-win-x64.zip
+```
+
 ## macOS 一键安装（推荐）
 
 在终端执行：
@@ -40,7 +58,7 @@ curl -fsSL https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/macos/ins
 ./macos/build-app.sh && open dist/RyanMusic.app
 ```
 
-## Windows 一键安装
+## Windows 一键安装（从源码编译安装）
 
 在 **PowerShell** 执行：
 
@@ -62,8 +80,10 @@ iex ((irm https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/windows/in
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File windows\install.ps1
-# 或只打包：
+# 或只打包（不含便携 PHP）：
 powershell -ExecutionPolicy Bypass -File windows\build-app.ps1
+# 绿色完整包：
+powershell -ExecutionPolicy Bypass -File windows\build-app.ps1 -BundlePhp
 ```
 
 若 `irm` / GitHub raw 连不上，可改用：
