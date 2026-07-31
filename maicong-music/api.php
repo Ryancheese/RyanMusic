@@ -4,7 +4,7 @@
  */
 
 define('MC_CORE', true);
-define('MC_VERSION', '1.7.8');
+define('MC_VERSION', '1.7.9');
 define('MC_CORE_DIR', __DIR__ . '/core');
 define('MC_TEMP_DIR', __DIR__ . '/template');
 define('MC_DEBUG', 0);

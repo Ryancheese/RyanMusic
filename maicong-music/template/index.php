@@ -64,8 +64,28 @@ if (!defined('MC_CORE')) {
             })();
         </script>
     <![endif]-->
-    <section class="am-g about">
-        <div class="am-container am-margin-vertical-xl">
+    <aside id="j-library" class="local-library local-library--dock glass-panel" aria-label="我的音乐">
+        <div class="local-library__head">
+            <h2 class="local-library__title">我的音乐</h2>
+            <p class="local-library__hint">仅存本机 · 按音源区分</p>
+        </div>
+        <div class="local-library__channels" role="tablist" aria-label="音源渠道">
+            <button type="button" class="local-library__chip is-active" data-channel="all">全部</button>
+            <button type="button" class="local-library__chip" data-channel="netease">网易云</button>
+            <button type="button" class="local-library__chip" data-channel="qq">QQ</button>
+        </div>
+        <div class="local-library__tabs" role="tablist" aria-label="本地列表">
+            <button type="button" class="local-library__tab is-active" data-tab="liked">喜欢</button>
+            <button type="button" class="local-library__tab" data-tab="recent">最近</button>
+        </div>
+        <div class="local-library__scroll">
+            <ul id="j-library-list" class="local-library__list"></ul>
+            <p id="j-library-empty" class="local-library__empty">还没有内容。播放后点红心即可收藏。</p>
+        </div>
+    </aside>
+
+    <section class="am-g about about--with-dock">
+        <div class="am-container am-margin-vertical-xl main-stage">
             <header class="hero-poster" aria-label="RyanMusic">
                 <div class="hero-poster__bg" aria-hidden="true">
                     <span class="hero-poster__watermark">听</span>
@@ -83,24 +103,6 @@ if (!defined('MC_CORE')) {
                 </div>
             </header>
             <div class="am-u-lg-12 am-padding-vertical">
-                <section id="j-library" class="local-library glass-panel" aria-label="我的音乐">
-                    <div class="local-library__head">
-                        <h2 class="local-library__title">我的音乐</h2>
-                        <p class="local-library__hint">仅保存在本机，按音源区分</p>
-                    </div>
-                    <div class="local-library__channels" role="tablist" aria-label="音源渠道">
-                        <button type="button" class="local-library__chip is-active" data-channel="all">全部</button>
-                        <button type="button" class="local-library__chip" data-channel="netease">网易云</button>
-                        <button type="button" class="local-library__chip" data-channel="qq">QQ 音乐</button>
-                    </div>
-                    <div class="local-library__tabs" role="tablist" aria-label="本地列表">
-                        <button type="button" class="local-library__tab is-active" data-tab="liked">我喜欢的</button>
-                        <button type="button" class="local-library__tab" data-tab="recent">最近播放</button>
-                    </div>
-                    <ul id="j-library-list" class="local-library__list"></ul>
-                    <p id="j-library-empty" class="local-library__empty">还没有内容。搜索歌曲后点红心，即可收藏到对应音源。</p>
-                </section>
-
                 <form id="j-validator" class="am-form am-margin-bottom-lg glass-panel" method="post">
                     <div class="am-u-md-12 am-u-sm-centered">
                         <div class="search-panel__head">

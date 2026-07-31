@@ -1394,7 +1394,6 @@ $(function() {
                 $('#j-submit').button('loading');
                 updateLoadMoreButton(false, filter);
                 startSearchProgress();
-                $('#j-library').slideUp(160);
               } else {
                 $more.text('请稍后...');
               }
@@ -1456,7 +1455,8 @@ $(function() {
                   renderLibrary();
 
                   $('#j-validator').slideUp();
-                  $('#j-library').slideUp(200);
+                  // 左侧悬浮库保持显示
+
 
                   player = new APlayer({
                     element: $('#j-player')[0],
@@ -1565,7 +1565,6 @@ $(function() {
     if ($btn.hasClass('is-loading')) return;
     $btn.addClass('is-loading');
     $('#j-validator').slideDown(320);
-    $('#j-library').slideDown(320);
     $('#j-main').slideUp(320, function() {
       $('#j-main input, #j-main textarea').val('');
       resetSearchState();
@@ -1643,7 +1642,6 @@ $(function() {
         renderLibrary();
 
         $('#j-validator').slideUp();
-        $('#j-library').slideUp(200);
         player = new APlayer({
           element: $('#j-player')[0],
           autoplay: true,

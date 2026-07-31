@@ -232,6 +232,18 @@ a:hover {
   max-width: 980px;
 }
 
+.about--with-dock .main-stage {
+  transition: margin 0.25s ease;
+}
+
+@media (min-width: 1100px) {
+  .about--with-dock .main-stage {
+    margin-left: 320px;
+    margin-right: auto;
+    max-width: min(920px, calc(100vw - 360px));
+  }
+}
+
 .about hr {
   display: none;
 }
@@ -1892,27 +1904,45 @@ a:hover {
   }
 }
 
-/* —— 本地音乐库（按音源分渠道） —— */
-.local-library {
-  margin-bottom: 1.25rem;
-  padding: 1.1rem 1.15rem 1rem;
+/* —— 本地音乐库：左侧竖向悬浮 —— */
+.local-library--dock {
+  position: fixed;
+  z-index: 40;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 288px;
+  max-height: min(720px, calc(100vh - 56px));
+  display: flex;
+  flex-direction: column;
+  padding: 1.15rem 1rem 1rem;
+  margin: 0;
+  overflow: hidden;
+  box-shadow:
+    0 22px 60px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 var(--glass-highlight);
 }
 
 .local-library__head {
-  margin-bottom: 0.75rem;
+  flex: 0 0 auto;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .local-library__title {
   margin: 0;
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-size: 1.35rem;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  color: var(--text-primary);
 }
 
 .local-library__hint {
-  margin: 0.25rem 0 0;
-  font-size: 0.78rem;
-  color: var(--text-tertiary);
+  margin: 0.4rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
 }
 
 .local-library__channels,
@@ -1920,18 +1950,21 @@ a:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.7rem;
+  flex: 0 0 auto;
 }
 
 .local-library__chip,
 .local-library__tab {
   appearance: none;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
   border-radius: var(--radius-pill);
-  padding: 0.35rem 0.85rem;
-  font-size: 0.8rem;
+  padding: 0.42rem 0.85rem;
+  font-size: 0.9rem;
+  font-weight: 560;
+  line-height: 1.2;
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
@@ -1939,36 +1972,44 @@ a:hover {
 .local-library__chip.is-active,
 .local-library__tab.is-active {
   color: #fff;
-  border-color: rgba(250, 45, 85, 0.55);
-  background: rgba(250, 45, 85, 0.28);
+  border-color: rgba(250, 45, 85, 0.6);
+  background: rgba(250, 45, 85, 0.32);
 }
 
 .local-library__chip[data-channel="netease"].is-active {
-  border-color: rgba(236, 65, 65, 0.65);
-  background: rgba(236, 65, 65, 0.28);
+  border-color: rgba(236, 65, 65, 0.7);
+  background: rgba(236, 65, 65, 0.32);
 }
 
 .local-library__chip[data-channel="qq"].is-active {
-  border-color: rgba(49, 194, 124, 0.65);
-  background: rgba(49, 194, 124, 0.25);
+  border-color: rgba(49, 194, 124, 0.7);
+  background: rgba(49, 194, 124, 0.28);
+}
+
+.local-library__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -0.25rem;
+  padding: 0 0.25rem;
 }
 
 .local-library__list {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 280px;
-  overflow-y: auto;
+  max-height: none;
 }
 
 .local-library__item {
   display: grid;
-  grid-template-columns: 44px 1fr auto;
-  gap: 0.7rem;
+  grid-template-columns: 48px 1fr auto;
+  gap: 0.75rem;
   align-items: center;
-  padding: 0.55rem 0.35rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0.65rem 0.4rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   cursor: pointer;
+  border-radius: var(--radius-sm);
 }
 
 .local-library__item:last-child {
@@ -1976,14 +2017,13 @@ a:hover {
 }
 
 .local-library__item:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .local-library__cover {
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
   object-fit: cover;
   background: #1a1a22;
 }
@@ -1994,17 +2034,18 @@ a:hover {
 
 .local-library__name {
   margin: 0;
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .local-library__sub {
-  margin: 0.15rem 0 0;
-  font-size: 0.72rem;
-  color: var(--text-tertiary);
+  margin: 0.28rem 0 0;
+  font-size: 0.86rem;
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2012,26 +2053,27 @@ a:hover {
 
 .local-library__badge {
   display: inline-block;
-  margin-right: 0.35rem;
-  padding: 0.05rem 0.4rem;
+  margin-right: 0.4rem;
+  padding: 0.12rem 0.45rem;
   border-radius: var(--radius-pill);
-  font-size: 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 600;
   vertical-align: middle;
 }
 
 .local-library__badge--netease {
-  color: #ffd0d0;
-  background: rgba(236, 65, 65, 0.3);
+  color: #ffd4d4;
+  background: rgba(236, 65, 65, 0.34);
 }
 
 .local-library__badge--qq {
-  color: #c8ffe0;
-  background: rgba(49, 194, 124, 0.28);
+  color: #c9ffe3;
+  background: rgba(49, 194, 124, 0.3);
 }
 
 .local-library__actions {
   display: flex;
-  gap: 0.3rem;
+  gap: 0.2rem;
 }
 
 .local-library__action {
@@ -2039,9 +2081,9 @@ a:hover {
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 1rem;
+  font-size: 1.15rem;
   line-height: 1;
-  padding: 0.35rem;
+  padding: 0.4rem;
   cursor: pointer;
 }
 
@@ -2050,75 +2092,108 @@ a:hover {
 }
 
 .local-library__empty {
-  margin: 0.4rem 0 0;
-  font-size: 0.82rem;
-  color: var(--text-tertiary);
+  margin: 0.5rem 0 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
   text-align: center;
-  padding: 0.8rem 0.5rem;
+  padding: 1.2rem 0.6rem;
 }
 
 .search-panel__head {
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.75rem;
 }
 
 .search-panel__title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.25rem;
   font-weight: 700;
+  color: var(--text-primary);
 }
 
 .result-toolbar {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  margin: 0.35rem 0 0.75rem;
+  gap: 0.7rem;
+  margin: 0.35rem 0 0.85rem;
 }
 
 .like-btn {
   appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
   border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
   border-radius: var(--radius-pill);
-  padding: 0.4rem 0.9rem;
-  font-size: 0.85rem;
+  padding: 0.48rem 1rem;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .like-btn.is-liked {
   color: #fff;
-  border-color: rgba(250, 45, 85, 0.7);
-  background: rgba(250, 45, 85, 0.35);
+  border-color: rgba(250, 45, 85, 0.75);
+  background: rgba(250, 45, 85, 0.38);
 }
 
 .like-btn__icon {
-  font-size: 1rem;
+  font-size: 1.05rem;
 }
 
 .track-channel {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  padding: 0.2rem 0.55rem;
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  padding: 0.28rem 0.65rem;
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .track-channel.is-netease {
   color: #ffd0d0;
-  background: rgba(236, 65, 65, 0.22);
+  background: rgba(236, 65, 65, 0.24);
 }
 
 .track-channel.is-qq {
   color: #c8ffe0;
-  background: rgba(49, 194, 124, 0.2);
+  background: rgba(49, 194, 124, 0.22);
+}
+
+@media (max-width: 1099px) {
+  .local-library--dock {
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    width: auto;
+    max-height: none;
+    margin: 16px 16px 0;
+    z-index: 2;
+  }
+
+  .about--with-dock .main-stage {
+    margin-left: auto;
+    max-width: 980px;
+  }
+
+  .local-library__scroll {
+    max-height: 260px;
+  }
 }
 
 @media (max-width: 640px) {
-  .local-library__list {
+  .local-library--dock {
+    margin: 12px 10px 0;
+    padding: 1rem 0.85rem;
+  }
+
+  .local-library__title {
+    font-size: 1.2rem;
+  }
+
+  .local-library__scroll {
     max-height: 220px;
   }
 }
