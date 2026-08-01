@@ -1,13 +1,58 @@
 import Cocoa
 import WebKit
 
+/// 顶部标题栏命中层：拖拽移动；双击缩放（与系统 App 一致）
+/// 左右留空给红绿灯 / LOGO，避免挡住交互
+final class TitlebarDragOverlay: NSView {
+    var bandHeight: CGFloat = 52
+    var passthroughLeading: CGFloat = 88
+    var passthroughTrailing: CGFloat = 280
+
+    override var isOpaque: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func layout() {
+        super.layout()
+        guard let superview else { return }
+        frame = NSRect(
+            x: 0,
+            y: superview.bounds.height - bandHeight,
+            width: superview.bounds.width,
+            height: bandHeight
+        )
+        autoresizingMask = [.width, .minYMargin]
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let superview else { return nil }
+        let local = convert(point, from: superview)
+        guard bounds.contains(local) else { return nil }
+        if local.x <= passthroughLeading { return nil }
+        if local.x >= bounds.width - passthroughTrailing { return nil }
+        return self
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let window else { return }
+        if event.clickCount >= 2 {
+            window.performZoom(nil)
+            return
+        }
+        window.performDrag(with: event)
+    }
+}
+
+final class RyanWebView: WKWebView {}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler, WKDownloadDelegate {
     var window: NSWindow!
-    var webView: WKWebView!
+    var webView: RyanWebView!
+    private var titlebarDragOverlay: TitlebarDragOverlay?
     var phpProcess: Process?
     var port: Int = 18765
     private var healthTimer: Timer?
     private var activeDownloads: [ObjectIdentifier: URL] = [:]
+    private var chromeObservers: [NSObjectProtocol] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let php = Self.findPHP() else {
@@ -42,6 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationWillTerminate(_ notification: Notification) {
         healthTimer?.invalidate()
+        for token in chromeObservers {
+            NotificationCenter.default.removeObserver(token)
+        }
+        chromeObservers.removeAll()
         stopPHP()
     }
 
@@ -49,28 +98,121 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let rect = NSRect(x: 0, y: 0, width: 1280, height: 860)
         window = NSWindow(
             contentRect: rect,
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = "RyanMusic"
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.isMovableByWindowBackground = true
         window.center()
         window.minSize = NSSize(width: 980, height: 700)
-        window.setFrameAutosaveName("RyanMusicMainWindow_v171")
+        window.setFrameAutosaveName("RyanMusicMainWindow_v1827")
 
         let config = WKWebViewConfiguration()
         config.preferences.isElementFullscreenEnabled = true
         config.userContentController.add(self, name: "ryanSave")
+        config.userContentController.add(self, name: "ryanWindowDrag")
+        config.userContentController.add(self, name: "ryanWindowZoom")
+        // 标记桌面壳 + 空白处拖拽 / 双击缩放
+        let platformJS = """
+        document.documentElement.classList.add('platform-macos-app');
+        (function () {
+          function isNoDrag(el) {
+            return !!(el && el.closest && el.closest(
+              'a,button,input,textarea,select,label,option,audio,video,' +
+              '.aplayer,.search-bar,.local-library,.site-chrome,.site-footer,' +
+              '.am-form,.result-player,.ambient-controls,.music-main,' +
+              '[role="button"],[role="tablist"],[contenteditable="true"]'
+            ));
+          }
+          document.addEventListener('mousedown', function (e) {
+            if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            if (isNoDrag(e.target)) return;
+            try {
+              if (e.detail >= 2) {
+                window.webkit.messageHandlers.ryanWindowZoom.postMessage({});
+              } else {
+                window.webkit.messageHandlers.ryanWindowDrag.postMessage({});
+              }
+            } catch (err) {}
+          }, true);
+        })();
+        """
+        config.userContentController.addUserScript(
+            WKUserScript(source: platformJS, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        )
 
         let desktopUA =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-        webView = WKWebView(frame: rect, configuration: config)
+        webView = RyanWebView(frame: rect, configuration: config)
         webView.customUserAgent = desktopUA
         webView.navigationDelegate = self
         webView.autoresizingMask = [.width, .height]
-        window.contentView = webView
+
+        // 底层容器保证标题栏区域始终有深色底，避免全屏退出后露黑条
+        let container = NSView(frame: rect)
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor(srgbRed: 0.02, green: 0.02, blue: 0.027, alpha: 1).cgColor
+        webView.frame = container.bounds
+        container.addSubview(webView)
+
+        let overlay = TitlebarDragOverlay(frame: .zero)
+        titlebarDragOverlay = overlay
+        container.addSubview(overlay)
+        overlay.layout()
+
+        window.contentView = container
+
+        applyWindowChrome()
+        observeWindowChrome()
+
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func applyWindowChrome() {
+        guard let window else { return }
+        if !window.styleMask.contains(.fullSizeContentView) {
+            window.styleMask.insert(.fullSizeContentView)
+        }
+        // 全屏退出后系统有时会复位，先关再开强制刷新
+        window.titlebarAppearsTransparent = false
+        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isOpaque = false
+        window.backgroundColor = NSColor(srgbRed: 0.02, green: 0.02, blue: 0.027, alpha: 1)
+        if #available(macOS 11.0, *) {
+            window.titlebarSeparatorStyle = .none
+        }
+        webView?.setValue(false, forKey: "drawsBackground")
+        if #available(macOS 12.0, *) {
+            webView?.underPageBackgroundColor = .clear
+        }
+        if let container = window.contentView {
+            container.wantsLayer = true
+            container.layer?.backgroundColor = NSColor(srgbRed: 0.02, green: 0.02, blue: 0.027, alpha: 1).cgColor
+        }
+    }
+
+    private func observeWindowChrome() {
+        let center = NotificationCenter.default
+        let names: [Notification.Name] = [
+            NSWindow.didExitFullScreenNotification,
+            NSWindow.didEnterFullScreenNotification,
+            NSWindow.didBecomeKeyNotification
+        ]
+        for name in names {
+            let token = center.addObserver(forName: name, object: window, queue: .main) { [weak self] note in
+                // 全屏退出后等一帧再刷，避免系统样式覆盖
+                let delay = (note.name == NSWindow.didExitFullScreenNotification) ? 0.05 : 0.0
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    self?.applyWindowChrome()
+                }
+            }
+            chromeObservers.append(token)
+        }
     }
 
     private func loadHomeWhenReady() {
@@ -108,6 +250,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     // MARK: - JS → Native 另存为
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "ryanWindowZoom" {
+            DispatchQueue.main.async { [weak self] in
+                self?.window?.performZoom(nil)
+            }
+            return
+        }
+
+        if message.name == "ryanWindowDrag" {
+            // 必须同步用当前鼠标事件启动拖拽
+            if let event = NSApp.currentEvent,
+               event.type == .leftMouseDown || event.type == .leftMouseDragged {
+                window?.performDrag(with: event)
+            }
+            return
+        }
+
         guard message.name == "ryanSave",
               let body = message.body as? [String: Any],
               let filename = body["filename"] as? String else {

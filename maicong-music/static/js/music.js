@@ -19,9 +19,22 @@ function patchAPlayerAuthorDisplay() {
   APlayer.prototype._authorDisplayPatched = true;
   APlayer.prototype.setMusic = function(index) {
     origSetMusic.apply(this, arguments);
+    var music = this.music || {};
+    var titleEl = this.element.getElementsByClassName('aplayer-title')[0];
+    if (titleEl && music.title) {
+      titleEl.textContent = music.title;
+      titleEl.setAttribute('role', 'button');
+      titleEl.setAttribute('tabindex', '0');
+      titleEl.setAttribute('title', '点击搜索该歌曲');
+      titleEl.classList.add('aplayer-title--searchable');
+    }
     var authorEl = this.element.getElementsByClassName('aplayer-author')[0];
-    if (authorEl && this.music && this.music.author) {
-      authorEl.textContent = this.music.author;
+    if (authorEl && music.author) {
+      authorEl.textContent = music.author;
+      authorEl.setAttribute('role', 'button');
+      authorEl.setAttribute('tabindex', '0');
+      authorEl.setAttribute('title', '点击搜索该歌手');
+      authorEl.classList.add('aplayer-author--searchable');
     }
   };
 
@@ -788,12 +801,58 @@ $(function() {
   }
 
   function cleanPlayerAuthorLabel($ap) {
+    $ap.find('.aplayer-music .aplayer-title').each(function() {
+      var text = $.trim($(this).text());
+      if (text && text !== '暂无') {
+        this.setAttribute('role', 'button');
+        this.setAttribute('tabindex', '0');
+        this.setAttribute('title', '点击搜索该歌曲');
+        this.classList.add('aplayer-title--searchable');
+      }
+    });
     $ap.find('.aplayer-author').each(function() {
       var text = $.trim($(this).text());
       if (/^-\s*/.test(text)) {
-        $(this).text(text.replace(/^-\s*/, ''));
+        text = text.replace(/^-\s*/, '');
+        $(this).text(text);
+      }
+      if (text && text !== '暂无') {
+        this.setAttribute('role', 'button');
+        this.setAttribute('tabindex', '0');
+        this.setAttribute('title', '点击搜索该歌手');
+        this.classList.add('aplayer-author--searchable');
       }
     });
+  }
+
+  function searchByKeyword(keyword) {
+    keyword = $.trim(keyword || '').replace(/^-\s*/, '');
+    if (!keyword || keyword === '暂无') return;
+
+    $('#j-input')
+      .val(keyword)
+      .attr('disabled', false)
+      .data('filter', 'name')
+      .attr({
+        placeholder: searchTabHolder.name,
+        pattern: searchTabHolder.pattern_name
+      })
+      .removeClass('am-field-valid am-field-error am-active')
+      .closest('.am-form-group')
+      .removeClass('am-form-success am-form-error')
+      .find('.am-alert')
+      .hide();
+
+    $('#j-type').show();
+    $('#j-validator').trigger('submit');
+  }
+
+  function searchByArtist(name) {
+    searchByKeyword(name);
+  }
+
+  function searchByTitle(title) {
+    searchByKeyword(title);
   }
 
   function tunePlayerStudio(playerInstance) {
@@ -923,7 +982,7 @@ $(function() {
         $('.aplayer-pic').css('background-image', "url('" + nopic + "')");
       };
       if (ambientGlow && data.pic) {
-        ambientGlow.setCover(data.pic);
+        ambientGlow.setCover(data.pic, data);
       }
       document.title = '正在播放: ' + data.title + ' - ' + data.author;
       setValue(data);
@@ -1172,7 +1231,9 @@ $(function() {
     if (!$flow.length) return null;
 
     var STORAGE_KEY = 'ryanmusic-ambient-reactive';
-    var INTENSITY_KEY = 'ryanmusic-ambient-intensity';
+    var BRIGHTNESS_KEY = 'ryanmusic-ambient-brightness';
+    var MOTION_KEY = 'ryanmusic-ambient-motion';
+    var INTENSITY_KEY = 'ryanmusic-ambient-intensity'; // 旧版单滑块
     var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduced) {
       $flow.find('.light-flow__orb').addClass('is-visible');
@@ -1184,9 +1245,17 @@ $(function() {
         isReactiveEnabled: function() {
           return false;
         },
+        setBrightness: function() {},
+        getBrightness: function() {
+          return 0.55;
+        },
+        setMotion: function() {},
+        getMotion: function() {
+          return 0.8;
+        },
         setIntensity: function() {},
         getIntensity: function() {
-          return 0.4;
+          return 0.55;
         }
       };
     }
@@ -1225,25 +1294,37 @@ $(function() {
     var audioGraph = null;
     var boundAudio = null;
     var reactiveEnabled = true;
-    var intensity = 0.4;
+    var brightness = 0.55;
+    var motion = 0.8;
+    var activeCoverUrl = null;
+    var DEFAULT_ACCENT = { r: 250, g: 45, b: 85 };
     try {
+      var savedBright = localStorage.getItem(BRIGHTNESS_KEY);
+      var savedMotion = localStorage.getItem(MOTION_KEY);
       var savedIntensity = localStorage.getItem(INTENSITY_KEY);
-      if (savedIntensity !== null) {
-        var parsed = parseInt(savedIntensity, 10);
-        if (!isNaN(parsed)) {
-          intensity = Math.max(0, Math.min(1, parsed / 100));
-        }
+      if (savedBright !== null) {
+        var pb = parseInt(savedBright, 10);
+        if (!isNaN(pb)) brightness = Math.max(0, Math.min(1, pb / 100));
+      } else if (savedIntensity !== null) {
+        var pi = parseInt(savedIntensity, 10);
+        if (!isNaN(pi)) brightness = Math.max(0, Math.min(1, pi / 100));
       }
-      // 旧版开关：关掉时迁移为 0%
+      if (savedMotion !== null) {
+        var pm = parseInt(savedMotion, 10);
+        if (!isNaN(pm)) motion = Math.max(0, Math.min(1, pm / 100));
+      } else if (savedIntensity !== null) {
+        // 旧版单滑块：律动默认略高于亮度
+        motion = Math.min(1, brightness + 0.15);
+      }
       var savedToggle = localStorage.getItem(STORAGE_KEY);
-      if (savedToggle === '0' && intensity > 0) {
-        intensity = 0;
-        localStorage.setItem(INTENSITY_KEY, '0');
+      if (savedToggle === '0' && brightness > 0) {
+        brightness = 0;
+        localStorage.setItem(BRIGHTNESS_KEY, '0');
       }
     } catch (e) {
       /* ignore */
     }
-    reactiveEnabled = intensity > 0;
+    reactiveEnabled = brightness > 0;
 
     function rand(min, max) {
       return min + Math.random() * (max - min);
@@ -1253,9 +1334,11 @@ $(function() {
       return (
         'radial-gradient(circle, rgba(' +
         rgb +
-        ', 0.55) 0%, rgba(' +
+        ', 0.78) 0%, rgba(' +
         rgb +
-        ', 0) 70%)'
+        ', 0.28) 42%, rgba(' +
+        rgb +
+        ', 0) 72%)'
       );
     }
 
@@ -1269,53 +1352,194 @@ $(function() {
     }
 
     function applyPalette(scheme) {
+      var c0 = parseRgb(scheme.orbs[0]);
+      var c1 = parseRgb(scheme.orbs[1]);
+      var c2 = parseRgb(scheme.orbs[2] || scheme.orbs[0]);
+      // 光效用提亮色，避免与背景取色糊成一片
+      var g0 = toGlowColor(c0);
+      var g1 = toGlowColor(c1);
+      var g2 = toGlowColor(c2);
+      var orbOpacityBase = typeof scheme.opacity === 'number' ? scheme.opacity : 0.62;
+      // 亮度越高，光斑本身越实
+      orbOpacityBase = Math.min(0.92, orbOpacityBase * (0.75 + brightness * 0.55));
+
       $orbs.each(function(i) {
         var $orb = $(this);
-        var rgb = scheme.orbs[i % scheme.orbs.length];
+        var glow = i === 0 ? g0 : i === 1 ? g1 : g2;
+        var rgb = rgbToStr(glow);
         $orb.css({
           background: orbGradient(rgb),
-          '--orb-opacity': (scheme.opacity * rand(0.9, 1.05)).toFixed(2),
-          '--orb-base-scale': rand(0.95, 1.08).toFixed(2),
+          '--orb-opacity': (orbOpacityBase * rand(0.92, 1.08)).toFixed(2),
+          '--orb-base-scale': rand(0.98, 1.12).toFixed(2),
           left: rand(-12, 72) + '%',
           top: rand(-12, 72) + '%'
         });
         $orb.addClass('is-visible');
       });
-      var beamA = scheme.beam[0].split(',');
-      var beamB = scheme.beam[1].split(',');
-      var c0 = parseRgb(scheme.orbs[0]);
-      var c1 = parseRgb(scheme.orbs[1]);
-      var c2 = parseRgb(scheme.orbs[2] || scheme.orbs[0]);
       $beam.css({
-        '--beam-ar': beamA[0],
-        '--beam-ag': beamA[1],
-        '--beam-ab': beamA[2],
-        '--beam-br': beamB[0],
-        '--beam-bg': beamB[1],
-        '--beam-bb': beamB[2],
+        '--beam-ar': g0.r,
+        '--beam-ag': g0.g,
+        '--beam-ab': g0.b,
+        '--beam-br': g1.r,
+        '--beam-bg': g1.g,
+        '--beam-bb': g1.b,
         '--beam-duration': (playing && reactiveEnabled ? rand(8, 12) : rand(11, 16)).toFixed(1) + 's',
-        '--beam-opacity': rand(0.45, 0.65).toFixed(2)
+        '--beam-opacity': (0.55 + brightness * 0.35).toFixed(2)
       });
       $flow.css({
-        '--bloom-r': c0.r,
-        '--bloom-g': c0.g,
-        '--bloom-b': c0.b,
-        '--bloom2-r': c1.r,
-        '--bloom2-g': c1.g,
-        '--bloom2-b': c1.b,
-        '--bloom3-r': c2.r,
-        '--bloom3-g': c2.g,
-        '--bloom3-b': c2.b
+        '--bloom-r': g0.r,
+        '--bloom-g': g0.g,
+        '--bloom-b': g0.b,
+        '--bloom2-r': g1.r,
+        '--bloom2-g': g1.g,
+        '--bloom2-b': g1.b,
+        '--bloom3-r': g2.r,
+        '--bloom3-g': g2.g,
+        '--bloom3-b': g2.b
       });
+      if (scheme.syncTheme !== false) {
+        applyThemeColors(c0, c1);
+      }
+    }
+
+    function clampByte(n) {
+      return Math.max(0, Math.min(255, Math.round(n)));
+    }
+
+    function rgbToHex(c) {
+      return (
+        '#' +
+        [c.r, c.g, c.b]
+          .map(function(n) {
+            var h = clampByte(n).toString(16);
+            return h.length === 1 ? '0' + h : h;
+          })
+          .join('')
+      );
+    }
+
+    function mixRgb(a, b, t) {
+      return {
+        r: clampByte(a.r + (b.r - a.r) * t),
+        g: clampByte(a.g + (b.g - a.g) * t),
+        b: clampByte(a.b + (b.b - a.b) * t)
+      };
+    }
+
+    function toAccentColor(c) {
+      var max = Math.max(c.r, c.g, c.b) || 1;
+      var min = Math.min(c.r, c.g, c.b);
+      var sat = (max - min) / max;
+      var r = c.r;
+      var g = c.g;
+      var b = c.b;
+      // 过暗则提亮，保证按钮/进度条可见
+      if (max < 150) {
+        var lift = 168 / max;
+        r = Math.min(255, r * lift);
+        g = Math.min(255, g * lift);
+        b = Math.min(255, b * lift);
+        max = Math.max(r, g, b);
+        min = Math.min(r, g, b);
+        sat = (max - min) / (max || 1);
+      }
+      // 饱和度偏低时略微拉开通道差
+      if (sat < 0.28) {
+        var mid = (r + g + b) / 3;
+        r = mid + (r - mid) * 1.55;
+        g = mid + (g - mid) * 1.55;
+        b = mid + (b - mid) * 1.55;
+      }
+      return { r: clampByte(r), g: clampByte(g), b: clampByte(b) };
+    }
+
+    // 光效层专用：明显更亮，和深色背景拉开对比
+    function toGlowColor(c) {
+      var accent = toAccentColor(c || DEFAULT_ACCENT);
+      var bright = mixRgb(accent, { r: 255, g: 255, b: 255 }, 0.22);
+      var max = Math.max(bright.r, bright.g, bright.b) || 1;
+      if (max < 190) {
+        var boost = 210 / max;
+        bright = {
+          r: clampByte(bright.r * boost),
+          g: clampByte(bright.g * boost),
+          b: clampByte(bright.b * boost)
+        };
+      }
+      return bright;
+    }
+
+    function applyThemeColors(primary, secondary) {
+      var accent = toAccentColor(primary || DEFAULT_ACCENT);
+      var second = toAccentColor(secondary || primary || DEFAULT_ACCENT);
+      var hex = rgbToHex(accent);
+      var hover = mixRgb(accent, { r: 255, g: 255, b: 255 }, 0.22);
+      var root = document.documentElement;
+      // 背景只保留很淡的专辑色，把对比留给光影
+      var dark0 = mixRgb(accent, { r: 5, g: 5, b: 7 }, 0.94);
+      var dark1 = mixRgb(accent, { r: 12, g: 12, b: 18 }, 0.9);
+      var dark2 = mixRgb(second, { r: 7, g: 7, b: 12 }, 0.93);
+
+      root.style.setProperty('--accent', hex);
+      root.style.setProperty(
+        '--accent-soft',
+        'rgba(' + accent.r + ',' + accent.g + ',' + accent.b + ',0.35)'
+      );
+      root.style.setProperty(
+        '--accent-glow',
+        'rgba(' + accent.r + ',' + accent.g + ',' + accent.b + ',0.55)'
+      );
+      root.style.setProperty('--accent-hover', rgbToHex(hover));
+      root.style.setProperty('--bg-0', rgbToHex(dark0));
+      root.style.setProperty('--bg-grad-0', rgbToHex(dark0));
+      root.style.setProperty('--bg-grad-1', rgbToHex(dark1));
+      root.style.setProperty('--bg-grad-2', rgbToHex(dark2));
+
+      // 同步 APlayer 主题色（进度条等内联样式）
+      try {
+        if (typeof player !== 'undefined' && player) {
+          if (player.option) player.option.theme = hex;
+          player.theme = hex;
+          var $ap = getPlayerRoot();
+          $ap.find('.aplayer-played').css('background', hex);
+          $ap.find('.aplayer-thumb').css({
+            background: hex,
+            boxShadow: '0 0 0 2px ' + hex
+          });
+          $ap.find('.aplayer-volume').css('background', hex);
+          $ap.find('.aplayer-list-cur').css('background', hex);
+        }
+      } catch (e) {
+        /* ignore */
+      }
     }
 
     function nextIdlePalette() {
+      // 有专辑封面主题时保持取色，仅轻微挪动光斑位置
+      if (activeCoverUrl && !/nopic\.jpg/i.test(activeCoverUrl)) {
+        paletteTimer = setTimeout(function() {
+          if (!activeCoverUrl) {
+            nextIdlePalette();
+            return;
+          }
+          $orbs.each(function() {
+            $(this).css({
+              left: rand(-12, 72) + '%',
+              top: rand(-12, 72) + '%'
+            });
+          });
+          paletteTimer = setTimeout(nextIdlePalette, playing ? 16000 : 14000);
+        }, playing ? 16000 : 14000);
+        return;
+      }
       var idx;
       do {
         idx = Math.floor(Math.random() * schemes.length);
       } while (idx === lastScheme && schemes.length > 1);
       lastScheme = idx;
-      applyPalette(schemes[idx]);
+      var scheme = schemes[idx];
+      scheme.syncTheme = false;
+      applyPalette(scheme);
       paletteTimer = setTimeout(nextIdlePalette, playing ? rand(12000, 18000) : rand(8000, 14000));
     }
 
@@ -1386,44 +1610,47 @@ $(function() {
       }
       if (graph) {
         graph.analyser.getByteFrequencyData(graph.data);
-        var bass = avgRange(graph.data, 0, 6) * 0.55;
-        var mid = avgRange(graph.data, 6, 24) * 0.5;
-        var treble = avgRange(graph.data, 24, 64) * 0.45;
-        var energy = avgRange(graph.data, 0, graph.data.length) * 0.5;
-        var pulse = Math.min(0.7, bass * 0.9 + energy * 0.25);
+        var bass = avgRange(graph.data, 0, 6) * 0.85;
+        var mid = avgRange(graph.data, 6, 24) * 0.75;
+        var treble = avgRange(graph.data, 24, 64) * 0.7;
+        var energy = avgRange(graph.data, 0, graph.data.length) * 0.75;
+        var pulse = Math.min(1, bass * 1.05 + energy * 0.35);
         return { pulse: pulse, bass: bass, mid: mid, treble: treble, energy: energy };
       }
       var t = performance.now() / 1000;
-      var organicBass = 0.18 + 0.12 * Math.sin(t * 1.4) + 0.06 * Math.sin(t * 2.6);
-      var organicMid = 0.14 + 0.1 * Math.sin(t * 1.9 + 1.2);
-      var organicTreble = 0.1 + 0.08 * Math.sin(t * 2.8 + 0.4);
+      var organicBass = 0.32 + 0.22 * Math.sin(t * 1.6) + 0.12 * Math.sin(t * 2.9);
+      var organicMid = 0.26 + 0.18 * Math.sin(t * 2.1 + 1.2);
+      var organicTreble = 0.2 + 0.14 * Math.sin(t * 3.1 + 0.4);
       var energy = (organicBass + organicMid + organicTreble) / 3;
       return {
-        pulse: Math.max(0, Math.min(0.55, organicBass)),
-        bass: Math.max(0, Math.min(0.55, organicBass)),
-        mid: Math.max(0, Math.min(0.5, organicMid)),
-        treble: Math.max(0, Math.min(0.45, organicTreble)),
-        energy: Math.max(0, Math.min(0.5, energy))
+        pulse: Math.max(0, Math.min(1, organicBass * 1.15)),
+        bass: Math.max(0, Math.min(1, organicBass)),
+        mid: Math.max(0, Math.min(0.9, organicMid)),
+        treble: Math.max(0, Math.min(0.85, organicTreble)),
+        energy: Math.max(0, Math.min(0.95, energy))
       };
     }
 
     function writeCssLevels() {
-      var gain = reactiveEnabled ? intensity : 0;
-      flowEl.style.setProperty('--pulse', (levels.pulse * gain).toFixed(3));
-      flowEl.style.setProperty('--bass', (levels.bass * gain).toFixed(3));
-      flowEl.style.setProperty('--mid', (levels.mid * gain).toFixed(3));
-      flowEl.style.setProperty('--treble', (levels.treble * gain).toFixed(3));
-      flowEl.style.setProperty('--energy', (levels.energy * gain).toFixed(3));
+      var glowOn = brightness > 0;
+      // 律动增益加大：100% 时约 2.4 倍，配合 CSS 缩放更明显
+      var amp = glowOn && motion > 0 ? motion * 2.4 : 0;
+      flowEl.style.setProperty('--ambient-intensity', brightness.toFixed(3));
+      flowEl.style.setProperty('--pulse', Math.min(1.8, levels.pulse * amp).toFixed(3));
+      flowEl.style.setProperty('--bass', Math.min(1.8, levels.bass * amp).toFixed(3));
+      flowEl.style.setProperty('--mid', Math.min(1.6, levels.mid * amp).toFixed(3));
+      flowEl.style.setProperty('--treble', Math.min(1.6, levels.treble * amp).toFixed(3));
+      flowEl.style.setProperty('--energy', Math.min(1.6, levels.energy * amp).toFixed(3));
     }
 
     function tickReactive(audio) {
-      if (!playing || !reactiveEnabled) return;
+      if (!playing || brightness <= 0 || motion <= 0) return;
       var next = readLevels(audio);
-      levels.pulse = smooth(levels.pulse, next.pulse, 0.14);
-      levels.bass = smooth(levels.bass, next.bass, 0.12);
-      levels.mid = smooth(levels.mid, next.mid, 0.11);
-      levels.treble = smooth(levels.treble, next.treble, 0.1);
-      levels.energy = smooth(levels.energy, next.energy, 0.1);
+      levels.pulse = smooth(levels.pulse, next.pulse, 0.18);
+      levels.bass = smooth(levels.bass, next.bass, 0.16);
+      levels.mid = smooth(levels.mid, next.mid, 0.14);
+      levels.treble = smooth(levels.treble, next.treble, 0.13);
+      levels.energy = smooth(levels.energy, next.energy, 0.14);
       writeCssLevels();
       rafId = requestAnimationFrame(function() {
         tickReactive(audio);
@@ -1448,65 +1675,95 @@ $(function() {
     }
 
     function syncReactiveClass() {
-      $flow.toggleClass('light-flow--reactive-off', !reactiveEnabled);
-      $flow.toggleClass('light-flow--playing', playing && reactiveEnabled);
+      reactiveEnabled = brightness > 0;
+      $flow.toggleClass('light-flow--reactive-off', brightness <= 0 || motion <= 0 || !playing);
+      $flow.toggleClass('light-flow--playing', playing && brightness > 0);
+    }
+
+    function restartMotionLoop() {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      syncReactiveClass();
+      writeCssLevels();
+      if (playing && brightness > 0 && motion > 0) {
+        tickReactive(lastAudio);
+      } else {
+        settleDown();
+      }
     }
 
     function setPlaying(isPlaying, audio) {
       playing = !!isPlaying;
       if (audio) lastAudio = audio;
-      syncReactiveClass();
-      cancelAnimationFrame(rafId);
-      rafId = 0;
-      if (playing && reactiveEnabled) {
-        tickReactive(audio || lastAudio || null);
-      } else {
-        settleDown();
-      }
+      restartMotionLoop();
     }
 
     function setReactiveEnabled(enabled) {
-      reactiveEnabled = !!enabled;
-      try {
-        localStorage.setItem(STORAGE_KEY, reactiveEnabled ? '1' : '0');
-      } catch (e) {
-        /* ignore */
+      if (!enabled) {
+        setBrightness(0);
+        return;
       }
-      syncReactiveClass();
-      cancelAnimationFrame(rafId);
-      rafId = 0;
-      if (playing && reactiveEnabled) {
-        tickReactive(lastAudio);
-      } else {
-        settleDown();
-      }
+      if (brightness <= 0) setBrightness(0.55);
     }
 
-    function setIntensity(value) {
+    function normalizeSlider(value, fallback) {
       var n = typeof value === 'number' ? value : parseFloat(value);
-      if (isNaN(n)) n = 40;
-      // 允许传入 0-100 或 0-1；0% 即关闭律动
-      intensity = n > 1 ? Math.max(0, Math.min(1, n / 100)) : Math.max(0, Math.min(1, n));
-      reactiveEnabled = intensity > 0;
+      if (isNaN(n)) n = fallback;
+      return n > 1 ? Math.max(0, Math.min(1, n / 100)) : Math.max(0, Math.min(1, n));
+    }
+
+    function setBrightness(value) {
+      brightness = normalizeSlider(value, 55);
+      reactiveEnabled = brightness > 0;
       try {
-        localStorage.setItem(INTENSITY_KEY, String(Math.round(intensity * 100)));
+        localStorage.setItem(BRIGHTNESS_KEY, String(Math.round(brightness * 100)));
+        localStorage.setItem(INTENSITY_KEY, String(Math.round(brightness * 100)));
         localStorage.setItem(STORAGE_KEY, reactiveEnabled ? '1' : '0');
       } catch (e) {
         /* ignore */
       }
-      syncReactiveClass();
-      cancelAnimationFrame(rafId);
-      rafId = 0;
-      writeCssLevels();
-      if (playing && reactiveEnabled) {
-        tickReactive(lastAudio);
-      } else {
-        settleDown();
+      restartMotionLoop();
+    }
+
+    function setMotion(value) {
+      motion = normalizeSlider(value, 80);
+      try {
+        localStorage.setItem(MOTION_KEY, String(Math.round(motion * 100)));
+      } catch (e) {
+        /* ignore */
       }
+      restartMotionLoop();
+    }
+
+    // 兼容旧 API：当作亮度
+    function setIntensity(value) {
+      setBrightness(value);
     }
 
     function rgbToStr(c) {
       return [c.r, c.g, c.b].join(',');
+    }
+
+    function colorScore(c) {
+      var max = Math.max(c.r, c.g, c.b) || 1;
+      var min = Math.min(c.r, c.g, c.b);
+      var sat = (max - min) / max;
+      var lum = (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255;
+      var midLum = 1 - Math.abs(lum - 0.48) * 1.4;
+      return c.n * (0.35 + sat * 1.4) * Math.max(0.15, midLum);
+    }
+
+    function sampleUrlForCover(picUrl, track) {
+      if (track && track.type && track.songid != null && track.songid !== '') {
+        return (
+          getUrl() +
+          '?cover=1&type=' +
+          encodeURIComponent(track.type) +
+          '&id=' +
+          encodeURIComponent(String(track.songid))
+        );
+      }
+      return picUrl;
     }
 
     function sampleCoverPalette(picUrl, done) {
@@ -1519,14 +1776,14 @@ $(function() {
       img.onload = function() {
         try {
           var canvas = document.createElement('canvas');
-          var size = 32;
+          var size = 36;
           canvas.width = size;
           canvas.height = size;
           var ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, size, size);
           var data = ctx.getImageData(0, 0, size, size).data;
           var buckets = {};
-          for (var i = 0; i < data.length; i += 16) {
+          for (var i = 0; i < data.length; i += 12) {
             var r = data[i];
             var g = data[i + 1];
             var b = data[i + 2];
@@ -1534,8 +1791,8 @@ $(function() {
             if (a < 200) continue;
             var max = Math.max(r, g, b);
             var min = Math.min(r, g, b);
-            if (max < 40 || min > 220) continue;
-            if (max - min < 18) continue;
+            if (max < 36 || min > 230) continue;
+            if (max - min < 16) continue;
             var key = (r >> 4) + ',' + (g >> 4) + ',' + (b >> 4);
             if (!buckets[key]) buckets[key] = { r: 0, g: 0, b: 0, n: 0 };
             buckets[key].r += r;
@@ -1554,20 +1811,31 @@ $(function() {
               };
             })
             .sort(function(a, b) {
-              return b.n - a.n;
+              return colorScore(b) - colorScore(a);
             });
-          if (colors.length < 2) {
+          if (!colors.length) {
             done(null);
             return;
           }
+          // 第二色：与主色有区分度的次优色
+          var primary = colors[0];
+          var secondary = colors[1] || colors[0];
+          var tertiary = colors[2] || secondary;
+          for (var j = 1; j < colors.length; j++) {
+            var d =
+              Math.abs(colors[j].r - primary.r) +
+              Math.abs(colors[j].g - primary.g) +
+              Math.abs(colors[j].b - primary.b);
+            if (d > 70) {
+              secondary = colors[j];
+              break;
+            }
+          }
           done({
-            orbs: [
-              rgbToStr(colors[0]),
-              rgbToStr(colors[1]),
-              rgbToStr(colors[2] || colors[0])
-            ],
-            beam: [rgbToStr(colors[0]), rgbToStr(colors[1])],
-            opacity: 0.4
+            orbs: [rgbToStr(primary), rgbToStr(secondary), rgbToStr(tertiary)],
+            beam: [rgbToStr(primary), rgbToStr(secondary)],
+            opacity: 0.72,
+            syncTheme: true
           });
         } catch (e) {
           done(null);
@@ -1579,13 +1847,30 @@ $(function() {
       img.src = picUrl;
     }
 
-    function setCover(picUrl) {
-      sampleCoverPalette(picUrl, function(palette) {
-        if (!palette) return;
-        if (paletteTimer) clearTimeout(paletteTimer);
-        applyPalette(palette);
-        paletteTimer = setTimeout(nextIdlePalette, playing ? 16000 : 12000);
-      });
+    function setCover(picUrl, track) {
+      activeCoverUrl = picUrl || null;
+      if (!picUrl || /nopic\.jpg/i.test(picUrl)) {
+        activeCoverUrl = null;
+        return;
+      }
+      var sampleUrl = sampleUrlForCover(picUrl, track);
+      var tryUrls = [sampleUrl];
+      if (sampleUrl !== picUrl) tryUrls.push(picUrl);
+
+      function tryNext(idx) {
+        if (idx >= tryUrls.length) return;
+        sampleCoverPalette(tryUrls[idx], function(palette) {
+          if (!palette) {
+            tryNext(idx + 1);
+            return;
+          }
+          if (paletteTimer) clearTimeout(paletteTimer);
+          applyPalette(palette);
+          // 保持专辑主题，仅定时微移光斑
+          paletteTimer = setTimeout(nextIdlePalette, playing ? 16000 : 12000);
+        });
+      }
+      tryNext(0);
     }
 
     function bindPlayer(playerInstance, getTrackData) {
@@ -1593,7 +1878,7 @@ $(function() {
       playerInstance._ambientBound = true;
       playerInstance.on('play', function() {
         var track = getTrackData ? getTrackData() : null;
-        if (track && track.pic) setCover(track.pic);
+        if (track && track.pic) setCover(track.pic, track);
         setPlaying(true, playerInstance.audio);
       });
       playerInstance.on('pause', function() {
@@ -1621,33 +1906,99 @@ $(function() {
       isReactiveEnabled: function() {
         return reactiveEnabled;
       },
+      setBrightness: setBrightness,
+      getBrightness: function() {
+        return brightness;
+      },
+      setMotion: setMotion,
+      getMotion: function() {
+        return motion;
+      },
       setIntensity: setIntensity,
       getIntensity: function() {
-        return intensity;
+        return brightness;
       }
     };
   }
 
   var ambientGlow = initLightFlowCycle();
   (function bindAmbientControls() {
-    var $range = $('#j-ambient-intensity');
-    var $val = $('#j-ambient-intensity-val');
-    if (!$range.length || !ambientGlow) return;
+    var $chrome = $('#j-site-chrome');
+    var $toggle = $('#j-logo-toggle');
+    var $panel = $('#j-ambient-controls');
+    var $bright = $('#j-ambient-brightness');
+    var $brightVal = $('#j-ambient-brightness-val');
+    var $motion = $('#j-ambient-motion');
+    var $motionVal = $('#j-ambient-motion-val');
 
-    function syncIntensityUi(pct) {
-      $range.val(String(pct));
-      if ($val.length) $val.text(pct + '%');
-      $range.closest('.ambient-intensity').toggleClass('is-off', pct <= 0);
+    function setAmbientOpen(open) {
+      if (!$panel.length || !$toggle.length) return;
+      if (open) {
+        $panel.prop('hidden', false);
+        $chrome.addClass('is-ambient-open');
+        $toggle.attr('aria-expanded', 'true');
+        $toggle.attr('title', '点击展开光影设置');
+      } else {
+        $panel.prop('hidden', true);
+        $chrome.removeClass('is-ambient-open');
+        $toggle.attr('aria-expanded', 'false');
+        $toggle.attr('title', '点击展开光影设置');
+      }
     }
 
-    syncIntensityUi(Math.round(ambientGlow.getIntensity() * 100));
+    setAmbientOpen(false);
 
-    $range.on('input change', function() {
-      var pct = parseInt($range.val(), 10);
-      if (isNaN(pct)) pct = 0;
-      ambientGlow.setIntensity(pct);
-      syncIntensityUi(pct);
+    if ($toggle.length) {
+      $toggle.on('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        setAmbientOpen(true);
+      });
+    }
+
+    // 点击滑块区域不关闭；点击其他地方恢复 LOGO
+    $panel.on('click', function(e) {
+      e.stopPropagation();
     });
+
+    $(document).on('pointerdown', function(e) {
+      if (!$chrome.hasClass('is-ambient-open')) return;
+      if ($(e.target).closest('#j-site-chrome').length) return;
+      setAmbientOpen(false);
+    });
+
+    $(document).on('keydown', function(e) {
+      if (e.key === 'Escape') setAmbientOpen(false);
+    });
+
+    if (!$bright.length || !ambientGlow) return;
+
+    function syncUi($range, $val, pct, off) {
+      $range.val(String(pct));
+      if ($val.length) $val.text(pct + '%');
+      $range.closest('.ambient-intensity').toggleClass('is-off', !!off);
+    }
+
+    syncUi($bright, $brightVal, Math.round(ambientGlow.getBrightness() * 100), ambientGlow.getBrightness() <= 0);
+    if ($motion.length) {
+      syncUi($motion, $motionVal, Math.round(ambientGlow.getMotion() * 100), ambientGlow.getMotion() <= 0);
+    }
+
+    $bright.on('input change', function() {
+      var pct = parseInt($bright.val(), 10);
+      if (isNaN(pct)) pct = 0;
+      ambientGlow.setBrightness(pct);
+      syncUi($bright, $brightVal, pct, pct <= 0);
+    });
+
+    if ($motion.length) {
+      $motion.on('input change', function() {
+        var pct = parseInt($motion.val(), 10);
+        if (isNaN(pct)) pct = 0;
+        ambientGlow.setMotion(pct);
+        syncUi($motion, $motionVal, pct, pct <= 0);
+      });
+    }
   })();
 
   // 输入验证
@@ -1805,7 +2156,7 @@ $(function() {
                       return playerList[player.playIndex];
                     });
                     if (playerList[0] && playerList[0].pic) {
-                      ambientGlow.setCover(playerList[0].pic);
+                      ambientGlow.setCover(playerList[0].pic, playerList[0]);
                     }
                   }
                   movePlayButton();
@@ -1895,6 +2246,35 @@ $(function() {
   $('#j-main input, #j-main textarea').on('focus', function() {
     $(this).select();
   });
+
+  // 点击标题区歌曲名 / 歌手名 → 直接搜索
+  $(document).on(
+    'click',
+    '#j-player .aplayer-music .aplayer-title, #j-player .aplayer-music .aplayer-author',
+    function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if ($(this).hasClass('aplayer-author')) {
+        searchByArtist($(this).text());
+      } else {
+        searchByTitle($(this).text());
+      }
+    }
+  );
+
+  $(document).on(
+    'keydown',
+    '#j-player .aplayer-music .aplayer-title, #j-player .aplayer-music .aplayer-author',
+    function(e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      if ($(this).hasClass('aplayer-author')) {
+        searchByArtist($(this).text());
+      } else {
+        searchByTitle($(this).text());
+      }
+    }
+  );
 
   function normalizeLibTrack(v, item) {
     if (!v.title) v.title = item.title || '暂无';
@@ -2018,7 +2398,7 @@ $(function() {
         return playerList[player.playIndex];
       });
       if (playerList[playIndex] && playerList[playIndex].pic) {
-        ambientGlow.setCover(playerList[playIndex].pic);
+        ambientGlow.setCover(playerList[playIndex].pic, playerList[playIndex]);
       }
     }
     movePlayButton();

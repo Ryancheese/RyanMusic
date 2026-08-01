@@ -64,34 +64,60 @@ if (!defined('MC_CORE')) {
             })();
         </script>
     <![endif]-->
-    <header class="site-chrome" aria-label="RyanMusic">
-        <div class="site-chrome__brand">
+    <header class="site-chrome" id="j-site-chrome" aria-label="RyanMusic">
+        <button
+            type="button"
+            class="site-chrome__logo"
+            id="j-logo-toggle"
+            aria-expanded="false"
+            aria-controls="j-ambient-controls"
+            title="点击展开光影设置"
+        >
             <h1 class="site-chrome__title">
                 <span class="site-chrome__line">RYAN</span>
                 <span class="site-chrome__line site-chrome__line--accent">MUSIC</span>
             </h1>
+        </button>
+        <div class="ambient-controls" id="j-ambient-controls" hidden aria-label="光影设置">
+            <label class="ambient-intensity" title="背景光影亮度，0% 为关闭">
+                <span class="ambient-intensity__label">亮度</span>
+                <input
+                    type="range"
+                    id="j-ambient-brightness"
+                    class="ambient-intensity__range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value="55"
+                    aria-label="光影亮度，0% 为关闭"
+                >
+                <span id="j-ambient-brightness-val" class="ambient-intensity__val">55%</span>
+            </label>
+            <label class="ambient-intensity" title="随音乐律动的幅度">
+                <span class="ambient-intensity__label">律动</span>
+                <input
+                    type="range"
+                    id="j-ambient-motion"
+                    class="ambient-intensity__range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value="80"
+                    aria-label="律动幅度"
+                >
+                <span id="j-ambient-motion-val" class="ambient-intensity__val">80%</span>
+            </label>
         </div>
-        <label class="ambient-intensity" title="光影律动，0% 为关闭">
-            <span class="ambient-intensity__label">光影</span>
-            <input
-                type="range"
-                id="j-ambient-intensity"
-                class="ambient-intensity__range"
-                min="0"
-                max="100"
-                step="1"
-                value="40"
-                aria-label="光影律动，0% 为关闭"
-            >
-            <span id="j-ambient-intensity-val" class="ambient-intensity__val">40%</span>
-        </label>
-        <p class="site-chrome__links">
-            <span class="site-chrome__ver">v<?php echo MC_VERSION; ?></span>
+    </header>
+
+    <footer class="site-footer" aria-label="站点信息">
+        <nav class="site-footer__links">
             <a href="help.php">帮助</a>
             <a href="disclaimer.php">声明</a>
             <a href="mailto:17625416243@163.com">联系</a>
-        </p>
-    </header>
+        </nav>
+        <span class="site-footer__ver">v<?php echo MC_VERSION; ?></span>
+    </footer>
 
     <section class="app-stage" aria-label="主内容">
         <div class="app-stage__row">
