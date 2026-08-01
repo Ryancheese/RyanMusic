@@ -658,6 +658,177 @@ $(function() {
     }
   }
 
+  var nowPlayingSyncTimer = null;
+  var mediaSessionHandlersBound = false;
+
+  function canMediaSessionNowPlaying() {
+    return !!(typeof navigator !== 'undefined' && navigator.mediaSession && window.MediaMetadata);
+  }
+
+  function clearNativeNowPlaying() {
+    if (!canMediaSessionNowPlaying()) return;
+    try {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = 'none';
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function bindMediaSessionHandlers() {
+    if (!canMediaSessionNowPlaying() || mediaSessionHandlersBound) return;
+    mediaSessionHandlersBound = true;
+    var actions = {
+      play: function() {
+        window.RyanMusicMedia.play();
+      },
+      pause: function() {
+        window.RyanMusicMedia.pause();
+      },
+      stop: function() {
+        window.RyanMusicMedia.pause();
+      },
+      previoustrack: function() {
+        window.RyanMusicMedia.prev();
+      },
+      nexttrack: function() {
+        window.RyanMusicMedia.next();
+      },
+      seekto: function(details) {
+        if (details && details.seekTime != null) {
+          window.RyanMusicMedia.seek(details.seekTime);
+        }
+      }
+    };
+    Object.keys(actions).forEach(function(name) {
+      try {
+        navigator.mediaSession.setActionHandler(name, actions[name]);
+      } catch (e) {
+        /* ignore unsupported action */
+      }
+    });
+  }
+
+  // 只用网页 Media Session → 控制中心只显示一条
+  function syncNativeNowPlaying() {
+    if (!canMediaSessionNowPlaying() || !player) return;
+    bindMediaSessionHandlers();
+    var track = playerList[player.playIndex] || player.music || null;
+    if (!track) {
+      clearNativeNowPlaying();
+      return;
+    }
+    var audio = player.audio;
+    var playing = !!(audio && !audio.paused);
+    var duration = audio && isFinite(audio.duration) ? audio.duration : 0;
+    var elapsed = audio && isFinite(audio.currentTime) ? audio.currentTime : 0;
+    var title = track.title || 'RyanMusic';
+    var artist = track.author || '';
+    var artwork = resolveMediaUrl(track.pic || '') || '';
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: title,
+        artist: artist,
+        album: 'RyanMusic',
+        artwork: artwork
+          ? [
+              { src: artwork, sizes: '96x96' },
+              { src: artwork, sizes: '256x256' },
+              { src: artwork, sizes: '512x512' }
+            ]
+          : []
+      });
+      navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+      if (duration > 0 && typeof navigator.mediaSession.setPositionState === 'function') {
+        navigator.mediaSession.setPositionState({
+          duration: duration,
+          playbackRate: 1,
+          position: Math.max(0, Math.min(elapsed, duration))
+        });
+      }
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function bindNativeNowPlaying(playerInstance) {
+    if (!playerInstance || !canMediaSessionNowPlaying() || playerInstance._nowPlayingBound) return;
+    playerInstance._nowPlayingBound = true;
+
+    var push = function() {
+      syncNativeNowPlaying();
+    };
+
+    playerInstance.on('play', push);
+    playerInstance.on('pause', push);
+    playerInstance.on('ended', function() {
+      setTimeout(push, 80);
+    });
+
+    if (playerInstance.audio) {
+      playerInstance.audio.addEventListener('timeupdate', function() {
+        if (nowPlayingSyncTimer) return;
+        nowPlayingSyncTimer = setTimeout(function() {
+          nowPlayingSyncTimer = null;
+          syncNativeNowPlaying();
+        }, 900);
+      });
+      playerInstance.audio.addEventListener('seeked', push);
+      playerInstance.audio.addEventListener('loadedmetadata', push);
+    }
+
+    push();
+  }
+
+  // 供 Media Session / 媒体键调用
+  window.RyanMusicMedia = {
+    play: function() {
+      if (player && typeof player.play === 'function') player.play();
+    },
+    pause: function() {
+      if (player && typeof player.pause === 'function') player.pause();
+    },
+    toggle: function() {
+      if (!player || !player.audio) return;
+      if (player.audio.paused) {
+        if (typeof player.play === 'function') player.play();
+      } else if (typeof player.pause === 'function') {
+        player.pause();
+      }
+    },
+    next: function() {
+      if (!player || !playerList.length) return;
+      var idx = (player.playIndex || 0) + 1;
+      if (idx >= playerList.length) idx = 0;
+      if (typeof player.setMusic === 'function') player.setMusic(idx);
+      if (typeof player.play === 'function') player.play();
+      syncNativeNowPlaying();
+    },
+    prev: function() {
+      if (!player || !playerList.length) return;
+      var audio = player.audio;
+      if (audio && audio.currentTime > 3) {
+        if (typeof player.seek === 'function') player.seek(0);
+        else audio.currentTime = 0;
+        if (typeof player.play === 'function') player.play();
+        syncNativeNowPlaying();
+        return;
+      }
+      var idx = (player.playIndex || 0) - 1;
+      if (idx < 0) idx = playerList.length - 1;
+      if (typeof player.setMusic === 'function') player.setMusic(idx);
+      if (typeof player.play === 'function') player.play();
+      syncNativeNowPlaying();
+    },
+    seek: function(seconds) {
+      var t = Number(seconds);
+      if (!isFinite(t) || !player) return;
+      if (typeof player.seek === 'function') player.seek(t);
+      else if (player.audio) player.audio.currentTime = t;
+      syncNativeNowPlaying();
+    }
+  };
+
   function bindNativeDownloadButtons() {
     if (!canNativeSave()) return;
     var $src = $('#j-src-btn');
@@ -989,11 +1160,14 @@ $(function() {
       addRecent(data);
       syncLikeButton(data);
       renderLibrary();
+      syncNativeNowPlaying();
     });
 
     playerInstance.on('ended', function() {
       document.title = siteTitle;
     });
+
+    bindNativeNowPlaying(playerInstance);
   }
 
   var loadMoreState = {
@@ -1071,6 +1245,7 @@ $(function() {
     playerInstance.on('pause', function() {
       syncPlayerPlayingState(playerInstance);
       setTimeout(movePlayButton, 50);
+      syncNativeNowPlaying();
     });
     playerInstance.on('ended', function() {
       syncPlayerPlayingState(playerInstance);
@@ -1220,6 +1395,7 @@ $(function() {
       player = null;
     }
     playerList = [];
+    clearNativeNowPlaying();
     $('#j-player').empty().addClass('aplayer');
 
     pushState(siteTitle, getUrl());

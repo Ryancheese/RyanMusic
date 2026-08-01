@@ -285,7 +285,7 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$DIST_DIR"
 
 echo "==> compile WKWebView app [${ARCH_LABEL}]"
-swiftc -O -framework Cocoa -framework WebKit -o "$MACOS_DIR/RyanMusic" "$SRC_SWIFT"
+swiftc -O -framework Cocoa -framework WebKit -framework MediaPlayer -o "$MACOS_DIR/RyanMusic" "$SRC_SWIFT"
 chmod +x "$MACOS_DIR/RyanMusic"
 
 echo "==> Info.plist"

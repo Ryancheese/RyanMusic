@@ -1,5 +1,6 @@
 import Cocoa
 import WebKit
+import MediaPlayer
 
 /// 顶部标题栏命中层：拖拽移动；双击缩放（与系统 App 一致）
 /// 左右留空给红绿灯 / LOGO，避免挡住交互
@@ -77,6 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             return
         }
 
+        // 清掉可能残留的原生 Now Playing，统一交给网页 Media Session（避免控制中心两条）
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        MPNowPlayingInfoCenter.default().playbackState = .stopped
+
         setupWindow()
         loadHomeWhenReady()
     }
@@ -91,6 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             NotificationCenter.default.removeObserver(token)
         }
         chromeObservers.removeAll()
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        MPNowPlayingInfoCenter.default().playbackState = .stopped
         stopPHP()
     }
 
@@ -107,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.isMovableByWindowBackground = true
         window.center()
         window.minSize = NSSize(width: 980, height: 700)
-        window.setFrameAutosaveName("RyanMusicMainWindow_v1827")
+        window.setFrameAutosaveName("RyanMusicMainWindow_v1828")
 
         let config = WKWebViewConfiguration()
         config.preferences.isElementFullscreenEnabled = true
@@ -115,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         config.userContentController.add(self, name: "ryanWindowDrag")
         config.userContentController.add(self, name: "ryanWindowZoom")
         // 标记桌面壳 + 空白处拖拽 / 双击缩放
+        // 媒体控制走网页 Media Session，避免与原生 Now Playing 叠成两条
         let platformJS = """
         document.documentElement.classList.add('platform-macos-app');
         (function () {
