@@ -1530,7 +1530,8 @@ function mc_api_secret()
     if (defined('MC_API_SECRET') && MC_API_SECRET !== '') {
         return MC_API_SECRET;
     }
-    return hash('sha256', MC_CORE_DIR . '|' . MC_VERSION);
+    // 不绑定 MC_VERSION：入口文件版本偶发不一致时会导致全站播放/封面 403
+    return hash('sha256', MC_CORE_DIR . '|ryanmusic-api');
 }
 
 function mc_api_sign($get, $type, $id, $t)
