@@ -94,7 +94,10 @@ public sealed class MainForm : Form
             _port = PickPort(18765);
             StartPhp(php, webRoot, _port);
 
-            await _webView.EnsureCoreWebView2Async();
+            // Program Files 下默认 UserData 无写权限 → E_ACCESSDENIED
+            var env = await CoreWebView2Environment.CreateAsync(
+                userDataFolder: ResolveDataDir("WebView2"));
+            await _webView.EnsureCoreWebView2Async(env);
             _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
             _webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             _webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
@@ -344,13 +347,17 @@ public sealed class MainForm : Form
 
     private void StartPhp(string phpPath, string webRoot, int port)
     {
-        _logPath = ResolveLogPath();
+        _logPath = Path.Combine(ResolveDataDir(), "ryanmusic-php.log");
         try
         {
-            File.WriteAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] RyanMusic PHP log\r\nphp={phpPath}\r\nroot={webRoot}\r\nport={port}\r\n\r\n");
-            // 旁路一个易找的说明文件
-            var hint = Path.Combine(AppContext.BaseDirectory, "如何查看日志.txt");
-            File.WriteAllText(hint, $"PHP 运行日志路径：\r\n{_logPath}\r\n\r\n可在资源管理器地址栏粘贴打开：\r\n{_logPath}\r\n", Encoding.UTF8);
+            File.WriteAllText(
+                _logPath,
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] RyanMusic PHP log\r\nphp={phpPath}\r\nroot={webRoot}\r\nport={port}\r\n\r\n");
+            var hint = Path.Combine(ResolveDataDir(), "如何查看日志.txt");
+            File.WriteAllText(
+                hint,
+                $"PHP 运行日志路径：\r\n{_logPath}\r\n\r\n可在资源管理器地址栏粘贴打开：\r\n{_logPath}\r\n",
+                Encoding.UTF8);
         }
         catch
         {
@@ -358,9 +365,13 @@ public sealed class MainForm : Form
         }
 
         var phpDir = Path.GetDirectoryName(phpPath) ?? "";
-        EnsurePhpIni(phpDir); // 在 php.ini 启用 curl 等，避免再 -d 重复加载
+        var iniPath = EnsurePhpIni(phpDir); // 可能写到 LocalAppData，避免 Program Files 拒绝访问
 
         var args = new StringBuilder();
+        if (!string.IsNullOrEmpty(iniPath))
+        {
+            args.Append("-c \"").Append(iniPath).Append("\" ");
+        }
         args.Append("-S 127.0.0.1:").Append(port);
         args.Append(" -t \"").Append(webRoot).Append('"');
 
@@ -374,6 +385,8 @@ public sealed class MainForm : Form
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        // 音源缓存写到可写目录（Program Files 下 core/cache 无写权限）
+        psi.Environment["RYANMUSIC_CACHE_DIR"] = ResolveDataDir("cache");
         _phpProcess = new Process { StartInfo = psi, EnableRaisingEvents = true };
         _phpProcess.OutputDataReceived += (_, e) => AppendLog(e.Data);
         _phpProcess.ErrorDataReceived += (_, e) => AppendLog(e.Data);
@@ -385,13 +398,17 @@ public sealed class MainForm : Form
         _phpProcess.BeginErrorReadLine();
     }
 
-    private static string ResolveLogPath()
+    private static string ResolveDataDir(string? subdir = null)
     {
         var dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "RyanMusic");
+        if (!string.IsNullOrWhiteSpace(subdir))
+        {
+            dir = Path.Combine(dir, subdir);
+        }
         Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "ryanmusic-php.log");
+        return dir;
     }
 
     private void AppendLog(string? line)
@@ -410,30 +427,37 @@ public sealed class MainForm : Form
         }
     }
 
-    private static void EnsurePhpIni(string phpDir)
+    /// <summary>
+    /// 确保 curl 等扩展启用。优先改安装目录 php.ini；若无写权限则复制到 LocalAppData。
+    /// </summary>
+    private static string? EnsurePhpIni(string phpDir)
     {
         try
         {
-            var iniPath = Path.Combine(phpDir, "php.ini");
-            if (!File.Exists(iniPath))
+            if (string.IsNullOrWhiteSpace(phpDir) || !Directory.Exists(phpDir))
+            {
+                return null;
+            }
+
+            var bundledIni = Path.Combine(phpDir, "php.ini");
+            string? sourceIni = File.Exists(bundledIni) ? bundledIni : null;
+            if (sourceIni == null)
             {
                 foreach (var name in new[] { "php.ini-development", "php.ini-production" })
                 {
                     var src = Path.Combine(phpDir, name);
                     if (File.Exists(src))
                     {
-                        File.Copy(src, iniPath, overwrite: true);
+                        sourceIni = src;
                         break;
                     }
                 }
             }
-            if (!File.Exists(iniPath))
-            {
-                return;
-            }
 
-            var lines = File.ReadAllLines(iniPath).ToList();
-            bool touched = false;
+            var lines = sourceIni != null
+                ? File.ReadAllLines(sourceIni).ToList()
+                : new List<string>();
+            var extDir = Path.Combine(phpDir, "ext").Replace('\\', '/');
 
             void Upsert(string keyPattern, string valueLine)
             {
@@ -441,32 +465,41 @@ public sealed class MainForm : Form
                 {
                     if (System.Text.RegularExpressions.Regex.IsMatch(lines[i], keyPattern))
                     {
-                        if (!string.Equals(lines[i].Trim(), valueLine, StringComparison.OrdinalIgnoreCase))
-                        {
-                            lines[i] = valueLine;
-                            touched = true;
-                        }
+                        lines[i] = valueLine;
                         return;
                     }
                 }
                 lines.Add(valueLine);
-                touched = true;
             }
 
-            Upsert(@"^\s*;?\s*extension_dir\s*=", "extension_dir=\"ext\"");
+            Upsert(@"^\s*;?\s*extension_dir\s*=", $"extension_dir=\"{extDir}\"");
             foreach (var ext in new[] { "curl", "openssl", "mbstring", "fileinfo" })
             {
                 Upsert($@"^\s*;?\s*extension\s*=\s*{ext}\b", $"extension={ext}");
             }
 
-            if (touched)
+            // 先尝试写回安装目录（绿色包场景）
+            try
             {
-                File.WriteAllLines(iniPath, lines);
+                File.WriteAllLines(bundledIni, lines);
+                return bundledIni;
             }
+            catch (UnauthorizedAccessException)
+            {
+                // Program Files：落到可写目录
+            }
+            catch (IOException)
+            {
+                // fall through
+            }
+
+            var userIni = Path.Combine(ResolveDataDir("php"), "php.ini");
+            File.WriteAllLines(userIni, lines);
+            return userIni;
         }
         catch
         {
-            // ignore; -d flags still applied
+            return null;
         }
     }
 

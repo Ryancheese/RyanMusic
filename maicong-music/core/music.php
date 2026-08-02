@@ -1715,7 +1715,12 @@ function mc_api_proxy_url($get, $type, $id)
 
 function mc_qq_cache_dir($subdir)
 {
-    $dir = MC_CORE_DIR . '/cache/' . $subdir;
+    // Windows 安装到 Program Files 时 core/cache 可能只读；宿主可通过环境变量指定可写目录
+    $base = getenv('RYANMUSIC_CACHE_DIR');
+    if (!is_string($base) || $base === '') {
+        $base = MC_CORE_DIR . '/cache';
+    }
+    $dir = rtrim(str_replace('\\', '/', $base), '/') . '/' . $subdir;
     if (!is_dir($dir)) {
         @mkdir($dir, 0755, true);
     }

@@ -2,7 +2,7 @@
 ; 由 windows/build-app.ps1 调用 ISCC 编译
 
 #ifndef AppVersion
-  #define AppVersion "1.8.40"
+  #define AppVersion "1.8.41"
 #endif
 
 #ifndef DistDir
@@ -27,7 +27,8 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}/releases
-DefaultDirName={autopf}\{#MyAppName}
+; 每用户安装，避免 Program Files 无写权限导致 WebView2/缓存启动失败
+DefaultDirName={localappdata}\Programs\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 LicenseFile=
@@ -39,7 +40,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=admin
+PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
@@ -67,17 +68,18 @@ Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs cr
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "立即运行 {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-; 仅清理安装目录内缓存，避免管理员安装模式下误改每用户目录
 Type: filesandordirs; Name: "{app}\maicong-music\core\cache"
+Type: filesandordirs; Name: "{localappdata}\RyanMusic\WebView2"
+Type: filesandordirs; Name: "{localappdata}\RyanMusic\cache"
+Type: filesandordirs; Name: "{localappdata}\RyanMusic\php"
 
 [Messages]
-; 覆盖欢迎页文案（简体中文）
 chinesesimp.WelcomeLabel1=欢迎使用 [name] 安装向导
 chinesesimp.WelcomeLabel2=这将在你的电脑上安装 [name/ver]。%n%n建议在继续前关闭其他应用程序。%n%n点击「下一步」继续。
 chinesesimp.FinishedLabel=完成 [name] 安装向导。%n%n可从开始菜单或桌面快捷方式启动。
