@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -14,10 +15,17 @@ namespace RyanMusic;
 
 public sealed class MainForm : Form
 {
+    private const int DwmwaUseImmersiveDarkMode = 20;
+    private const int DwmwaBorderColor = 34;
+    private const int DwmwaCaptionColor = 35;
+
     private readonly WebView2 _webView = new();
     private Process? _phpProcess;
     private int _port = 18765;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(2) };
+    private NotifyIcon? _tray;
+    private bool _forceExit;
+    private bool _balloonShown;
 
     public MainForm()
     {
@@ -27,13 +35,193 @@ public sealed class MainForm : Form
         MinimumSize = new Size(980, 700);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Color.FromArgb(8, 8, 14);
+        ForeColor = Color.White;
         TrySetAppIcon();
+        InitTray();
 
         _webView.Dock = DockStyle.Fill;
         Controls.Add(_webView);
 
-        Load += async (_, _) => await BootstrapAsync();
-        FormClosed += (_, _) => StopPhp();
+        Load += async (_, _) =>
+        {
+            ApplyDarkTitleBar();
+            await BootstrapAsync();
+        };
+        FormClosing += OnFormClosingGuard;
+        FormClosed += (_, _) =>
+        {
+            StopPhp();
+            DisposeTray();
+        };
+        HandleCreated += (_, _) => ApplyDarkTitleBar();
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    private void ApplyDarkTitleBar()
+    {
+        if (!IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            var hwnd = Handle;
+            var dark = 1;
+            _ = DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkMode, ref dark, sizeof(int));
+
+            // COLORREF: 0x00BBGGRR，贴近应用背景 #08080e
+            var caption = 0x0E0808;
+            _ = DwmSetWindowAttribute(hwnd, DwmwaCaptionColor, ref caption, sizeof(int));
+            var border = 0x0E0808;
+            _ = DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref border, sizeof(int));
+        }
+        catch
+        {
+            // 旧系统忽略
+        }
+    }
+
+    private void InitTray()
+    {
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("打开 RyanMusic", null, (_, _) => RestoreFromTray());
+        menu.Items.Add("退出时询问", null, (_, _) => AppSettings.SetCloseAction(CloseAction.Ask));
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("退出", null, (_, _) => ExitApplication());
+
+        _tray = new NotifyIcon
+        {
+            Text = "RyanMusic",
+            Visible = false,
+            ContextMenuStrip = menu
+        };
+        try
+        {
+            _tray.Icon = Icon ?? SystemIcons.Application;
+        }
+        catch
+        {
+            _tray.Icon = SystemIcons.Application;
+        }
+
+        _tray.DoubleClick += (_, _) => RestoreFromTray();
+        _tray.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                RestoreFromTray();
+            }
+        };
+    }
+
+    private void DisposeTray()
+    {
+        if (_tray == null)
+        {
+            return;
+        }
+
+        _tray.Visible = false;
+        _tray.Dispose();
+        _tray = null;
+    }
+
+    private void OnFormClosingGuard(object? sender, FormClosingEventArgs e)
+    {
+        if (_forceExit)
+        {
+            return;
+        }
+
+        if (e.CloseReason is CloseReason.WindowsShutDown or CloseReason.TaskManagerClosing)
+        {
+            return;
+        }
+
+        var pref = AppSettings.GetCloseAction();
+        if (pref == CloseAction.Tray)
+        {
+            e.Cancel = true;
+            MinimizeToTray();
+            return;
+        }
+
+        if (pref == CloseAction.Exit)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        using var dlg = new ClosePromptDialog();
+        var result = dlg.ShowDialog(this);
+        if (result == DialogResult.Cancel || dlg.ChosenAction == CloseAction.Ask)
+        {
+            return;
+        }
+
+        if (dlg.RememberChoice)
+        {
+            AppSettings.SetCloseAction(dlg.ChosenAction);
+        }
+
+        if (dlg.ChosenAction == CloseAction.Tray)
+        {
+            MinimizeToTray();
+            return;
+        }
+
+        ExitApplication();
+    }
+
+    private void MinimizeToTray()
+    {
+        if (_tray == null)
+        {
+            return;
+        }
+
+        Hide();
+        ShowInTaskbar = false;
+        _tray.Visible = true;
+        if (!_balloonShown)
+        {
+            _balloonShown = true;
+            _tray.BalloonTipTitle = "RyanMusic";
+            _tray.BalloonTipText = "已缩小到托盘，双击图标可重新打开。";
+            _tray.ShowBalloonTip(2500);
+        }
+    }
+
+    private void RestoreFromTray()
+    {
+        if (_tray != null)
+        {
+            _tray.Visible = false;
+        }
+
+        ShowInTaskbar = true;
+        Show();
+        if (WindowState == FormWindowState.Minimized)
+        {
+            WindowState = FormWindowState.Normal;
+        }
+
+        Activate();
+        ApplyDarkTitleBar();
+    }
+
+    private void ExitApplication()
+    {
+        _forceExit = true;
+        if (_tray != null)
+        {
+            _tray.Visible = false;
+        }
+
+        Close();
     }
 
     private void TrySetAppIcon()
@@ -106,6 +294,8 @@ public sealed class MainForm : Form
 
             _webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
 
+            await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                "document.documentElement.classList.add('platform-windows-app');");
             await InjectNativeSaveBridgeAsync();
             await WaitAndNavigateAsync();
         }

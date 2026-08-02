@@ -451,6 +451,77 @@ html.platform-macos-app .site-footer {
   padding-bottom: 14px;
 }
 
+/* Windows 壳：更大字号与清晰渲染，尤其「我的音乐」 */
+html.platform-windows-app {
+  --font-sans: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei",
+    "PingFang SC", sans-serif;
+  font-size: 17px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+html.platform-windows-app body {
+  font-family: var(--font-sans);
+  letter-spacing: 0.01em;
+}
+
+html.platform-windows-app .local-library {
+  padding: 1.25rem 1.1rem 1.1rem;
+}
+
+html.platform-windows-app .local-library__title {
+  font-size: 1.85rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+html.platform-windows-app .local-library__chip,
+html.platform-windows-app .local-library__tab {
+  padding: 0.58rem 1.05rem;
+  font-size: 1.12rem;
+  font-weight: 650;
+}
+
+html.platform-windows-app .local-library__item {
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 0.6rem 0.8rem;
+  padding: 0.72rem 0.5rem;
+}
+
+html.platform-windows-app .local-library__item--text {
+  min-height: 3.4rem;
+}
+
+html.platform-windows-app .local-library__index {
+  font-size: 1.05rem;
+}
+
+html.platform-windows-app .local-library__name {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+html.platform-windows-app .local-library__sub {
+  margin-top: 0.32rem;
+  font-size: 1.02rem;
+}
+
+html.platform-windows-app .local-library__badge {
+  font-size: 0.9rem;
+  padding: 0.18rem 0.55rem;
+}
+
+html.platform-windows-app .local-library__action {
+  font-size: 1.45rem;
+  padding: 0.45rem;
+}
+
+html.platform-windows-app .local-library__empty {
+  font-size: 1.15rem;
+  line-height: 1.6;
+  padding: 1.35rem 0.7rem;
+}
+
 /* 右上角：LOGO + 可展开光影滑块 */
 .site-chrome {
   position: fixed;
