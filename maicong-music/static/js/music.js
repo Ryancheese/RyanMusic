@@ -2358,45 +2358,6 @@ $(function() {
       e.preventDefault();
       closeModal(false);
     });
-
-    $(document).on('pointerdown', function(e) {
-      if (!$chrome.hasClass('is-ambient-open')) return;
-      if ($(e.target).closest('#j-site-chrome').length) return;
-      setAmbientOpen(false);
-    });
-
-    $(document).on('keydown', function(e) {
-      if (e.key === 'Escape') setAmbientOpen(false);
-    });
-
-    if (!$bright.length || !ambientGlow) return;
-
-    function syncUi($range, $val, pct, off) {
-      $range.val(String(pct));
-      if ($val.length) $val.text(pct + '%');
-      $range.closest('.ambient-intensity').toggleClass('is-off', !!off);
-    }
-
-    syncUi($bright, $brightVal, Math.round(ambientGlow.getBrightness() * 100), ambientGlow.getBrightness() <= 0);
-    if ($motion.length) {
-      syncUi($motion, $motionVal, Math.round(ambientGlow.getMotion() * 100), ambientGlow.getMotion() <= 0);
-    }
-
-    $bright.on('input change', function() {
-      var pct = parseInt($bright.val(), 10);
-      if (isNaN(pct)) pct = 0;
-      ambientGlow.setBrightness(pct);
-      syncUi($bright, $brightVal, pct, pct <= 0);
-    });
-
-    if ($motion.length) {
-      $motion.on('input change', function() {
-        var pct = parseInt($motion.val(), 10);
-        if (isNaN(pct)) pct = 0;
-        ambientGlow.setMotion(pct);
-        syncUi($motion, $motionVal, pct, pct <= 0);
-      });
-    }
   })();
 
   // 输入验证
