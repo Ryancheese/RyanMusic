@@ -241,32 +241,89 @@ make_dmg() {
   local app="$1"
   local out_dmg="$2"
   local stage="$DIST_DIR/dmg-stage-${ARCH_LABEL}"
+  local rw_dmg="$DIST_DIR/dmg-rw-${ARCH_LABEL}.dmg"
+  local bg_src="$ROOT/macos/dmg-background.png"
+  local mount_dir=""
+  local win_w=660
+  local win_h=400
 
   echo "==> make DMG: ${out_dmg}"
-  rm -rf "$stage" "$out_dmg"
-  mkdir -p "$stage"
+  rm -rf "$stage" "$out_dmg" "$rw_dmg"
+  mkdir -p "$stage/.background"
   ditto "$app" "$stage/${APP_NAME}.app"
   ln -sf /Applications "$stage/Applications"
-  cat > "$stage/README.txt" <<'EOF'
-RyanMusic macOS
-===============
 
-1. Drag RyanMusic to Applications.
-2. First launch: right-click -> Open -> Open (Gatekeeper).
-3. PHP is bundled; no brew install needed.
-4. Closing the window quits the app.
-EOF
+  if [[ -f "$bg_src" ]]; then
+    cp "$bg_src" "$stage/.background/background.png"
+  else
+    echo "warn: missing $bg_src — DMG will lack drag-install artwork" >&2
+  fi
 
   xattr -cr "$stage/${APP_NAME}.app" 2>/dev/null || true
 
+  # 可写镜像 → Finder 布局（拖到 Applications 指引）→ 再压成 UDZO
+  local size_mb
+  size_mb="$(du -sm "$stage" | awk '{print $1}')"
+  size_mb=$((size_mb + 40))
   hdiutil create \
     -volname "$APP_NAME" \
     -srcfolder "$stage" \
     -ov \
-    -format UDZO \
-    "$out_dmg"
+    -fs HFS+ \
+    -format UDRW \
+    -size "${size_mb}m" \
+    "$rw_dmg"
 
-  rm -rf "$stage"
+  # detach stale volume if any
+  if [[ -d "/Volumes/${APP_NAME}" ]]; then
+    hdiutil detach "/Volumes/${APP_NAME}" -force 2>/dev/null || true
+    sleep 1
+  fi
+
+  mount_dir="$(hdiutil attach -readwrite -noverify -noautoopen "$rw_dmg" | awk '/\/Volumes\//{print $3; exit}')"
+  if [[ -z "$mount_dir" || ! -d "$mount_dir" ]]; then
+    echo "error: failed to mount RW DMG" >&2
+    exit 1
+  fi
+
+  # 确保背景图在卷上（部分环境下 srcfolder 的点目录偶发丢失）
+  mkdir -p "$mount_dir/.background"
+  if [[ -f "$bg_src" ]]; then
+    cp "$bg_src" "$mount_dir/.background/background.png"
+  fi
+
+  if [[ -f "$mount_dir/.background/background.png" ]]; then
+    # Finder 图标坐标：左 App / 右 Applications，对齐背景箭头与虚线框
+    osascript <<EOF
+tell application "Finder"
+  tell disk "$APP_NAME"
+    open
+    set current view of container window to icon view
+    set toolbar visible of container window to false
+    set statusbar visible of container window to false
+    set the bounds of container window to {200, 120, $((200 + win_w)), $((120 + win_h))}
+    set theViewOptions to the icon view options of container window
+    set arrangement of theViewOptions to not arranged
+    set icon size of theViewOptions to 96
+    set background picture of theViewOptions to file ".background:background.png"
+    set position of item "${APP_NAME}.app" of container window to {150, 180}
+    set position of item "Applications" of container window to {510, 180}
+    update without registering applications
+    delay 2
+    close
+  end tell
+end tell
+EOF
+  else
+    echo "warn: no background.png on volume; skipping Finder layout" >&2
+  fi
+
+  sync
+  hdiutil detach "$mount_dir" || hdiutil detach "$mount_dir" -force
+  sleep 1
+
+  hdiutil convert "$rw_dmg" -format UDZO -imagekey zlib-level=9 -o "$out_dmg"
+  rm -rf "$stage" "$rw_dmg"
   echo "DMG ready: ${out_dmg}"
 }
 
