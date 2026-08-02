@@ -45,49 +45,6 @@ final class TitlebarDragOverlay: NSView {
 
 final class RyanWebView: WKWebView {}
 
-/// 顶部标题栏命中层：拖拽移动；双击缩放（与系统 App 一致）
-/// 左右留空给红绿灯 / LOGO，避免挡住交互
-final class TitlebarDragOverlay: NSView {
-    var bandHeight: CGFloat = 52
-    var passthroughLeading: CGFloat = 88
-    var passthroughTrailing: CGFloat = 280
-
-    override var isOpaque: Bool { false }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func layout() {
-        super.layout()
-        guard let superview else { return }
-        frame = NSRect(
-            x: 0,
-            y: superview.bounds.height - bandHeight,
-            width: superview.bounds.width,
-            height: bandHeight
-        )
-        autoresizingMask = [.width, .minYMargin]
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        guard let superview else { return nil }
-        let local = convert(point, from: superview)
-        guard bounds.contains(local) else { return nil }
-        if local.x <= passthroughLeading { return nil }
-        if local.x >= bounds.width - passthroughTrailing { return nil }
-        return self
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        guard let window else { return }
-        if event.clickCount >= 2 {
-            window.performZoom(nil)
-            return
-        }
-        window.performDrag(with: event)
-    }
-}
-
-final class RyanWebView: WKWebView {}
-
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler, WKDownloadDelegate {
     var window: NSWindow!
     var webView: RyanWebView!
