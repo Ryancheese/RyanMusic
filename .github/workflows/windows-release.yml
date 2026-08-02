@@ -20,7 +20,20 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Build green portable zip
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup -y --no-progress
+          } else {
+            Write-Host "Inno Setup already present: $iscc"
+          }
+
+      - name: Build setup installer
         shell: pwsh
         run: |
           powershell -ExecutionPolicy Bypass -File windows/build-app.ps1 -BundlePhp
@@ -28,8 +41,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RyanMusic-win-x64
-          path: dist/RyanMusic-win-x64.zip
+          name: RyanMusic-Setup-x64
+          path: dist/RyanMusic-Setup-x64.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -37,7 +50,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/RyanMusic-win-x64.zip
+          files: dist/RyanMusic-Setup-x64.exe
           generate_release_notes: true
           fail_on_unmatched_files: true
         env:

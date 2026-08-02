@@ -24,6 +24,141 @@ require MC_CORE_DIR . '/vendor/autoload.php';
 // 使用 Curl
 use \Curl\Curl;
 
+// Clash fake-ip 常用网段 198.18.0.0/15，解析到此后直连 TLS 常失败
+function mc_is_fake_ip($ip)
+{
+    if (!$ip || !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        return false;
+    }
+    $long = ip2long($ip);
+    return ($long & 0xFFFE0000) === (ip2long('198.18.0.0') & 0xFFFE0000);
+}
+
+// 通过 DoH 解析真实 IP（绕过系统 fake-ip DNS）
+function mc_doh_resolve($host)
+{
+    static $cache = [];
+    $host = strtolower(trim($host));
+    if ($host === '' || filter_var($host, FILTER_VALIDATE_IP)) {
+        return $host !== '' ? $host : null;
+    }
+    if (array_key_exists($host, $cache)) {
+        return $cache[$host];
+    }
+
+    // DoH 服务自身也常被 fake-ip，这里固定解析到已知地址
+    $endpoints = [
+        [
+            'url'     => 'https://dns.alidns.com/resolve?name=' . rawurlencode($host) . '&type=A',
+            'resolve' => ['dns.alidns.com:443:223.5.5.5', 'dns.alidns.com:443:223.6.6.6'],
+        ],
+        [
+            'url'     => 'https://cloudflare-dns.com/dns-query?name=' . rawurlencode($host) . '&type=A',
+            'resolve' => ['cloudflare-dns.com:443:1.1.1.1', 'cloudflare-dns.com:443:1.0.0.1'],
+        ],
+    ];
+    foreach ($endpoints as $endpoint) {
+        $ch = curl_init($endpoint['url']);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 5,
+            CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_HTTPHEADER     => ['Accept: application/dns-json'],
+            CURLOPT_USERAGENT      => 'RyanMusic/1.0',
+            CURLOPT_RESOLVE        => $endpoint['resolve'],
+        ]);
+        $raw = curl_exec($ch);
+        curl_close($ch);
+        $json = json_decode($raw, true);
+        if (empty($json['Answer']) || !is_array($json['Answer'])) {
+            continue;
+        }
+        foreach ($json['Answer'] as $ans) {
+            $type = isset($ans['type']) ? (int) $ans['type'] : 0;
+            $data = isset($ans['data']) ? trim($ans['data']) : '';
+            if ($type === 1 && filter_var($data, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && !mc_is_fake_ip($data)) {
+                return $cache[$host] = $data;
+            }
+        }
+    }
+
+    return $cache[$host] = null;
+}
+
+// 系统 DNS 若落到 fake-ip，则改用 DoH 真实 IP
+function mc_resolve_host($host)
+{
+    static $cache = [];
+    $host = strtolower(trim($host));
+    if ($host === '') {
+        return null;
+    }
+    if (filter_var($host, FILTER_VALIDATE_IP)) {
+        return $host;
+    }
+    if (array_key_exists($host, $cache)) {
+        return $cache[$host];
+    }
+
+    $ips = @gethostbynamel($host);
+    if (is_array($ips)) {
+        foreach ($ips as $ip) {
+            if ($ip && !mc_is_fake_ip($ip)) {
+                return $cache[$host] = $ip;
+            }
+        }
+    }
+
+    $doh = mc_doh_resolve($host);
+    return $cache[$host] = $doh;
+}
+
+// 生成 CURLOPT_RESOLVE 列表；仅在需要绕过 fake-ip 时返回
+function mc_curl_resolve_list($url)
+{
+    $parts = @parse_url($url);
+    if (empty($parts['host'])) {
+        return [];
+    }
+    $host = strtolower($parts['host']);
+    if (filter_var($host, FILTER_VALIDATE_IP)) {
+        return [];
+    }
+
+    $sys = @gethostbyname($host);
+    if ($sys && $sys !== $host && !mc_is_fake_ip($sys)) {
+        return [];
+    }
+
+    $ip = mc_resolve_host($host);
+    if (!$ip || mc_is_fake_ip($ip)) {
+        return [];
+    }
+
+    $scheme = isset($parts['scheme']) ? strtolower($parts['scheme']) : 'http';
+    $port = isset($parts['port'])
+        ? (int) $parts['port']
+        : ($scheme === 'https' ? 443 : 80);
+
+    return [
+        $host . ':' . $port . ':' . $ip,
+        // 跟随同域跳转时常见双端口
+        $host . ':443:' . $ip,
+        $host . ':80:' . $ip,
+    ];
+}
+
+function mc_curl_apply_resolve($ch, $url)
+{
+    $list = mc_curl_resolve_list($url);
+    if ($list) {
+        curl_setopt($ch, CURLOPT_RESOLVE, $list);
+    }
+    return $list;
+}
+
 // Curl 内容获取
 function mc_curl($args = [])
 {
@@ -50,6 +185,10 @@ function mc_curl($args = [])
     $curl->setOpt(CURLOPT_FOLLOWLOCATION, true);
     $curl->setOpt(CURLOPT_SSL_VERIFYPEER, false);
     $curl->setOpt(CURLOPT_SSL_VERIFYHOST, false);
+    $resolve = mc_curl_resolve_list($args['url']);
+    if ($resolve) {
+        $curl->setOpt(CURLOPT_RESOLVE, $resolve);
+    }
     if ($args['proxy'] && MC_PROXY) {
         $curl->setOpt(CURLOPT_HTTPPROXYTUNNEL, 1);
         $curl->setOpt(CURLOPT_PROXY, MC_PROXY);
@@ -112,6 +251,10 @@ function mc_stream_download($url, $filename)
             return strlen($chunk);
         },
     ];
+    $resolve = mc_curl_resolve_list($url);
+    if ($resolve) {
+        $opts[CURLOPT_RESOLVE] = $resolve;
+    }
     if (MC_PROXY) {
         $opts[CURLOPT_HTTPPROXYTUNNEL] = 1;
         $opts[CURLOPT_PROXY] = MC_PROXY;
@@ -182,6 +325,12 @@ function mc_proxy_stream($url, $options = [])
         CURLOPT_TIMEOUT        => 300,
         CURLOPT_CONNECTTIMEOUT => 20,
         CURLOPT_RETURNTRANSFER => false,
+    ];
+    $resolve = mc_curl_resolve_list($url);
+    if ($resolve) {
+        $opts[CURLOPT_RESOLVE] = $resolve;
+    }
+    $opts += [
         CURLOPT_HEADERFUNCTION => function ($curl, $header_line) use (&$status_code, &$resp_headers) {
             if (preg_match('/^HTTP\/\S+\s+(\d+)/i', $header_line, $m)) {
                 $status_code = (int) $m[1];
@@ -1658,15 +1807,24 @@ function mc_qq_bootstrap_pyq_code($songmid)
     }
     $api = $base . '/' . ltrim($json['data'][0]['url'], '/');
     $ch = curl_init($api);
-    curl_setopt_array($ch, [
+    $opts = [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HEADER       => true,
+        CURLOPT_HEADER         => true,
         CURLOPT_FOLLOWLOCATION => false,
-        CURLOPT_HTTPHEADER   => [
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_HTTPHEADER     => [
             'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
             'Referer: ' . $base . '/',
         ],
-    ]);
+    ];
+    $resolve = mc_curl_resolve_list($api);
+    if ($resolve) {
+        $opts[CURLOPT_RESOLVE] = $resolve;
+    }
+    curl_setopt_array($ch, $opts);
     $raw = curl_exec($ch);
     curl_close($ch);
     if (preg_match('/[?&]code=([^&\s\'"]+)/', $raw, $m)) {
@@ -1691,7 +1849,7 @@ function mc_qq_get_pyq_code($songmid)
 function mc_qq_curl_redirect($url, $referer = 'https://y.qq.com/')
 {
     $ch = curl_init($url);
-    curl_setopt_array($ch, [
+    $opts = [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HEADER         => true,
         CURLOPT_FOLLOWLOCATION => false,
@@ -1703,7 +1861,12 @@ function mc_qq_curl_redirect($url, $referer = 'https://y.qq.com/')
             'Referer: ' . $referer,
             'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
         ],
-    ]);
+    ];
+    $resolve = mc_curl_resolve_list($url);
+    if ($resolve) {
+        $opts[CURLOPT_RESOLVE] = $resolve;
+    }
+    curl_setopt_array($ch, $opts);
     $resp = curl_exec($ch);
     $loc = curl_getinfo($ch, CURLINFO_REDIRECT_URL);
     curl_close($ch);
@@ -1937,6 +2100,22 @@ function mc_netease_bootstrap_play_url($songid)
     return mc_qq_curl_redirect($loc, $base . '/') ?: $loc;
 }
 
+// Meting 公共接口回退（官方/引导源失败时）
+function mc_netease_meting_play_url($songid)
+{
+    $endpoints = [
+        'https://api.injahow.cn/meting/?server=netease&type=url&id=' . rawurlencode($songid),
+        'https://api.injahow.cn/meting/?type=url&id=' . rawurlencode($songid),
+    ];
+    foreach ($endpoints as $endpoint) {
+        $loc = mc_qq_curl_redirect($endpoint, 'https://api.injahow.cn/');
+        if ($loc && !mc_is_error($loc) && preg_match('#(126\.net|163\.com|music\.163)#i', $loc)) {
+            return $loc;
+        }
+    }
+    return null;
+}
+
 function mc_netease_resolve_play_url($songid)
 {
     $cached = mc_netease_play_cache_get($songid);
@@ -1947,6 +2126,9 @@ function mc_netease_resolve_play_url($songid)
     $url = mc_netease_official_play_url($songid);
     if (!$url) {
         $url = mc_netease_bootstrap_play_url($songid);
+    }
+    if (!$url) {
+        $url = mc_netease_meting_play_url($songid);
     }
     if ($url && !mc_is_error($url) && stripos($url, '/404') === false) {
         $url = mc_netease_https_url($url);

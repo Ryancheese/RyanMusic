@@ -1,11 +1,15 @@
-﻿# RyanMusic Windows 打包脚本（绿色免安装包）
+﻿# RyanMusic Windows 打包脚本（Inno Setup 安装向导）
 # 用法（在仓库根目录或 windows 目录）：
 #   powershell -ExecutionPolicy Bypass -File windows/build-app.ps1
 #   powershell -ExecutionPolicy Bypass -File windows/build-app.ps1 -BundlePhp
-#   powershell -ExecutionPolicy Bypass -File windows/build-app.ps1 -BundlePhp -SkipZip
+#   powershell -ExecutionPolicy Bypass -File windows/build-app.ps1 -BundlePhp -SkipInstaller
+#   powershell -ExecutionPolicy Bypass -File windows/build-app.ps1 -BundlePhp -AlsoZip
 
 param(
   [switch]$BundlePhp,
+  [switch]$SkipInstaller,
+  [switch]$AlsoZip,
+  # 兼容旧参数：跳过压缩包（现默认就不打 zip）
   [switch]$SkipZip
 )
 
@@ -15,11 +19,16 @@ $ErrorActionPreference = "Stop"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $WinDir = Join-Path $Root "windows"
 $DistDir = Join-Path $Root "dist\RyanMusic-win"
+$SetupPath = Join-Path $Root "dist\RyanMusic-Setup-x64.exe"
 $ZipPath = Join-Path $Root "dist\RyanMusic-win-x64.zip"
+$IssPath = Join-Path $WinDir "RyanMusic.iss"
 $MusicSrc = Join-Path $Root "maicong-music"
 $Csproj = Join-Path $WinDir "RyanMusic.csproj"
 # CLI / 内置服务器用 NTS；latest 别名跟随官方小版本更新
 $PhpZipUrl = "https://windows.php.net/downloads/releases/latest/php-8.3-nts-Win32-vs16-x64-latest.zip"
+# 固定版本，避免 download.php 跳转到 HTML 页面
+$InnoSetupVersion = "6.7.3"
+$InnoSetupUrl = "https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-$InnoSetupVersion.exe"
 
 # 刷新 PATH，避免刚装完 SDK 找不到
 $machine = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
@@ -42,6 +51,14 @@ if (-not (Test-Path $Csproj)) {
 
 if (-not (Test-Path $MusicSrc)) {
   Write-Error "找不到 $MusicSrc"
+}
+
+function Get-AppVersion {
+  $raw = Get-Content -Path $Csproj -Raw -Encoding UTF8
+  if ($raw -match '<Version>\s*([^<]+)\s*</Version>') {
+    return $Matches[1].Trim()
+  }
+  return "1.0.0"
 }
 
 function Write-PortablePhpIni([string]$PhpDir) {
@@ -68,7 +85,10 @@ function Install-BundledPhp([string]$TargetPhpDir) {
   $zipFile = Join-Path $tmpRoot "php.zip"
   try {
     Write-Host "    $PhpZipUrl"
-    Invoke-WebRequest -Uri $PhpZipUrl -OutFile $zipFile -UseBasicParsing
+    & curl.exe -fL --retry 3 --retry-all-errors --max-time 600 -o $zipFile $PhpZipUrl
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $zipFile) -or ((Get-Item $zipFile).Length -lt 1MB)) {
+      throw "便携 PHP 下载失败：$PhpZipUrl"
+    }
     $extractDir = Join-Path $tmpRoot "extract"
     Expand-Archive -Path $zipFile -DestinationPath $extractDir -Force
 
@@ -100,20 +120,195 @@ function Install-BundledPhp([string]$TargetPhpDir) {
   }
 }
 
+function Find-Iscc {
+  $candidates = @(
+    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
+    (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"),
+    (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe"),
+    (Join-Path $env:TEMP "RyanMusic-InnoSetup\ISCC.exe")
+  )
+  foreach ($c in $candidates) {
+    if ($c -and (Test-Path $c)) {
+      return $c
+    }
+  }
+  $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+  if ($cmd) {
+    return $cmd.Source
+  }
+  return $null
+}
+
+function Ensure-Iscc {
+  $iscc = Find-Iscc
+  if ($iscc) {
+    return $iscc
+  }
+
+  # 优先 winget（稳定，适合本机与 CI）
+  $winget = Get-Command winget -ErrorAction SilentlyContinue
+  if ($winget) {
+    Write-Host "==> 通过 winget 安装 Inno Setup…"
+    try {
+      & winget install --id JRSoftware.InnoSetup -e --accept-package-agreements --accept-source-agreements --disable-interactivity
+    } catch {
+      Write-Warning "winget 安装 Inno Setup 失败：$($_.Exception.Message)"
+    }
+    # 刷新 PATH 后再找一次
+    $machine = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    $user = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = "$machine;$user"
+    $iscc = Find-Iscc
+    if ($iscc) {
+      Write-Host "    ISCC：$iscc"
+      return $iscc
+    }
+  }
+
+  Write-Host "==> 下载 Inno Setup $InnoSetupVersion…"
+  $tmpRoot = Join-Path $env:TEMP ("ryanmusic-inno-" + [Guid]::NewGuid().ToString("N"))
+  $installer = Join-Path $tmpRoot "innosetup.exe"
+  $portableDir = Join-Path $env:TEMP "RyanMusic-InnoSetup"
+  New-Item -ItemType Directory -Path $tmpRoot -Force | Out-Null
+  try {
+    $downloadUrls = @(
+      $InnoSetupUrl,
+      "https://ghproxy.net/https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-$InnoSetupVersion.exe"
+    )
+    $downloaded = $false
+    foreach ($url in $downloadUrls) {
+      Write-Host "    $url"
+      Remove-Item $installer -Force -ErrorAction SilentlyContinue
+      & curl.exe -fL --retry 2 --retry-all-errors --max-time 180 -o $installer $url
+      if ((Test-Path $installer) -and ((Get-Item $installer).Length -gt 1MB)) {
+        $downloaded = $true
+        break
+      }
+    }
+    if (-not $downloaded) {
+      throw "Inno Setup 下载失败或文件过小：$installer"
+    }
+
+    if (Test-Path $portableDir) {
+      Remove-Item -Recurse -Force $portableDir
+    }
+    New-Item -ItemType Directory -Path $portableDir -Force | Out-Null
+
+    $argSets = @(
+      @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/PORTABLE=1", "/DIR=$portableDir"),
+      @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/DIR=$portableDir")
+    )
+    $installed = $false
+    foreach ($args in $argSets) {
+      $p = Start-Process -FilePath $installer -ArgumentList $args -Wait -PassThru
+      if ($p.ExitCode -eq 0 -and (Test-Path (Join-Path $portableDir "ISCC.exe"))) {
+        $installed = $true
+        break
+      }
+    }
+    if (-not $installed) {
+      throw "Inno Setup 安装失败"
+    }
+
+    $iscc = Find-Iscc
+    if (-not $iscc) {
+      $fallback = Join-Path $portableDir "ISCC.exe"
+      if (Test-Path $fallback) {
+        $iscc = $fallback
+      }
+    }
+    if (-not $iscc) {
+      throw "Inno Setup 安装后仍未找到 ISCC.exe"
+    }
+    Write-Host "    ISCC：$iscc"
+    return $iscc
+  } finally {
+    if (Test-Path $tmpRoot) {
+      Remove-Item -Recurse -Force $tmpRoot -ErrorAction SilentlyContinue
+    }
+  }
+}
+
+function Ensure-ChineseLanguage([string]$IsccPath) {
+  $compilerDir = Split-Path $IsccPath -Parent
+  $langDir = Join-Path $compilerDir "Languages"
+  $langFile = Join-Path $langDir "ChineseSimplified.isl"
+  if (Test-Path $langFile) {
+    return
+  }
+
+  Write-Host "==> 下载简体中文语言包"
+  New-Item -ItemType Directory -Path $langDir -Force | Out-Null
+  $urls = @(
+    "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl",
+    "https://cdn.jsdelivr.net/gh/jrsoftware/issrc@main/Files/Languages/ChineseSimplified.isl",
+    "https://raw.githubusercontent.com/kira-96/Inno-Setup-Chinese-Simplified-Translation/main/ChineseSimplified.isl"
+  )
+  $ok = $false
+  foreach ($url in $urls) {
+    try {
+      Invoke-WebRequest -Uri $url -OutFile $langFile -UseBasicParsing
+      if ((Test-Path $langFile) -and ((Get-Item $langFile).Length -gt 200)) {
+        $ok = $true
+        Write-Host "    已写入：$langFile"
+        break
+      }
+    } catch {
+      # try next
+    }
+  }
+  if (-not $ok) {
+    Write-Warning "未能下载 ChineseSimplified.isl，安装向导将回退为英文界面"
+  }
+}
+
+function Build-Installer([string]$Version) {
+  if (-not (Test-Path $IssPath)) {
+    throw "找不到安装脚本：$IssPath"
+  }
+
+  $iscc = Ensure-Iscc
+  Ensure-ChineseLanguage $iscc
+
+  if (Test-Path $SetupPath) {
+    Remove-Item -Force $SetupPath
+  }
+
+  Write-Host "==> 编译安装向导 ($Version)"
+  $distForIss = $DistDir
+  $outForIss = Split-Path $SetupPath -Parent
+  & $iscc `
+    "/DAppVersion=$Version" `
+    "/DDistDir=$distForIss" `
+    "/DOutputDir=$outForIss" `
+    $IssPath
+  if ($LASTEXITCODE -ne 0) {
+    throw "ISCC 编译失败 (exit=$LASTEXITCODE)"
+  }
+  if (-not (Test-Path $SetupPath)) {
+    throw "安装包未生成：$SetupPath"
+  }
+}
+
+$AppVersion = Get-AppVersion
+
 Write-Host "==> 清理旧包"
 if (Test-Path $DistDir) {
   Remove-Item -Recurse -Force $DistDir
 }
-New-Item -ItemType Directory -Path $DistDir | Out-Null
 $distParent = Split-Path $DistDir -Parent
 if (-not (Test-Path $distParent)) {
   New-Item -ItemType Directory -Path $distParent | Out-Null
 }
-if ((Test-Path $ZipPath) -and -not $SkipZip) {
+New-Item -ItemType Directory -Path $DistDir | Out-Null
+if ((Test-Path $SetupPath) -and -not $SkipInstaller) {
+  Remove-Item -Force $SetupPath
+}
+if ((Test-Path $ZipPath) -and $AlsoZip) {
   Remove-Item -Force $ZipPath
 }
 
-Write-Host "==> 发布自包含可执行文件 (win-x64)"
+Write-Host "==> 发布自包含可执行文件 (win-x64) v$AppVersion"
 Push-Location $WinDir
 try {
   & dotnet publish $Csproj `
@@ -138,7 +333,7 @@ Write-Host "==> 复制站点文件"
 $MusicDst = Join-Path $DistDir "maicong-music"
 robocopy $MusicSrc $MusicDst /E /NFL /NDL /NJH /NJS /nc /ns /np `
   /XD .git core\cache node_modules `
-  /XF .DS_Store | Out-Null
+  /XF .DS_Store Dockerfile docker-compose.yml | Out-Null
 if ($LASTEXITCODE -ge 8) {
   Write-Error "复制站点文件失败 (robocopy=$LASTEXITCODE)"
 }
@@ -150,28 +345,38 @@ if (Test-Path $icoSrc) {
   Copy-Item $icoSrc (Join-Path $DistDir "AppIcon.ico") -Force
 }
 
+# 安装包不需要调试符号与 XML 文档
+Get-ChildItem -Path $DistDir -Include *.pdb,*.xml -Recurse -ErrorAction SilentlyContinue |
+  Remove-Item -Force -ErrorAction SilentlyContinue
+
 if ($BundlePhp) {
   Install-BundledPhp (Join-Path $DistDir "php")
 }
 
 Write-Host "==> 写入使用说明"
 $readmeTxt = @"
-RyanMusic Windows 绿色免安装包
-==============================
+RyanMusic Windows
+=================
 
-1. 解压本压缩包到任意目录（建议路径不含中文亦可）。
-2. 双击 RyanMusic.exe 即可使用。
-3. 本包已内置 PHP（php 目录），无需单独安装 .NET / PHP。
-4. 需要系统已安装 Microsoft Edge WebView2 Runtime（Windows 10/11 通常自带）。
-   若启动提示缺少 WebView2，请安装：
-   https://developer.microsoft.com/microsoft-edge/webview2/
+安装版：双击 RyanMusic-Setup-x64.exe，按向导完成安装。
+本目录为安装包内容（已内嵌 PHP），也可直接运行 RyanMusic.exe。
+
+系统要求：
+- Windows 10/11 x64
+- Microsoft Edge WebView2 Runtime（Win10/11 通常自带）
+  若启动提示缺少 WebView2：
+  https://developer.microsoft.com/microsoft-edge/webview2/
 
 关闭窗口即退出程序并停止本地服务。
 "@
 Set-Content -Path (Join-Path $DistDir "使用说明.txt") -Value $readmeTxt -Encoding UTF8
 
-if (-not $SkipZip) {
-  Write-Host "==> 打包 zip"
+if (-not $SkipInstaller) {
+  Build-Installer -Version $AppVersion
+}
+
+if ($AlsoZip -and -not $SkipZip) {
+  Write-Host "==> 额外打包 zip（兼容旧流程）"
   if (Test-Path $ZipPath) {
     Remove-Item -Force $ZipPath
   }
@@ -182,7 +387,11 @@ if (-not $SkipZip) {
 Write-Host ""
 Write-Host "已生成目录：$DistDir"
 Write-Host "运行：$DistDir\RyanMusic.exe"
-if ((-not $SkipZip) -and (Test-Path $ZipPath)) {
+if ((-not $SkipInstaller) -and (Test-Path $SetupPath)) {
+  $sizeMb = [math]::Round((Get-Item $SetupPath).Length / 1MB, 1)
+  Write-Host "安装包：$SetupPath ($sizeMb MB)"
+}
+if ($AlsoZip -and (Test-Path $ZipPath)) {
   $sizeMb = [math]::Round((Get-Item $ZipPath).Length / 1MB, 1)
   Write-Host "压缩包：$ZipPath ($sizeMb MB)"
 }

@@ -14,7 +14,7 @@
 | `macos/` | macOS 原生窗口 App（WKWebView）与一键安装脚本 |
 | `windows/` | Windows 原生窗口 App（WebView2）与一键安装脚本 |
 
-## 下载绿色安装包（推荐发给朋友）
+## 下载安装包（推荐发给朋友）
 
 从 GitHub Releases 下载：
 
@@ -22,7 +22,7 @@
 
 | 平台 | 文件 | 说明 |
 |------|------|------|
-| Windows | `RyanMusic-win-x64.zip` | 解压后双击 `RyanMusic.exe`（已内嵌 PHP；需 WebView2） |
+| Windows | `RyanMusic-Setup-x64.exe` | 双击按安装向导完成（已内嵌 PHP；需 WebView2） |
 | macOS Apple Silicon | `RyanMusic-mac-arm64.dmg` | 拖到「应用程序」；首次请右键 → 打开 |
 
 > Intel Mac 暂请使用下方「一键安装」脚本编译安装。
@@ -32,8 +32,9 @@
 本地打包：
 
 ```powershell
-# Windows
+# Windows（生成安装向导 exe，需联网下载 Inno Setup / PHP）
 powershell -ExecutionPolicy Bypass -File windows\build-app.ps1 -BundlePhp
+# 产物：dist/RyanMusic-Setup-x64.exe
 ```
 
 ```bash
@@ -90,9 +91,9 @@ iex ((irm https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/windows/in
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File windows\install.ps1
-# 或只打包（不含便携 PHP）：
-powershell -ExecutionPolicy Bypass -File windows\build-app.ps1
-# 绿色完整包：
+# 或只打包目录（不含安装向导 / 不含便携 PHP）：
+powershell -ExecutionPolicy Bypass -File windows\build-app.ps1 -SkipInstaller
+# 完整安装包（内嵌 PHP + Setup.exe）：
 powershell -ExecutionPolicy Bypass -File windows\build-app.ps1 -BundlePhp
 ```
 
