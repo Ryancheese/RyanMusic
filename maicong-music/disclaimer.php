@@ -4,7 +4,7 @@
  */
 
 define('MC_CORE', true);
-define('MC_VERSION', '1.8.31');
+define('MC_VERSION', '1.8.36');
 define('MC_TEMP_DIR', __DIR__ . '/template');
 
 include_once __DIR__ . '/template/disclaimer.php';

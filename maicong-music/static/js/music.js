@@ -504,16 +504,29 @@ $(function() {
       );
       $li.find('.local-library__index').text(index + 1);
       $li.find('.local-library__name').text(item.title || '暂无');
-      $li
-        .find('.local-library__sub')
-        .html(
-          '<span class="' +
-            badgeClass +
-            '">' +
-            channelLabel(item.type) +
-            '</span>' +
-            (item.author || '')
+      var $sub = $li.find('.local-library__sub').empty();
+      $sub.append(
+        $('<span/>', {
+          class: badgeClass,
+          text: channelLabel(item.type)
+        })
+      );
+      var authorName = $.trim(item.author || '');
+      if (authorName && authorName !== '暂无') {
+        var sourceType = item.type === 'qq' ? 'qq' : 'netease';
+        $sub.append(document.createTextNode(' '));
+        $sub.append(
+          $('<span/>', {
+            class: 'local-library__author',
+            text: authorName,
+            title: '点击搜索该歌手',
+            role: 'button',
+            tabindex: 0,
+            'data-author': authorName,
+            'data-type': sourceType
+          })
         );
+      }
       $li.data('track', item);
       $list.append($li);
     });
@@ -996,9 +1009,12 @@ $(function() {
     });
   }
 
-  function searchByKeyword(keyword) {
+  function searchByKeyword(keyword, type) {
     keyword = $.trim(keyword || '').replace(/^-\s*/, '');
     if (!keyword || keyword === '暂无') return;
+    if (type === 'netease' || type === 'qq') {
+      setMusicType(type);
+    }
 
     $('#j-input')
       .val(keyword)
@@ -1018,12 +1034,12 @@ $(function() {
     $('#j-validator').trigger('submit');
   }
 
-  function searchByArtist(name) {
-    searchByKeyword(name);
+  function searchByArtist(name, type) {
+    searchByKeyword(name, type);
   }
 
-  function searchByTitle(title) {
-    searchByKeyword(title);
+  function searchByTitle(title, type) {
+    searchByKeyword(title, type);
   }
 
   function tunePlayerStudio(playerInstance) {
@@ -1220,7 +1236,18 @@ $(function() {
     list.addEventListener('scroll', list._ryanInfiniteHandler, { passive: true });
   }
 
+  function setStageEmptyVisible(visible) {
+    var $empty = $('#j-stage-empty');
+    if (!$empty.length) return;
+    if (visible) {
+      $empty.prop('hidden', false).attr('aria-hidden', 'false');
+    } else {
+      $empty.prop('hidden', true).attr('aria-hidden', 'true');
+    }
+  }
+
   function showResultMain(animated) {
+    setStageEmptyVisible(false);
     var $main = $('#j-main');
     // 始终用 flex，保证与顶部搜索同页铺满剩余高度
     if (animated && !$main.is(':visible')) {
@@ -1397,6 +1424,8 @@ $(function() {
     playerList = [];
     clearNativeNowPlaying();
     $('#j-player').empty().addClass('aplayer');
+    $('#j-main').hide();
+    setStageEmptyVisible(true);
 
     pushState(siteTitle, getUrl());
     document.title = siteTitle;
@@ -1409,6 +1438,7 @@ $(function() {
     var STORAGE_KEY = 'ryanmusic-ambient-reactive';
     var BRIGHTNESS_KEY = 'ryanmusic-ambient-brightness';
     var MOTION_KEY = 'ryanmusic-ambient-motion';
+    var SATURATION_KEY = 'ryanmusic-ambient-saturation';
     var INTENSITY_KEY = 'ryanmusic-ambient-intensity'; // 旧版单滑块
     var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduced) {
@@ -1428,6 +1458,10 @@ $(function() {
         setMotion: function() {},
         getMotion: function() {
           return 0.8;
+        },
+        setSaturation: function() {},
+        getSaturation: function() {
+          return 0.85;
         },
         setIntensity: function() {},
         getIntensity: function() {
@@ -1472,11 +1506,16 @@ $(function() {
     var reactiveEnabled = true;
     var brightness = 0.55;
     var motion = 0.8;
+    var saturation = 0.85;
     var activeCoverUrl = null;
+    var lastPalette = null;
+    var lastThemePrimary = null;
+    var lastThemeSecondary = null;
     var DEFAULT_ACCENT = { r: 250, g: 45, b: 85 };
     try {
       var savedBright = localStorage.getItem(BRIGHTNESS_KEY);
       var savedMotion = localStorage.getItem(MOTION_KEY);
+      var savedSaturation = localStorage.getItem(SATURATION_KEY);
       var savedIntensity = localStorage.getItem(INTENSITY_KEY);
       if (savedBright !== null) {
         var pb = parseInt(savedBright, 10);
@@ -1491,6 +1530,10 @@ $(function() {
       } else if (savedIntensity !== null) {
         // 旧版单滑块：律动默认略高于亮度
         motion = Math.min(1, brightness + 0.15);
+      }
+      if (savedSaturation !== null) {
+        var ps = parseInt(savedSaturation, 10);
+        if (!isNaN(ps)) saturation = Math.max(0, Math.min(1, ps / 100));
       }
       var savedToggle = localStorage.getItem(STORAGE_KEY);
       if (savedToggle === '0' && brightness > 0) {
@@ -1528,6 +1571,7 @@ $(function() {
     }
 
     function applyPalette(scheme) {
+      lastPalette = scheme;
       var c0 = parseRgb(scheme.orbs[0]);
       var c1 = parseRgb(scheme.orbs[1]);
       var c2 = parseRgb(scheme.orbs[2] || scheme.orbs[0]);
@@ -1574,6 +1618,8 @@ $(function() {
         '--bloom3-b': g2.b
       });
       if (scheme.syncTheme !== false) {
+        lastThemePrimary = c0;
+        lastThemeSecondary = c1;
         applyThemeColors(c0, c1);
       }
     }
@@ -1602,6 +1648,15 @@ $(function() {
       };
     }
 
+    function scaleChroma(c, amount) {
+      var mid = (c.r + c.g + c.b) / 3;
+      return {
+        r: clampByte(mid + (c.r - mid) * amount),
+        g: clampByte(mid + (c.g - mid) * amount),
+        b: clampByte(mid + (c.b - mid) * amount)
+      };
+    }
+
     function toAccentColor(c) {
       var max = Math.max(c.r, c.g, c.b) || 1;
       var min = Math.min(c.r, c.g, c.b);
@@ -1626,7 +1681,8 @@ $(function() {
         g = mid + (g - mid) * 1.55;
         b = mid + (b - mid) * 1.55;
       }
-      return { r: clampByte(r), g: clampByte(g), b: clampByte(b) };
+      // 用户饱和度滑块：只缩放色度，不改明暗
+      return scaleChroma({ r: r, g: g, b: b }, saturation);
     }
 
     // 光效层专用：明显更亮，和深色背景拉开对比
@@ -1812,6 +1868,7 @@ $(function() {
       // 律动增益加大：100% 时约 2.4 倍，配合 CSS 缩放更明显
       var amp = glowOn && motion > 0 ? motion * 2.4 : 0;
       flowEl.style.setProperty('--ambient-intensity', brightness.toFixed(3));
+      flowEl.style.setProperty('--ambient-saturation', saturation.toFixed(3));
       flowEl.style.setProperty('--pulse', Math.min(1.8, levels.pulse * amp).toFixed(3));
       flowEl.style.setProperty('--bass', Math.min(1.8, levels.bass * amp).toFixed(3));
       flowEl.style.setProperty('--mid', Math.min(1.6, levels.mid * amp).toFixed(3));
@@ -1909,6 +1966,22 @@ $(function() {
         /* ignore */
       }
       restartMotionLoop();
+    }
+
+    function setSaturation(value) {
+      saturation = normalizeSlider(value, 85);
+      try {
+        localStorage.setItem(SATURATION_KEY, String(Math.round(saturation * 100)));
+      } catch (e) {
+        /* ignore */
+      }
+      writeCssLevels();
+      if (lastPalette) {
+        applyPalette(lastPalette);
+      } else if (lastThemePrimary) {
+        applyThemeColors(lastThemePrimary, lastThemeSecondary || lastThemePrimary);
+      }
+      if (brightness <= 0) setBrightness(0.55);
     }
 
     // 兼容旧 API：当作亮度
@@ -2090,6 +2163,10 @@ $(function() {
       getMotion: function() {
         return motion;
       },
+      setSaturation: setSaturation,
+      getSaturation: function() {
+        return saturation;
+      },
       setIntensity: setIntensity,
       getIntensity: function() {
         return brightness;
@@ -2106,6 +2183,8 @@ $(function() {
     var $brightVal = $('#j-ambient-brightness-val');
     var $motion = $('#j-ambient-motion');
     var $motionVal = $('#j-ambient-motion-val');
+    var $sat = $('#j-ambient-saturation');
+    var $satVal = $('#j-ambient-saturation-val');
 
     function setAmbientOpen(open) {
       if (!$panel.length || !$toggle.length) return;
@@ -2135,6 +2214,149 @@ $(function() {
     // 点击滑块区域不关闭；点击其他地方恢复 LOGO
     $panel.on('click', function(e) {
       e.stopPropagation();
+    });
+
+    $(document).on('pointerdown', function(e) {
+      if (!$chrome.hasClass('is-ambient-open')) return;
+      if ($(e.target).closest('#j-site-chrome').length) return;
+      setAmbientOpen(false);
+    });
+
+    $(document).on('keydown', function(e) {
+      if (e.key !== 'Escape') return;
+      if ($('.site-modal.is-open').length) return; // 交给弹层处理
+      setAmbientOpen(false);
+    });
+
+    if (!$bright.length || !ambientGlow) return;
+
+    function syncUi($range, $val, pct, off) {
+      $range.val(String(pct));
+      if ($val.length) $val.text(pct + '%');
+      $range.closest('.ambient-intensity').toggleClass('is-off', !!off);
+    }
+
+    syncUi($bright, $brightVal, Math.round(ambientGlow.getBrightness() * 100), ambientGlow.getBrightness() <= 0);
+    if ($motion.length) {
+      syncUi($motion, $motionVal, Math.round(ambientGlow.getMotion() * 100), ambientGlow.getMotion() <= 0);
+    }
+    if ($sat.length && ambientGlow.getSaturation) {
+      syncUi($sat, $satVal, Math.round(ambientGlow.getSaturation() * 100), ambientGlow.getSaturation() <= 0);
+    }
+
+    $bright.on('input change', function() {
+      var pct = parseInt($bright.val(), 10);
+      if (isNaN(pct)) pct = 0;
+      ambientGlow.setBrightness(pct);
+      syncUi($bright, $brightVal, pct, pct <= 0);
+    });
+
+    if ($motion.length) {
+      $motion.on('input change', function() {
+        var pct = parseInt($motion.val(), 10);
+        if (isNaN(pct)) pct = 0;
+        ambientGlow.setMotion(pct);
+        syncUi($motion, $motionVal, pct, pct <= 0);
+      });
+    }
+
+    if ($sat.length && ambientGlow.setSaturation) {
+      $sat.on('input change', function() {
+        var pct = parseInt($sat.val(), 10);
+        if (isNaN(pct)) pct = 0;
+        ambientGlow.setSaturation(pct);
+        syncUi($sat, $satVal, pct, pct <= 0);
+      });
+    }
+  })();
+
+  (function bindSiteModals() {
+    var openId = null;
+    var closing = false;
+
+    function modalEl(id) {
+      return document.getElementById(id === 'help' ? 'j-modal-help' : id === 'disclaimer' ? 'j-modal-disclaimer' : id);
+    }
+
+    function openModal(name) {
+      var el = modalEl(name);
+      if (!el || closing) return;
+      var current = document.querySelector('.site-modal.is-open');
+      if (current && current !== el) {
+        closeModal(true);
+      }
+      el.hidden = false;
+      el.setAttribute('aria-hidden', 'false');
+      // 强制 reflow，保证开启动画
+      void el.offsetWidth;
+      el.classList.add('is-open');
+      openId = name;
+      document.body.classList.add('is-modal-open');
+      var panel = el.querySelector('.site-modal__panel');
+      if (panel && typeof panel.focus === 'function') {
+        setTimeout(function() {
+          panel.focus();
+        }, 40);
+      }
+    }
+
+    function closeModal(immediate) {
+      var el = document.querySelector('.site-modal.is-open');
+      if (!el) {
+        openId = null;
+        document.body.classList.remove('is-modal-open');
+        return;
+      }
+      if (immediate) {
+        el.classList.remove('is-open', 'is-closing');
+        el.hidden = true;
+        el.setAttribute('aria-hidden', 'true');
+        openId = null;
+        document.body.classList.remove('is-modal-open');
+        closing = false;
+        return;
+      }
+      closing = true;
+      el.classList.add('is-closing');
+      var done = false;
+      function finish() {
+        if (done) return;
+        done = true;
+        el.classList.remove('is-open', 'is-closing');
+        el.hidden = true;
+        el.setAttribute('aria-hidden', 'true');
+        openId = null;
+        closing = false;
+        document.body.classList.remove('is-modal-open');
+      }
+      var panel = el.querySelector('.site-modal__panel');
+      if (panel) {
+        panel.addEventListener('transitionend', function onEnd(e) {
+          if (e.target !== panel) return;
+          panel.removeEventListener('transitionend', onEnd);
+          finish();
+        });
+      }
+      setTimeout(finish, 280);
+    }
+
+    $(document).on('click', '[data-modal]', function(e) {
+      var name = $(this).attr('data-modal');
+      if (!name || !modalEl(name)) return;
+      e.preventDefault();
+      openModal(name);
+    });
+
+    $(document).on('click', '[data-modal-close]', function(e) {
+      e.preventDefault();
+      closeModal(false);
+    });
+
+    $(document).on('keydown', function(e) {
+      if (e.key !== 'Escape') return;
+      if (!document.querySelector('.site-modal.is-open')) return;
+      e.preventDefault();
+      closeModal(false);
     });
 
     $(document).on('pointerdown', function(e) {
@@ -2247,6 +2469,7 @@ $(function() {
                 $('#j-submit').button('loading');
                 updateInfiniteLoadState(false, filter);
                 setLoadStatus('');
+                setStageEmptyVisible(false);
                 startSearchProgress();
               } else {
                 setLoadStatus('正在加载更多…');
@@ -2371,6 +2594,9 @@ $(function() {
                     .find('.am-alert')
                     .html(result.error || '(°ー°〃) 服务器好像罢工了')
                     .show();
+                  if (!$('#j-main').is(':visible')) {
+                    setStageEmptyVisible(true);
+                  }
                 } else {
                   page = Math.max(1, pageNo - 1);
                   updateInfiniteLoadState(false, filter);
@@ -2392,6 +2618,9 @@ $(function() {
                   .find('.am-alert')
                   .html(err)
                   .show();
+                if (!$('#j-main').is(':visible')) {
+                  setStageEmptyVisible(true);
+                }
               } else {
                 page = Math.max(1, pageNo - 1);
                 setLoadStatus('加载失败，继续下滑重试');
@@ -2423,17 +2652,24 @@ $(function() {
     $(this).select();
   });
 
-  // 点击标题区歌曲名 / 歌手名 → 直接搜索
+  // 点击标题区歌曲名 / 歌手名 → 直接搜索（并切到当前曲音源）
+  function currentTrackSearchType() {
+    var track = player && playerList[player.playIndex] ? playerList[player.playIndex] : null;
+    if (track && (track.type === 'qq' || track.type === 'netease')) return track.type;
+    return getMusicType();
+  }
+
   $(document).on(
     'click',
     '#j-player .aplayer-music .aplayer-title, #j-player .aplayer-music .aplayer-author',
     function(e) {
       e.preventDefault();
       e.stopPropagation();
+      var type = currentTrackSearchType();
       if ($(this).hasClass('aplayer-author')) {
-        searchByArtist($(this).text());
+        searchByArtist($(this).text(), type);
       } else {
-        searchByTitle($(this).text());
+        searchByTitle($(this).text(), type);
       }
     }
   );
@@ -2444,10 +2680,11 @@ $(function() {
     function(e) {
       if (e.key !== 'Enter' && e.key !== ' ') return;
       e.preventDefault();
+      var type = currentTrackSearchType();
       if ($(this).hasClass('aplayer-author')) {
-        searchByArtist($(this).text());
+        searchByArtist($(this).text(), type);
       } else {
-        searchByTitle($(this).text());
+        searchByTitle($(this).text(), type);
       }
     }
   );
@@ -2689,6 +2926,15 @@ $(function() {
     var $target = $(e.target);
     var item = $(this).data('track');
     if (!item) return;
+    if ($target.closest('.local-library__author').length) {
+      e.preventDefault();
+      e.stopPropagation();
+      var $author = $target.closest('.local-library__author');
+      var name = $author.attr('data-author') || $author.text();
+      var type = $author.attr('data-type') || item.type;
+      searchByArtist(name, type);
+      return;
+    }
     if ($target.closest('[data-act="unlike"]').length) {
       e.stopPropagation();
       removeLiked(item);
@@ -2728,6 +2974,16 @@ $(function() {
       return;
     }
     playFromListContext(LIB.tab, item);
+  });
+
+  $('#j-library-list').on('keydown', '.local-library__author', function(e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    e.stopPropagation();
+    var $author = $(this);
+    var name = $author.attr('data-author') || $author.text();
+    var type = $author.attr('data-type');
+    searchByArtist(name, type);
   });
 
   renderLibrary();

@@ -88,6 +88,7 @@ body::after {
   --treble: 0;
   --energy: 0;
   --ambient-intensity: 0.4;
+  --ambient-saturation: 0.85;
 }
 
 .light-flow__bloom {
@@ -100,7 +101,10 @@ body::after {
         var(--bloom-r, 250),
         var(--bloom-g, 45),
         var(--bloom-b, 85),
-        calc((0.16 + var(--energy) * 0.28) * (0.45 + var(--ambient-intensity) * 1.1))
+        calc(
+          (0.2 + var(--energy) * 0.2) * (0.45 + var(--ambient-intensity) * 1.1) *
+            (0.4 + var(--ambient-saturation) * 0.7)
+        )
       )
         0%,
       transparent 64%
@@ -111,7 +115,10 @@ body::after {
         var(--bloom2-r, 88),
         var(--bloom2-g, 86),
         var(--bloom2-b, 214),
-        calc((0.12 + var(--bass) * 0.22) * (0.4 + var(--ambient-intensity) * 1.05))
+        calc(
+          (0.15 + var(--bass) * 0.16) * (0.4 + var(--ambient-intensity) * 1.05) *
+            (0.4 + var(--ambient-saturation) * 0.7)
+        )
       )
         0%,
       transparent 62%
@@ -122,13 +129,16 @@ body::after {
         var(--bloom3-r, 255),
         var(--bloom3-g, 120),
         var(--bloom3-b, 160),
-        calc((0.1 + var(--mid) * 0.2) * (0.4 + var(--ambient-intensity) * 1.05))
+        calc(
+          (0.13 + var(--mid) * 0.14) * (0.4 + var(--ambient-intensity) * 1.05) *
+            (0.4 + var(--ambient-saturation) * 0.7)
+        )
       )
         0%,
       transparent 60%
     );
   filter: blur(12px);
-  opacity: calc(0.5 + var(--ambient-intensity) * 0.5);
+  opacity: calc((0.5 + var(--ambient-intensity) * 0.5) * (0.55 + var(--ambient-saturation) * 0.5));
   transform: scale(calc(1 + var(--pulse) * 0.16 + var(--bass) * 0.06 + var(--ambient-intensity) * 0.02));
   transition: opacity 0.8s ease;
   will-change: transform, opacity;
@@ -136,7 +146,7 @@ body::after {
 }
 
 .light-flow--playing .light-flow__bloom {
-  opacity: calc(0.62 + var(--ambient-intensity) * 0.38);
+  opacity: calc((0.62 + var(--ambient-intensity) * 0.38) * (0.55 + var(--ambient-saturation) * 0.5));
 }
 
 .light-flow__orb {
@@ -171,12 +181,12 @@ body::after {
 .light-flow__orb.is-visible {
   opacity: calc(
     var(--orb-opacity, 0.55) * (0.55 + var(--ambient-intensity) * 0.95) *
-      (0.85 + var(--energy) * 0.45)
+      (0.45 + var(--ambient-saturation) * 0.55) * (0.92 + var(--energy) * 0.28)
   );
 }
 
 .light-flow.light-flow--reactive-off .light-flow__bloom {
-  opacity: calc(var(--ambient-intensity) * 0.62);
+  opacity: calc(var(--ambient-intensity) * (0.4 + var(--ambient-saturation) * 0.45));
   transform: scale(calc(0.96 + var(--ambient-intensity) * 0.06));
 }
 
@@ -186,12 +196,18 @@ body::after {
 }
 
 .light-flow.light-flow--reactive-off .light-flow__orb.is-visible {
-  opacity: calc(var(--orb-opacity, 0.55) * var(--ambient-intensity) * 0.9);
+  opacity: calc(
+    var(--orb-opacity, 0.55) * var(--ambient-intensity) *
+      (0.45 + var(--ambient-saturation) * 0.55)
+  );
 }
 
 .light-flow.light-flow--reactive-off .light-flow__beam {
   animation-duration: var(--beam-duration, 12s);
-  opacity: calc(var(--beam-opacity, 0.55) * var(--ambient-intensity) * 0.75);
+  opacity: calc(
+    var(--beam-opacity, 0.55) * var(--ambient-intensity) *
+      (0.4 + var(--ambient-saturation) * 0.5)
+  );
   transform: none;
 }
 
@@ -604,10 +620,11 @@ html.platform-macos-app .site-footer {
 .ambient-intensity {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 18px;
-  color: var(--text-tertiary);
-  font-size: 0.7rem;
+  gap: 10px;
+  height: 22px;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  font-weight: 700;
   line-height: 1;
   user-select: none;
   white-space: nowrap;
@@ -625,11 +642,15 @@ html.platform-macos-app .site-footer {
   line-height: 1;
   margin: 0;
   padding: 0;
+  font-size: inherit;
+  font-weight: inherit;
 }
 
 .ambient-intensity__label {
-  flex: 0 0 2em;
-  letter-spacing: 0.04em;
+  flex: 0 0 3.2em;
+  width: 3.2em;
+  min-width: 3.2em;
+  letter-spacing: 0.02em;
   text-align: right;
   justify-content: flex-end;
 }
@@ -638,8 +659,8 @@ html.platform-macos-app .site-footer {
   -webkit-appearance: none;
   appearance: none;
   display: block;
-  width: 84px;
-  height: 18px;
+  width: 96px;
+  height: 22px;
   margin: 0;
   padding: 0;
   background: transparent;
@@ -683,12 +704,13 @@ html.platform-macos-app .site-footer {
 }
 
 .ambient-intensity__val {
-  flex: 0 0 2.6em;
-  min-width: 32px;
+  flex: 0 0 3.2em;
+  width: 3.2em;
+  min-width: 3.2em;
   justify-content: flex-end;
   font-variant-numeric: tabular-nums;
-  opacity: 0.9;
-  color: var(--text-tertiary);
+  opacity: 0.95;
+  color: var(--text-secondary);
 }
 
 /* 底栏：链接居中，版本号右下 */
@@ -1276,6 +1298,174 @@ html.platform-macos-app .site-footer {
   height: auto;
   min-height: 0;
   overflow: hidden;
+}
+
+/* 搜索前空态：品牌占位 */
+.app-stage__main .stage-empty {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: hidden;
+  text-align: center;
+  padding: 28px 20px 36px;
+  user-select: none;
+}
+
+.stage-empty[hidden] {
+  display: none !important;
+}
+
+.stage-empty__glow {
+  position: absolute;
+  width: min(420px, 70%);
+  height: min(280px, 55%);
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(
+    ellipse at center,
+    var(--accent-soft, rgba(250, 45, 85, 0.35)) 0%,
+    rgba(250, 45, 85, 0.08) 42%,
+    transparent 72%
+  );
+  filter: blur(8px);
+  pointer-events: none;
+  animation: stage-empty-breathe 5.5s ease-in-out infinite;
+}
+
+.stage-empty__mark {
+  position: relative;
+  z-index: 1;
+  width: 128px;
+  height: 128px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stage-empty__vinyl {
+  display: block;
+  width: 112px;
+  height: 112px;
+  color: var(--accent, #fa2d55);
+  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.35));
+  animation: stage-empty-spin 18s linear infinite;
+}
+
+.stage-empty__pulse {
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(250, 45, 85, 0.28);
+  pointer-events: none;
+  animation: stage-empty-pulse 2.8s ease-out infinite;
+}
+
+.stage-empty__brand {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.12em;
+  margin: 4px 0 0;
+  padding: 0;
+  line-height: 1;
+}
+
+.stage-empty__line {
+  display: inline-block;
+  font-family: var(--font-sans);
+  font-size: clamp(2rem, 4.2vw, 2.85rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  background: linear-gradient(
+    180deg,
+    #fff 0%,
+    rgba(255, 255, 255, 0.9) 55%,
+    rgba(255, 180, 198, 0.95) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.stage-empty__line--accent {
+  background: linear-gradient(
+    105deg,
+    #ff6b88 0%,
+    var(--accent, #fa2d55) 48%,
+    #ff9ab0 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.stage-empty__hint {
+  position: relative;
+  z-index: 1;
+  margin: 12px 0 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  opacity: 0.9;
+  animation: stage-empty-fade 3.2s ease-in-out infinite;
+}
+
+@keyframes stage-empty-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes stage-empty-pulse {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+@keyframes stage-empty-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+  50% {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+}
+
+@keyframes stage-empty-fade {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-empty__vinyl,
+  .stage-empty__pulse,
+  .stage-empty__glow,
+  .stage-empty__hint {
+    animation: none !important;
+  }
 }
 
 /* 返回按钮已移除：搜索与结果同页 */
@@ -2233,6 +2423,182 @@ html.platform-macos-app .site-footer {
 }
 
 /* Modal */
+.site-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 18px;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.28s ease, visibility 0.28s ease;
+}
+
+.site-modal.is-open {
+  pointer-events: auto;
+  opacity: 1;
+  visibility: visible;
+}
+
+.site-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  background: rgba(4, 4, 8, 0.58);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.site-modal.is-open .site-modal__backdrop {
+  opacity: 1;
+}
+
+.site-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(520px, 100%);
+  max-height: min(72vh, 640px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: linear-gradient(
+    160deg,
+    rgba(36, 36, 48, 0.94) 0%,
+    rgba(16, 16, 24, 0.92) 100%
+  );
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  transform: translateY(18px) scale(0.94);
+  opacity: 0;
+  transition:
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.28s ease;
+}
+
+.site-modal.is-open .site-modal__panel {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+.site-modal.is-closing .site-modal__panel {
+  transform: translateY(12px) scale(0.96);
+  opacity: 0;
+  transition-duration: 0.22s;
+}
+
+.site-modal.is-closing .site-modal__backdrop {
+  opacity: 0;
+  transition-duration: 0.22s;
+}
+
+.site-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.site-modal__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 780;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+
+.site-modal__close {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+}
+
+.site-modal__close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+}
+
+.site-modal__close:active {
+  transform: scale(0.94);
+}
+
+.site-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 18px 20px;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.65;
+}
+
+.site-modal__body p {
+  margin: 0 0 12px;
+}
+
+.site-modal__body ul,
+.site-modal__body .disclaimer-list {
+  margin: 0 0 14px;
+  padding-left: 1.2em;
+}
+
+.site-modal__body li {
+  margin: 0 0 8px;
+}
+
+.site-modal__body strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.site-modal__h {
+  margin: 16px 0 8px;
+  font-size: 0.98rem;
+  font-weight: 720;
+  color: var(--text-primary);
+}
+
+.site-modal__body .disclaimer-contact {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.site-modal__body a {
+  color: var(--accent-hover, #ff5f7f);
+}
+
+body.is-modal-open {
+  overflow: hidden;
+}
+
 .am-popup-inner {
   background: rgba(28, 28, 34, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -2535,6 +2901,20 @@ html.platform-macos-app .site-footer {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.local-library__author {
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  transition: color 0.18s ease, background 0.18s ease;
+}
+
+.local-library__author:hover,
+.local-library__author:focus-visible {
+  color: var(--accent-hover, #ff5f7f);
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
 }
 
 .local-library__actions {
