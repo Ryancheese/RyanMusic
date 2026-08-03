@@ -2354,10 +2354,319 @@ $(function() {
 
     $(document).on('keydown', function(e) {
       if (e.key !== 'Escape') return;
+      if (document.getElementById('j-onboarding') &&
+          document.getElementById('j-onboarding').classList.contains('is-open')) {
+        return; // 交给引导层处理
+      }
       if (!document.querySelector('.site-modal.is-open')) return;
       e.preventDefault();
       closeModal(false);
     });
+
+    window.__ryanOpenSiteModal = openModal;
+    window.__ryanCloseSiteModal = closeModal;
+  })();
+
+  (function bindOnboardingTour() {
+    var STORAGE_KEY = 'ryanmusic-onboarding-v1';
+    var root = document.getElementById('j-onboarding');
+    if (!root) return;
+
+    var $root = $(root);
+    var $art = $('#j-onboarding-art');
+    var $dots = $('#j-onboarding-dots');
+    var $step = $('#j-onboarding-step');
+    var $title = $('#j-onboarding-title');
+    var $desc = $('#j-onboarding-desc');
+    var $next = $('#j-onboarding-next');
+    var $skip = $('#j-onboarding-skip');
+    var $spot = $('#j-onboarding-spot');
+    var $ring = $('#j-onboarding-ring');
+    var $card = $root.find('.onboarding__card');
+    var index = 0;
+    var open = false;
+    var closing = false;
+    var resizeTimer = null;
+
+    function platformTip() {
+      var html = document.documentElement;
+      if (html.classList.contains('platform-windows-app')) {
+        return '关闭窗口时可选择最小化到托盘，下次打开继续听。需要时也可在页脚打开「帮助」。';
+      }
+      if (html.classList.contains('platform-macos-app')) {
+        return '可用键盘媒体键与控制中心调节播放。需要时也可在页脚打开「帮助」。';
+      }
+      return '随时可在页脚打开「帮助」，或再次查看本引导。';
+    }
+
+    var steps = [
+      {
+        art: 'welcome',
+        title: '欢迎来到 RYANMUSIC',
+        desc: '网易云与 QQ 音乐，一处搜索、试听与收藏。接下来用几步带你熟悉主界面。',
+        target: null
+      },
+      {
+        art: 'search',
+        title: '搜索歌曲',
+        desc: '在上方输入歌名或歌手，点击「搜索」。通常需要几秒，进度条会提示等待时间。',
+        target: '#j-search-bar'
+      },
+      {
+        art: 'source',
+        title: '切换音源',
+        desc: '点搜索框旁的「网易 / QQ」按钮，即可在两个平台间切换。',
+        target: '#j-source-toggle'
+      },
+      {
+        art: 'library',
+        title: '我的音乐',
+        desc: '左侧可查看喜欢、最近播放与播放列表，也能按网易云 / QQ 筛选。',
+        target: '#j-library'
+      },
+      {
+        art: 'play',
+        title: '收藏与播放列表',
+        desc: '播放时点红心收藏，或加入播放列表；点歌名 / 歌手可快速再搜。',
+        target: '#j-stage-empty'
+      },
+      {
+        art: 'download',
+        title: '下载歌曲与歌词',
+        desc: '播放器右上角可下载歌曲与歌词；桌面端会弹出系统保存对话框。',
+        target: null
+      },
+      {
+        art: 'ambient',
+        title: '光影氛围',
+        desc: '点击右上角 RYANMUSIC，调节亮度、律动与饱和度；背景会随封面取色变化。',
+        target: '#j-logo-toggle'
+      },
+      {
+        art: 'finish',
+        title: '可以开始了',
+        desc: platformTip(),
+        target: null
+      }
+    ];
+
+    function hasSeen() {
+      try {
+        return localStorage.getItem(STORAGE_KEY) === '1';
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function markSeen() {
+      try {
+        localStorage.setItem(STORAGE_KEY, '1');
+      } catch (e) {
+        /* private mode */
+      }
+    }
+
+    function buildDots() {
+      var html = '';
+      for (var i = 0; i < steps.length; i++) {
+        html += '<span class="onboarding__dot" data-i="' + i + '"></span>';
+      }
+      $dots.html(html);
+    }
+
+    function clearHighlight() {
+      $('.is-onboarding-target').removeClass('is-onboarding-target');
+      root.classList.remove('has-spotlight');
+      $spot.removeClass('is-active').css({ width: 0, height: 0, opacity: 0 });
+      $ring.removeClass('is-active').css({ width: 0, height: 0, opacity: 0 });
+    }
+
+    function isTargetVisible(el) {
+      if (!el || !el.getBoundingClientRect) return false;
+      var style = window.getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+        return false;
+      }
+      var rect = el.getBoundingClientRect();
+      if (rect.width < 8 || rect.height < 8) return false;
+      if (rect.bottom < 0 || rect.right < 0) return false;
+      if (rect.top > window.innerHeight || rect.left > window.innerWidth) return false;
+      return true;
+    }
+
+    function placeSpotlight(selector) {
+      clearHighlight();
+      root.classList.remove('has-spotlight');
+      if (!selector) return;
+      var el = document.querySelector(selector);
+      if (!isTargetVisible(el)) {
+        // 下载按钮等可能尚未展示：回退到播放区域
+        if (selector === '#j-src-btn') {
+          el = document.querySelector('#j-show') || document.querySelector('#j-main');
+          if (!isTargetVisible(el)) return;
+        } else {
+          return;
+        }
+      }
+      el.classList.add('is-onboarding-target');
+      root.classList.add('has-spotlight');
+      var rect = el.getBoundingClientRect();
+      var pad = 10;
+      var left = Math.max(8, rect.left - pad);
+      var top = Math.max(8, rect.top - pad);
+      var width = Math.min(window.innerWidth - left - 8, rect.width + pad * 2);
+      var height = Math.min(window.innerHeight - top - 8, rect.height + pad * 2);
+      var radius = Math.min(22, Math.max(12, Math.round(Math.min(width, height) * 0.18)));
+      $spot
+        .css({
+          left: left + 'px',
+          top: top + 'px',
+          width: width + 'px',
+          height: height + 'px',
+          borderRadius: radius + 'px',
+          opacity: 1
+        })
+        .addClass('is-active');
+      $ring
+        .css({
+          left: left - 4 + 'px',
+          top: top - 4 + 'px',
+          width: width + 8 + 'px',
+          height: height + 8 + 'px',
+          borderRadius: radius + 4 + 'px',
+          opacity: 1
+        })
+        .addClass('is-active');
+    }
+
+    function renderStep(animateCard) {
+      var step = steps[index];
+      if (!step) return;
+      $art.attr('data-art', step.art);
+      $step.text('引导 ' + (index + 1) + ' / ' + steps.length);
+      $title.text(step.title);
+      $desc.text(step.desc);
+      $next.text(index >= steps.length - 1 ? '开始聆听' : '下一步');
+      $skip.toggle(index < steps.length - 1);
+      $dots.find('.onboarding__dot').each(function() {
+        var i = parseInt($(this).attr('data-i'), 10);
+        $(this)
+          .toggleClass('is-active', i === index)
+          .toggleClass('is-done', i < index);
+      });
+      if (animateCard) {
+        $card.removeClass('is-step-swap');
+        void $card[0].offsetWidth;
+        $card.addClass('is-step-swap');
+      }
+      placeSpotlight(step.target);
+    }
+
+    function finish(immediate) {
+      if (!open || closing) return;
+      markSeen();
+      closing = true;
+      clearHighlight();
+      if (immediate) {
+        root.classList.remove('is-open', 'is-closing');
+        root.hidden = true;
+        root.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('is-onboarding-open');
+        open = false;
+        closing = false;
+        return;
+      }
+      root.classList.add('is-closing');
+      setTimeout(function() {
+        root.classList.remove('is-open', 'is-closing');
+        root.hidden = true;
+        root.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('is-onboarding-open');
+        open = false;
+        closing = false;
+      }, 280);
+    }
+
+    function openTour(fromReplay) {
+      if (open || closing) return;
+      if (typeof window.__ryanCloseSiteModal === 'function') {
+        window.__ryanCloseSiteModal(true);
+      }
+      index = 0;
+      buildDots();
+      root.hidden = false;
+      root.setAttribute('aria-hidden', 'false');
+      void root.offsetWidth;
+      root.classList.add('is-open');
+      document.body.classList.add('is-onboarding-open');
+      open = true;
+      renderStep(false);
+      setTimeout(function() {
+        if ($card[0] && typeof $card[0].focus === 'function') $card[0].focus();
+      }, 60);
+      if (fromReplay) {
+        /* keep storage until finished so refresh mid-tour still resumes? mark on complete only */
+      }
+    }
+
+    function next() {
+      if (!open || closing) return;
+      if (index >= steps.length - 1) {
+        finish(false);
+        return;
+      }
+      index += 1;
+      renderStep(true);
+    }
+
+    $next.on('click', function(e) {
+      e.preventDefault();
+      next();
+    });
+
+    $skip.on('click', function(e) {
+      e.preventDefault();
+      finish(false);
+    });
+
+    $(document).on('click', '[data-onboarding-replay]', function(e) {
+      e.preventDefault();
+      if (typeof window.__ryanCloseSiteModal === 'function') {
+        window.__ryanCloseSiteModal(true);
+      }
+      openTour(true);
+    });
+
+    $(document).on('keydown', function(e) {
+      if (!open) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        finish(false);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        next();
+      }
+    });
+
+    $(window).on('resize orientationchange', function() {
+      if (!open) return;
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function() {
+        if (!open) return;
+        placeSpotlight(steps[index] && steps[index].target);
+      }, 80);
+    });
+
+    window.__ryanOpenOnboarding = openTour;
+
+    // 首次进入：等界面与空态动画稍作铺垫后再出现
+    if (!hasSeen()) {
+      setTimeout(function() {
+        if (!hasSeen()) openTour(false);
+      }, 720);
+    }
   })();
 
   // 输入验证

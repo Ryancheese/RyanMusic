@@ -158,6 +158,9 @@ if (!defined('MC_CORE')) {
                     <li>点击右上角 <strong>RYANMUSIC</strong> 可调节亮度、律动与饱和度</li>
                     <li>背景色会随当前封面取色变化</li>
                 </ul>
+                <p class="site-modal__replay">
+                    <button type="button" class="site-modal__link-btn" data-onboarding-replay>重新查看使用引导</button>
+                </p>
             </div>
         </div>
     </div>
@@ -171,6 +174,83 @@ if (!defined('MC_CORE')) {
             </header>
             <div class="site-modal__body disclaimer-block">
                 <?php include MC_TEMP_DIR . '/disclaimer-content.php'; ?>
+            </div>
+        </div>
+    </div>
+
+    <div
+        id="j-onboarding"
+        class="onboarding"
+        hidden
+        aria-hidden="true"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="j-onboarding-title"
+        aria-describedby="j-onboarding-desc"
+    >
+        <div class="onboarding__veil" aria-hidden="true"></div>
+        <div class="onboarding__spotlight" id="j-onboarding-spot" aria-hidden="true"></div>
+        <div class="onboarding__ring" id="j-onboarding-ring" aria-hidden="true"></div>
+        <div class="onboarding__card" tabindex="-1">
+            <div class="onboarding__glow" aria-hidden="true"></div>
+            <div class="onboarding__art" id="j-onboarding-art" data-art="welcome" aria-hidden="true">
+                <div class="onboarding-art onboarding-art--welcome">
+                    <span class="onboarding-art__orbit"></span>
+                    <span class="onboarding-art__orbit onboarding-art__orbit--2"></span>
+                    <span class="onboarding-art__vinyl"></span>
+                    <span class="onboarding-art__core"></span>
+                    <span class="onboarding-art__note onboarding-art__note--1">♪</span>
+                    <span class="onboarding-art__note onboarding-art__note--2">♫</span>
+                </div>
+                <div class="onboarding-art onboarding-art--search">
+                    <span class="onboarding-art__bar"></span>
+                    <span class="onboarding-art__cursor"></span>
+                    <span class="onboarding-art__ripple"></span>
+                </div>
+                <div class="onboarding-art onboarding-art--source">
+                    <span class="onboarding-art__chip onboarding-art__chip--a">网易</span>
+                    <span class="onboarding-art__swap"></span>
+                    <span class="onboarding-art__chip onboarding-art__chip--b">QQ</span>
+                </div>
+                <div class="onboarding-art onboarding-art--library">
+                    <span class="onboarding-art__rail"></span>
+                    <span class="onboarding-art__row onboarding-art__row--1"></span>
+                    <span class="onboarding-art__row onboarding-art__row--2"></span>
+                    <span class="onboarding-art__row onboarding-art__row--3"></span>
+                    <span class="onboarding-art__heart">♥</span>
+                </div>
+                <div class="onboarding-art onboarding-art--play">
+                    <span class="onboarding-art__disc"></span>
+                    <span class="onboarding-art__eq">
+                        <i></i><i></i><i></i><i></i><i></i>
+                    </span>
+                    <span class="onboarding-art__like">♡</span>
+                </div>
+                <div class="onboarding-art onboarding-art--download">
+                    <span class="onboarding-art__sheet"></span>
+                    <span class="onboarding-art__arrow"></span>
+                    <span class="onboarding-art__tray"></span>
+                </div>
+                <div class="onboarding-art onboarding-art--ambient">
+                    <span class="onboarding-art__blob onboarding-art__blob--1"></span>
+                    <span class="onboarding-art__blob onboarding-art__blob--2"></span>
+                    <span class="onboarding-art__blob onboarding-art__blob--3"></span>
+                    <span class="onboarding-art__knob"></span>
+                </div>
+                <div class="onboarding-art onboarding-art--finish">
+                    <span class="onboarding-art__check"></span>
+                    <span class="onboarding-art__spark onboarding-art__spark--1"></span>
+                    <span class="onboarding-art__spark onboarding-art__spark--2"></span>
+                    <span class="onboarding-art__spark onboarding-art__spark--3"></span>
+                </div>
+            </div>
+            <div class="onboarding__progress" id="j-onboarding-dots" aria-hidden="true"></div>
+            <p class="onboarding__eyebrow" id="j-onboarding-step">引导 1 / 8</p>
+            <h2 class="onboarding__title" id="j-onboarding-title">欢迎</h2>
+            <p class="onboarding__desc" id="j-onboarding-desc"></p>
+            <div class="onboarding__actions">
+                <button type="button" class="onboarding__btn onboarding__btn--ghost" id="j-onboarding-skip">跳过</button>
+                <button type="button" class="onboarding__btn onboarding__btn--primary" id="j-onboarding-next">下一步</button>
             </div>
         </div>
     </div>
