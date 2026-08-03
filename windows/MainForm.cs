@@ -263,7 +263,19 @@ public sealed class MainForm : Form
             if (php == null)
             {
                 MessageBox.Show(
-                    "未找到 PHP。\n请先安装 PHP 并加入 PATH，或用 winget：\nwinget install --id PHP.PHP.8.3 -e",
+                    "未找到可用的 PHP（需启用 curl）。\n请重装 RyanMusic，或安装 PHP 并启用 curl 扩展。",
+                    "RyanMusic",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+                Close();
+                return;
+            }
+
+            if (!PhpHasCurl(php))
+            {
+                MessageBox.Show(
+                    "当前 PHP 未启用 Curl 模块，无法启动。\n\n已检测到：\n" + php +
+                    "\n\n请使用安装包自带 PHP，或在 php.ini 中启用 extension=curl 后重试。",
                     "RyanMusic",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
@@ -459,31 +471,39 @@ public sealed class MainForm : Form
 
     private static string? FindPhp()
     {
-        var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
-        foreach (var dir in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        // 安装包内嵌 PHP 优先，避免 PATH 里无 curl 的系统 PHP 抢先
+        var candidates = new List<string>();
+        void AddCandidate(string? path)
         {
-            var exe = Path.Combine(dir.Trim('"'), "php.exe");
-            if (File.Exists(exe))
+            if (string.IsNullOrWhiteSpace(path))
             {
-                return exe;
+                return;
+            }
+
+            var full = Path.GetFullPath(path);
+            if (File.Exists(full) &&
+                !candidates.Exists(x => string.Equals(x, full, StringComparison.OrdinalIgnoreCase)))
+            {
+                candidates.Add(full);
             }
         }
 
-        var extras = new[]
+        AddCandidate(Path.Combine(AppContext.BaseDirectory, "php", "php.exe"));
+        AddCandidate(Path.Combine(AppContext.BaseDirectory, "runtime", "php", "php.exe"));
+
+        var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
+        foreach (var dir in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
-            @"C:\php\php.exe",
-            @"C:\Program Files\PHP\php.exe",
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "PHP", "php.exe"),
-            Path.Combine(AppContext.BaseDirectory, "php", "php.exe"),
-            Path.Combine(AppContext.BaseDirectory, "runtime", "php", "php.exe"),
-        };
-        foreach (var exe in extras)
-        {
-            if (File.Exists(exe))
-            {
-                return exe;
-            }
+            AddCandidate(Path.Combine(dir.Trim('"'), "php.exe"));
         }
+
+        AddCandidate(@"C:\php\php.exe");
+        AddCandidate(@"C:\Program Files\PHP\php.exe");
+        AddCandidate(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Programs",
+            "PHP",
+            "php.exe"));
 
         try
         {
@@ -500,9 +520,9 @@ public sealed class MainForm : Form
             p?.WaitForExit(3000);
             foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
-                if (line.EndsWith("php.exe", StringComparison.OrdinalIgnoreCase) && File.Exists(line))
+                if (line.EndsWith("php.exe", StringComparison.OrdinalIgnoreCase))
                 {
-                    return line;
+                    AddCandidate(line);
                 }
             }
         }
@@ -511,7 +531,77 @@ public sealed class MainForm : Form
             // ignore
         }
 
-        return null;
+        string? fallback = null;
+        foreach (var exe in candidates)
+        {
+            if (PhpHasCurl(exe))
+            {
+                return exe;
+            }
+
+            fallback ??= exe;
+        }
+
+        return fallback;
+    }
+
+    private static bool PhpHasCurl(string phpExe)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = phpExe,
+                Arguments = "-n -d extension_dir=ext -d extension=curl -m",
+                WorkingDirectory = Path.GetDirectoryName(phpExe) ?? "",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var p = Process.Start(psi);
+            if (p == null)
+            {
+                return false;
+            }
+
+            var output = p.StandardOutput.ReadToEnd() + "\n" + p.StandardError.ReadToEnd();
+            if (!p.WaitForExit(8000))
+            {
+                try { p.Kill(entireProcessTree: true); } catch { }
+                return false;
+            }
+
+            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (string.Equals(line, "curl", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            // 再试：依赖已有 php.ini（便携包场景）
+            psi.Arguments = "-m";
+            using var p2 = Process.Start(psi);
+            if (p2 == null)
+            {
+                return false;
+            }
+
+            output = p2.StandardOutput.ReadToEnd();
+            if (!p2.WaitForExit(8000))
+            {
+                try { p2.Kill(entireProcessTree: true); } catch { }
+                return false;
+            }
+
+            return output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Any(line => string.Equals(line, "curl", StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static int PickPort(int start)
