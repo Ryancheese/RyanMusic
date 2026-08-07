@@ -24,6 +24,39 @@ require MC_CORE_DIR . '/vendor/autoload.php';
 // 使用 Curl
 use \Curl\Curl;
 
+// 未配置显式代理时，清除继承的代理环境变量，避免 libcurl 自动走 Clash/VPN 系统代理
+if (!defined('MC_PROXY') || !MC_PROXY) {
+    foreach ([
+        'http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY',
+        'all_proxy', 'ALL_PROXY', 'socks_proxy', 'SOCKS_PROXY',
+        'socks5_proxy', 'SOCKS5_PROXY', 'ftp_proxy', 'FTP_PROXY',
+    ] as $mc_proxy_env) {
+        putenv($mc_proxy_env);
+        unset($_ENV[$mc_proxy_env], $_SERVER[$mc_proxy_env]);
+    }
+    putenv('NO_PROXY=*');
+    putenv('no_proxy=*');
+    $_ENV['NO_PROXY'] = '*';
+    $_ENV['no_proxy'] = '*';
+    $_SERVER['NO_PROXY'] = '*';
+    $_SERVER['no_proxy'] = '*';
+}
+
+/**
+ * curl 直连选项：空 PROXY 禁用环境变量代理，NOPROXY=* 兜底。
+ * 显式 MC_PROXY 时不要合并此数组。
+ */
+function mc_curl_direct_opts()
+{
+    $opts = [
+        CURLOPT_PROXY => '',
+    ];
+    if (defined('CURLOPT_NOPROXY')) {
+        $opts[CURLOPT_NOPROXY] = '*';
+    }
+    return $opts;
+}
+
 // Clash fake-ip 常用网段 198.18.0.0/15，解析到此后直连 TLS 常失败
 function mc_is_fake_ip($ip)
 {
@@ -59,7 +92,7 @@ function mc_doh_resolve($host)
     ];
     foreach ($endpoints as $endpoint) {
         $ch = curl_init($endpoint['url']);
-        curl_setopt_array($ch, [
+        curl_setopt_array($ch, mc_curl_direct_opts() + [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 5,
             CURLOPT_CONNECTTIMEOUT => 3,
@@ -193,6 +226,12 @@ function mc_curl($args = [])
         $curl->setOpt(CURLOPT_HTTPPROXYTUNNEL, 1);
         $curl->setOpt(CURLOPT_PROXY, MC_PROXY);
         $curl->setOpt(CURLOPT_PROXYUSERPWD, MC_PROXYUSERPWD);
+    } else {
+        // 默认直连，忽略 Clash/VPN 注入的 http_proxy 等环境变量
+        $curl->setOpt(CURLOPT_PROXY, '');
+        if (defined('CURLOPT_NOPROXY')) {
+            $curl->setOpt(CURLOPT_NOPROXY, '*');
+        }
     }
     if (!empty($args['headers'])) {
         $curl->setHeaders($args['headers']);
@@ -259,6 +298,8 @@ function mc_stream_download($url, $filename)
         $opts[CURLOPT_HTTPPROXYTUNNEL] = 1;
         $opts[CURLOPT_PROXY] = MC_PROXY;
         $opts[CURLOPT_PROXYUSERPWD] = MC_PROXYUSERPWD;
+    } else {
+        $opts += mc_curl_direct_opts();
     }
     curl_setopt_array($ch, $opts);
     $ok = curl_exec($ch);
@@ -382,6 +423,8 @@ function mc_proxy_stream($url, $options = [])
         $opts[CURLOPT_HTTPPROXYTUNNEL] = 1;
         $opts[CURLOPT_PROXY] = MC_PROXY;
         $opts[CURLOPT_PROXYUSERPWD] = MC_PROXYUSERPWD;
+    } else {
+        $opts += mc_curl_direct_opts();
     }
     curl_setopt_array($ch, $opts);
     $ok = curl_exec($ch);
@@ -1825,6 +1868,13 @@ function mc_qq_bootstrap_pyq_code($songmid)
             'Referer: ' . $base . '/',
         ],
     ];
+    if (defined('MC_PROXY') && MC_PROXY) {
+        $opts[CURLOPT_HTTPPROXYTUNNEL] = 1;
+        $opts[CURLOPT_PROXY] = MC_PROXY;
+        $opts[CURLOPT_PROXYUSERPWD] = MC_PROXYUSERPWD;
+    } else {
+        $opts = mc_curl_direct_opts() + $opts;
+    }
     $resolve = mc_curl_resolve_list($api);
     if ($resolve) {
         $opts[CURLOPT_RESOLVE] = $resolve;
@@ -1867,6 +1917,13 @@ function mc_qq_curl_redirect($url, $referer = 'https://y.qq.com/')
             'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
         ],
     ];
+    if (defined('MC_PROXY') && MC_PROXY) {
+        $opts[CURLOPT_HTTPPROXYTUNNEL] = 1;
+        $opts[CURLOPT_PROXY] = MC_PROXY;
+        $opts[CURLOPT_PROXYUSERPWD] = MC_PROXYUSERPWD;
+    } else {
+        $opts = mc_curl_direct_opts() + $opts;
+    }
     $resolve = mc_curl_resolve_list($url);
     if ($resolve) {
         $opts[CURLOPT_RESOLVE] = $resolve;

@@ -55,6 +55,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var activeDownloads: [ObjectIdentifier: URL] = [:]
     private var chromeObservers: [NSObjectProtocol] = []
 
+    /// 禁用系统/VPN HTTP 代理的会话（健康检查、另存为下载）
+    private lazy var directSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.connectionProxyDictionary = [:]
+        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForResource = 600
+        return URLSession(configuration: config)
+    }()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 纯代码启动的 NSApp 默认无 Edit 菜单；缺少 paste: 时 Cmd+V 无法进入 WKWebView
         installMainMenu()
@@ -263,7 +272,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             tries += 1
             var request = URLRequest(url: url, timeoutInterval: 0.8)
             request.httpMethod = "GET"
-            let task = URLSession.shared.dataTask(with: request) { _, response, _ in
+            let task = self.directSession.dataTask(with: request) { _, response, _ in
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
                 if (200..<400).contains(code) {
                     DispatchQueue.main.async {
@@ -341,7 +350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     private func downloadFile(from url: URL, to destination: URL) {
         Self.notify("开始下载…")
-        let task = URLSession.shared.downloadTask(with: url) { tempURL, response, error in
+        let task = directSession.downloadTask(with: url) { tempURL, response, error in
             DispatchQueue.main.async {
                 if let error {
                     Self.alert("下载失败：\(error.localizedDescription)")
@@ -467,6 +476,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         // 保证内嵌 PHP 能找到同目录 dylib（部分环境仍需要）
         var env = ProcessInfo.processInfo.environment
+        // 剥离 Clash/Surge 等注入的代理环境，避免 PHP/curl 出站被 VPN 劫持
+        let proxyEnvKeys = [
+            "http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+            "all_proxy", "ALL_PROXY", "socks_proxy", "SOCKS_PROXY",
+            "socks5_proxy", "SOCKS5_PROXY", "ftp_proxy", "FTP_PROXY"
+        ]
+        for key in proxyEnvKeys {
+            env.removeValue(forKey: key)
+        }
+        env["NO_PROXY"] = "*"
+        env["no_proxy"] = "*"
+
         let phpDir = (phpPath as NSString).deletingLastPathComponent
         let libDir = (phpDir as NSString).appendingPathComponent("../lib")
         if FileManager.default.fileExists(atPath: libDir) {
