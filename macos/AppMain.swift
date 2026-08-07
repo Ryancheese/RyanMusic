@@ -155,7 +155,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.setFrameAutosaveName("RyanMusicMainWindow_v1828")
 
         let config = WKWebViewConfiguration()
-        config.preferences.isElementFullscreenEnabled = true
+        if #available(macOS 12.3, *) {
+            config.preferences.isElementFullscreenEnabled = true
+        }
         config.userContentController.add(self, name: "ryanSave")
         config.userContentController.add(self, name: "ryanWindowDrag")
         config.userContentController.add(self, name: "ryanWindowZoom")

@@ -341,8 +341,19 @@ echo "==> clean"
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$DIST_DIR"
 
-echo "==> compile WKWebView app [${ARCH_LABEL}]"
-swiftc -O -framework Cocoa -framework WebKit -framework MediaPlayer -o "$MACOS_DIR/RyanMusic" "$SRC_SWIFT"
+# 本机 Swift 默认 target 可能高于当前系统（如 macosx28.0），导致“无法与此版本 macOS 配合使用”
+DEPLOY_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
+case "$ARCH_NAME" in
+  arm64|aarch64) SWIFT_TARGET="arm64-apple-macosx${DEPLOY_TARGET}" ;;
+  x86_64) SWIFT_TARGET="x86_64-apple-macosx${DEPLOY_TARGET}" ;;
+  *) SWIFT_TARGET="${ARCH_NAME}-apple-macosx${DEPLOY_TARGET}" ;;
+esac
+
+echo "==> compile WKWebView app [${ARCH_LABEL}] target=${SWIFT_TARGET}"
+export MACOSX_DEPLOYMENT_TARGET="$DEPLOY_TARGET"
+swiftc -O -target "$SWIFT_TARGET" \
+  -framework Cocoa -framework WebKit -framework MediaPlayer \
+  -o "$MACOS_DIR/RyanMusic" "$SRC_SWIFT"
 chmod +x "$MACOS_DIR/RyanMusic"
 
 echo "==> Info.plist"
