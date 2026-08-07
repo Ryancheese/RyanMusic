@@ -134,30 +134,13 @@ if (!defined('MC_CORE')) {
 
     <div class="site-modal" id="j-modal-help" hidden aria-hidden="true">
         <button type="button" class="site-modal__backdrop" data-modal-close aria-label="关闭"></button>
-        <div class="site-modal__panel" role="dialog" aria-modal="true" aria-labelledby="j-modal-help-title" tabindex="-1">
+        <div class="site-modal__panel site-modal__panel--help" role="dialog" aria-modal="true" aria-labelledby="j-modal-help-title" tabindex="-1">
             <header class="site-modal__head">
                 <h2 class="site-modal__title" id="j-modal-help-title">使用帮助</h2>
                 <button type="button" class="site-modal__close" data-modal-close aria-label="关闭">×</button>
             </header>
             <div class="site-modal__body">
-                <p>支持在首页搜索并试听 <strong>网易云音乐</strong> 与 <strong>QQ 音乐</strong> 的歌曲。</p>
-                <h3 class="site-modal__h">搜索</h3>
-                <ul>
-                    <li>在搜索框输入歌名或歌手，点击搜索</li>
-                    <li>可用右上角按钮在「网易 / QQ」之间切换音源</li>
-                    <li>点击正在播放的<strong>歌名</strong>或<strong>歌手</strong>，可直接按该关键词再搜</li>
-                </ul>
-                <h3 class="site-modal__h">播放与收藏</h3>
-                <ul>
-                    <li>左侧「我的音乐」可查看喜欢、最近与播放列表</li>
-                    <li>播放时点红心收藏，也可加入播放列表</li>
-                    <li>播放器右上角可下载歌曲与歌词（视资源与浏览器而定）</li>
-                </ul>
-                <h3 class="site-modal__h">光影</h3>
-                <ul>
-                    <li>点击右上角 <strong>RYANMUSIC</strong> 可调节亮度、律动与饱和度</li>
-                    <li>背景色会随当前封面取色变化</li>
-                </ul>
+                <?php include MC_TEMP_DIR . '/help-content.php'; ?>
                 <p class="site-modal__replay">
                     <button type="button" class="site-modal__link-btn" data-onboarding-replay>重新查看使用引导</button>
                 </p>

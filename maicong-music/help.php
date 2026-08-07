@@ -4,6 +4,7 @@
  */
 
 define('MC_CORE', true);
-define('MC_VERSION', '1.8.44');
+define('MC_VERSION', '1.8.45');
+define('MC_TEMP_DIR', __DIR__ . '/template');
 
 include_once __DIR__ . '/template/help.php';
