@@ -626,7 +626,21 @@ function mc_netease_songs_by_ids(array $ids, $cookie)
     return $out;
 }
 
-function mc_netease_playlist_tracks($playlistId, $cookie)
+function mc_netease_page_params()
+{
+    $offset = max(0, (int) post('offset'));
+    $limit = (int) post('limit');
+    if ($limit <= 0) {
+        $limit = 10;
+    }
+    if ($limit > 50) {
+        $limit = 50;
+    }
+    return [$offset, $limit];
+}
+
+/** 拉取歌单全部曲目 ID（playlist.trackIds），不截断。 */
+function mc_netease_playlist_track_ids($playlistId, $cookie)
 {
     $res = mc_netease_api('/api/v6/playlist/detail', [
         'id' => (int) $playlistId,
@@ -635,16 +649,7 @@ function mc_netease_playlist_tracks($playlistId, $cookie)
     ], $cookie, 'POST');
     $playlist = $res['json']['playlist'] ?? null;
     if (!is_array($playlist)) {
-        return [];
-    }
-    $tracks = [];
-    if (!empty($playlist['tracks']) && is_array($playlist['tracks'])) {
-        foreach ($playlist['tracks'] as $song) {
-            $t = mc_netease_track_from_song($song);
-            if ($t) {
-                $tracks[] = $t;
-            }
-        }
+        return ['ids' => [], 'name' => '', 'total' => 0];
     }
     $trackIds = [];
     if (!empty($playlist['trackIds']) && is_array($playlist['trackIds'])) {
@@ -655,14 +660,40 @@ function mc_netease_playlist_tracks($playlistId, $cookie)
                 $trackIds[] = (int) $row;
             }
         }
+    } elseif (!empty($playlist['tracks']) && is_array($playlist['tracks'])) {
+        foreach ($playlist['tracks'] as $song) {
+            if (!empty($song['id'])) {
+                $trackIds[] = (int) $song['id'];
+            }
+        }
     }
-    if (count($trackIds) > count($tracks)) {
-        $tracks = mc_netease_songs_by_ids($trackIds, $cookie);
+    $total = count($trackIds);
+    $hint = (int) ($playlist['trackCount'] ?? 0);
+    if ($hint > $total) {
+        $total = $hint;
     }
-    if (count($tracks) > 2000) {
-        $tracks = array_slice($tracks, 0, 2000);
-    }
-    return $tracks;
+    return [
+        'ids'   => $trackIds,
+        'name'  => (string) ($playlist['name'] ?? ''),
+        'total' => $total,
+    ];
+}
+
+/** 歌单分页：返回全部 trackIds + 当前页 tracks。 */
+function mc_netease_playlist_page($playlistId, $cookie, $offset = 0, $limit = 10)
+{
+    $meta = mc_netease_playlist_track_ids($playlistId, $cookie);
+    $ids = $meta['ids'];
+    $offset = max(0, (int) $offset);
+    $limit = max(1, (int) $limit);
+    $pageIds = array_slice($ids, $offset, $limit);
+    return [
+        'id'       => (string) ((int) $playlistId),
+        'name'     => $meta['name'],
+        'total'    => count($ids) > 0 ? count($ids) : (int) $meta['total'],
+        'trackIds' => $ids,
+        'tracks'   => mc_netease_songs_by_ids($pageIds, $cookie),
+    ];
 }
 
 function mc_netease_public_status()
@@ -876,6 +907,7 @@ function mc_netease_account_handle($action)
             if (!$auth) {
                 response('', 401, '请先登录网易云');
             }
+            list($offset, $limit) = mc_netease_page_params();
             $uid = (int) ($auth['uid'] ?? 0);
             $res = mc_netease_api('/api/song/like/get', ['uid' => $uid], $auth['cookie'], 'POST');
             $ids = $res['json']['ids'] ?? [];
@@ -893,16 +925,31 @@ function mc_netease_account_handle($action)
                     }
                 }
                 if ($likedId > 0) {
+                    $page = mc_netease_playlist_page($likedId, $auth['cookie'], $offset, $limit);
                     response([
                         'playlistId' => (string) $likedId,
-                        'tracks'     => mc_netease_playlist_tracks($likedId, $auth['cookie']),
+                        'name'       => $page['name'] !== '' ? $page['name'] : '我喜欢',
+                        'total'      => $page['total'],
+                        'trackIds'   => $page['trackIds'],
+                        'tracks'     => $page['tracks'],
                     ], 200, '');
                 }
-                response(['playlistId' => '', 'tracks' => []], 200, '');
+                response([
+                    'playlistId' => '',
+                    'name'       => '我喜欢',
+                    'total'      => 0,
+                    'trackIds'   => [],
+                    'tracks'     => [],
+                ], 200, '');
             }
+            $allIds = array_values(array_map('intval', $ids));
+            $pageIds = array_slice($allIds, $offset, $limit);
             response([
                 'playlistId' => 'likelist',
-                'tracks'     => mc_netease_songs_by_ids($ids, $auth['cookie']),
+                'name'       => '我喜欢',
+                'total'      => count($allIds),
+                'trackIds'   => $allIds,
+                'tracks'     => mc_netease_songs_by_ids($pageIds, $auth['cookie']),
             ], 200, '');
             break;
 
@@ -915,16 +962,32 @@ function mc_netease_account_handle($action)
             if ($id === '' || !preg_match('/^\d+$/', $id)) {
                 response('', 400, '歌单 ID 无效');
             }
-            $detail = mc_netease_api('/api/v6/playlist/detail', [
-                'id' => (int) $id,
-                'n'  => 100000,
-                's'  => 0,
-            ], $auth['cookie'], 'POST');
-            $name = (string) ($detail['json']['playlist']['name'] ?? '');
+            list($offset, $limit) = mc_netease_page_params();
+            $page = mc_netease_playlist_page((int) $id, $auth['cookie'], $offset, $limit);
             response([
-                'id'     => $id,
-                'name'   => $name,
-                'tracks' => mc_netease_playlist_tracks((int) $id, $auth['cookie']),
+                'id'       => $id,
+                'name'     => $page['name'],
+                'total'    => $page['total'],
+                'trackIds' => $page['trackIds'],
+                'tracks'   => $page['tracks'],
+            ], 200, '');
+            break;
+
+        case 'netease_songs_by_ids':
+            $auth = mc_netease_auth_read();
+            if (!$auth) {
+                response('', 401, '请先登录网易云');
+            }
+            $raw = trim((string) post('ids'));
+            if ($raw === '') {
+                response(['tracks' => []], 200, '');
+            }
+            $ids = array_values(array_filter(array_map('intval', explode(',', $raw))));
+            if (count($ids) > 10) {
+                $ids = array_slice($ids, 0, 10);
+            }
+            response([
+                'tracks' => mc_netease_songs_by_ids($ids, $auth['cookie']),
             ], 200, '');
             break;
 

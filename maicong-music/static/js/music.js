@@ -104,7 +104,7 @@ $(function() {
     qqCloudKey: 'ryanmusic-qq-cloud-v1',
     recentMax: 80,
     playlistMax: 200,
-    cloudTrackMax: 500,
+    cloudPageSize: 10,
     channel: 'all',
     tab: 'liked'
   };
@@ -113,6 +113,11 @@ $(function() {
     view: 'playlists', // playlists | tracks
     playlists: [],
     tracks: [],
+    trackIds: [],
+    allTracks: [],
+    total: 0,
+    hasMore: false,
+    loadingMore: false,
     playlistId: '',
     playlistName: '',
     qrTimer: null,
@@ -123,6 +128,11 @@ $(function() {
     view: 'playlists', // playlists | tracks
     playlists: [],
     tracks: [],
+    trackIds: [],
+    allTracks: [],
+    total: 0,
+    hasMore: false,
+    loadingMore: false,
     playlistId: '',
     playlistName: '',
     qrTimer: null
@@ -485,9 +495,6 @@ $(function() {
     var idx = indexOfLibItem(items, item);
     var queue = items.slice(idx);
     if (!queue.length) return;
-    if (queue.length > LIB.cloudTrackMax) {
-      queue = queue.slice(0, LIB.cloudTrackMax);
-    }
     playLibraryItems(queue, 0);
   }
 
@@ -658,6 +665,20 @@ $(function() {
       $li.data('track', item);
       $list.append($li);
     });
+    if (isCloudLibraryTab(LIB.tab)) {
+      var cloudState = LIB.tab === 'qqcloud' ? CLOUD_QQ : CLOUD;
+      if (cloudState.view === 'tracks' && cloudState.loadingMore) {
+        $list.append(
+          $('<li/>', {
+            class: 'local-library__item local-library__item--loading',
+            text: '加载更多…'
+          })
+        );
+      }
+      requestAnimationFrame(function() {
+        maybeLoadMoreCloudFromScroll();
+      });
+    }
   }
 
   function renderCloudPlaylists($list, $empty) {
@@ -3393,9 +3414,15 @@ $(function() {
     LIB.tab = $(this).data('tab') || 'liked';
     if (LIB.tab === 'cloud') {
       CLOUD.view = 'playlists';
+      resetCloudTrackPaging(CLOUD);
+      CLOUD.playlistId = '';
+      CLOUD.playlistName = '';
       loadCloudPlaylistsIntoMemory();
     } else if (LIB.tab === 'qqcloud') {
       CLOUD_QQ.view = 'playlists';
+      resetCloudTrackPaging(CLOUD_QQ);
+      CLOUD_QQ.playlistId = '';
+      CLOUD_QQ.playlistName = '';
       loadQqCloudPlaylistsIntoMemory();
     }
     $(this)
@@ -3408,12 +3435,12 @@ $(function() {
   $('#j-cloud-back').on('click', function() {
     if (LIB.tab === 'qqcloud') {
       CLOUD_QQ.view = 'playlists';
-      CLOUD_QQ.tracks = [];
+      resetCloudTrackPaging(CLOUD_QQ);
       CLOUD_QQ.playlistId = '';
       CLOUD_QQ.playlistName = '';
     } else {
       CLOUD.view = 'playlists';
-      CLOUD.tracks = [];
+      resetCloudTrackPaging(CLOUD);
       CLOUD.playlistId = '';
       CLOUD.playlistName = '';
     }
@@ -3547,14 +3574,99 @@ $(function() {
       });
   }
 
+  function resetCloudTrackPaging(state) {
+    state.trackIds = [];
+    state.allTracks = [];
+    state.tracks = [];
+    state.total = 0;
+    state.hasMore = false;
+    state.loadingMore = false;
+  }
+
+  function cloudScrollEl() {
+    return document.querySelector('.local-library__scroll');
+  }
+
+  function maybeLoadMoreCloudFromScroll() {
+    if (LIB.tab !== 'cloud' && LIB.tab !== 'qqcloud') return;
+    var state = LIB.tab === 'qqcloud' ? CLOUD_QQ : CLOUD;
+    if (state.view !== 'tracks' || !state.hasMore || state.loadingMore) return;
+    var el = cloudScrollEl();
+    if (!el) return;
+    if (el.scrollHeight <= el.clientHeight + 8) {
+      loadMoreCloudTracks();
+      return;
+    }
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 56) {
+      loadMoreCloudTracks();
+    }
+  }
+
+  function bindCloudLibraryInfiniteScroll() {
+    var el = cloudScrollEl();
+    if (!el) return;
+    if (el._ryanCloudInfiniteHandler) {
+      el.removeEventListener('scroll', el._ryanCloudInfiniteHandler);
+    }
+    el._ryanCloudInfiniteHandler = function() {
+      maybeLoadMoreCloudFromScroll();
+    };
+    el.addEventListener('scroll', el._ryanCloudInfiniteHandler, { passive: true });
+  }
+
+  function loadMoreCloudTracks() {
+    if (LIB.tab === 'cloud') {
+      if (CLOUD.view !== 'tracks' || !CLOUD.hasMore || CLOUD.loadingMore) return;
+      var offset = CLOUD.tracks.length;
+      var ids = CLOUD.trackIds.slice(offset, offset + LIB.cloudPageSize);
+      if (!ids.length) {
+        CLOUD.hasMore = false;
+        return;
+      }
+      CLOUD.loadingMore = true;
+      renderLibrary();
+      neteaseAjax('netease_songs_by_ids', { ids: ids.join(',') })
+        .done(function(res) {
+          if (!res || res.code !== 200 || !res.data) return;
+          var more = (res.data.tracks || []).map(function(t) {
+            return toLibItem(t);
+          });
+          CLOUD.tracks = CLOUD.tracks.concat(more);
+          var total = CLOUD.total || CLOUD.trackIds.length;
+          CLOUD.hasMore = CLOUD.tracks.length < total && CLOUD.tracks.length < CLOUD.trackIds.length;
+        })
+        .always(function() {
+          CLOUD.loadingMore = false;
+          renderLibrary();
+        });
+      return;
+    }
+    if (LIB.tab === 'qqcloud') {
+      if (CLOUD_QQ.view !== 'tracks' || !CLOUD_QQ.hasMore || CLOUD_QQ.loadingMore) return;
+      CLOUD_QQ.loadingMore = true;
+      renderLibrary();
+      var start = CLOUD_QQ.tracks.length;
+      var next = CLOUD_QQ.allTracks.slice(start, start + LIB.cloudPageSize);
+      CLOUD_QQ.tracks = CLOUD_QQ.tracks.concat(next);
+      CLOUD_QQ.hasMore = CLOUD_QQ.tracks.length < CLOUD_QQ.allTracks.length;
+      CLOUD_QQ.loadingMore = false;
+      renderLibrary();
+    }
+  }
+
   function openCloudPlaylist(pl) {
     if (!pl || !pl.id) return;
     $('#j-library-empty').show().text('正在加载歌单…');
     $('#j-library-list').empty();
+    resetCloudTrackPaging(CLOUD);
+    var pageArgs = { offset: 0, limit: LIB.cloudPageSize };
     var req =
       pl.specialType === 5
-        ? neteaseAjax('netease_likelist')
-        : neteaseAjax('netease_playlist_detail', { id: String(pl.id) });
+        ? neteaseAjax('netease_likelist', pageArgs)
+        : neteaseAjax(
+            'netease_playlist_detail',
+            $.extend({ id: String(pl.id) }, pageArgs)
+          );
     req
       .done(function(res) {
         if (!res || res.code !== 200 || !res.data) {
@@ -3562,13 +3674,21 @@ $(function() {
           return;
         }
         var tracks = res.data.tracks || [];
-        if (tracks.length > LIB.cloudTrackMax) {
-          tracks = tracks.slice(0, LIB.cloudTrackMax);
+        var trackIds = (res.data.trackIds || []).map(function(id) {
+          return Number(id) || id;
+        });
+        var total = Number(res.data.total);
+        if (!total || total < trackIds.length) {
+          total = trackIds.length || tracks.length;
         }
         CLOUD.view = 'tracks';
+        CLOUD.trackIds = trackIds;
+        CLOUD.total = total;
         CLOUD.tracks = tracks.map(function(t) {
           return toLibItem(t);
         });
+        CLOUD.hasMore = CLOUD.tracks.length < total && CLOUD.tracks.length < trackIds.length;
+        CLOUD.loadingMore = false;
         CLOUD.playlistId = String(pl.id);
         CLOUD.playlistName = res.data.name || pl.name || '歌单';
         renderLibrary();
@@ -3582,6 +3702,7 @@ $(function() {
     if (!pl || !pl.id) return;
     $('#j-library-empty').show().text('正在加载歌单…');
     $('#j-library-list').empty();
+    resetCloudTrackPaging(CLOUD_QQ);
     var req =
       Number(pl.dirid) === 201
         ? qqAjax('qq_likelist')
@@ -3592,14 +3713,16 @@ $(function() {
           $('#j-library-empty').text((res && res.error) || '加载失败');
           return;
         }
-        var tracks = res.data.tracks || [];
-        if (tracks.length > LIB.cloudTrackMax) {
-          tracks = tracks.slice(0, LIB.cloudTrackMax);
-        }
-        CLOUD_QQ.view = 'tracks';
-        CLOUD_QQ.tracks = tracks.map(function(t) {
+        var all = (res.data.tracks || []).map(function(t) {
           return toLibItem(t);
         });
+        var total = Number(res.data.total) || all.length;
+        CLOUD_QQ.view = 'tracks';
+        CLOUD_QQ.allTracks = all;
+        CLOUD_QQ.total = total;
+        CLOUD_QQ.tracks = all.slice(0, LIB.cloudPageSize);
+        CLOUD_QQ.hasMore = CLOUD_QQ.tracks.length < all.length;
+        CLOUD_QQ.loadingMore = false;
         CLOUD_QQ.playlistId = String(pl.id);
         CLOUD_QQ.playlistName = res.data.name || pl.name || '歌单';
         renderLibrary();
@@ -3675,22 +3798,40 @@ $(function() {
         $('#j-qq-qr-status').text('请使用 QQ / 微信扫码');
         CLOUD_QQ.qrTimer = setInterval(function() {
           qqAjax('qq_qr_check').done(function(check) {
-            if (!check || check.code !== 200 || !check.data) return;
-            var st = check.data.status;
+            if (!check) return;
+            var data = check.data || {};
+            var st = data.status;
+            var errMsg =
+              check.error ||
+              data.message ||
+              '扫码成功但登录失败，请刷新二维码或改用 Cookie';
+
+            // JSON code 非 200（如 502）时仍可能带 status===0
+            if (check.code !== 200) {
+              if (st === 0 || st === 65 || check.error) {
+                $('#j-qq-qr-status').text(errMsg);
+                stopQqQrPoll();
+              }
+              return;
+            }
+            if (st === undefined || st === null) return;
+
             if (st === 66) {
-              $('#j-qq-qr-status').text(check.data.message || '等待扫码…');
+              $('#j-qq-qr-status').text(data.message || '等待扫码…');
             } else if (st === 67) {
-              $('#j-qq-qr-status').text(check.data.message || '已扫码，请在手机上确认');
+              $('#j-qq-qr-status').text(data.message || '已扫码，请在手机上确认');
             } else if (st === 65) {
-              $('#j-qq-qr-status').text(check.data.message || '二维码已过期，请刷新');
+              $('#j-qq-qr-status').text(data.message || '二维码已过期，请刷新');
               stopQqQrPoll();
-            } else if (st === 0 && check.data.loggedIn) {
-              $('#j-qq-qr-status').text('登录成功');
-              setQqLoggedInUI(check.data);
+            } else if (st === 0 && data.loggedIn) {
+              $('#j-qq-qr-status').text(data.message || '登录成功');
+              setQqLoggedInUI(data);
               stopQqQrPoll();
             } else if (st === 0) {
-              $('#j-qq-qr-status').text(check.error || check.data.message || '登录成功但凭证异常，请改用 Cookie');
+              $('#j-qq-qr-status').text(errMsg);
               stopQqQrPoll();
+            } else if (st === -1) {
+              $('#j-qq-qr-status').text(data.message || '轮询异常，请刷新二维码');
             }
           });
         }, 2000);
@@ -3860,6 +4001,7 @@ $(function() {
 
   loadCloudPlaylistsIntoMemory();
   loadQqCloudPlaylistsIntoMemory();
+  bindCloudLibraryInfiniteScroll();
   renderLibrary();
   syncLikeButton(null);
 });
