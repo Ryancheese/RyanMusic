@@ -91,6 +91,8 @@ $(function() {
   // 申明变量
   var player = null;
   var playerList = [];
+  var searchBrowseActive = false;
+  var searchBrowseList = [];
   var nopic = 'static/img/nopic.jpg';
   var CHANNEL_LABELS = {
     netease: '网易云',
@@ -1432,7 +1434,98 @@ $(function() {
     }
   }
 
+  function isPlayerPlaying() {
+    return !!(player && player.audio && !player.audio.paused);
+  }
+
+  function shouldKeepPlaybackOnSearch(filter) {
+    return filter === 'name' && isPlayerPlaying();
+  }
+
+  function setSearchBrowseStatus(text) {
+    var $status = $('#j-search-browse-status');
+    if (!$status.length) return;
+    if (!text) {
+      $status.prop('hidden', true).text('');
+      return;
+    }
+    $status.prop('hidden', false).text(text);
+  }
+
+  function clearSearchBrowse() {
+    searchBrowseActive = false;
+    searchBrowseList = [];
+    $('#j-search-browse').prop('hidden', true);
+    $('.stage-shell').removeClass('has-search-browse');
+    $('#j-search-browse-list').empty();
+    setSearchBrowseStatus('');
+    var el = document.querySelector('.search-browse__scroll');
+    if (el && el._ryanBrowseInfiniteHandler) {
+      el.removeEventListener('scroll', el._ryanBrowseInfiniteHandler);
+      el._ryanBrowseInfiniteHandler = null;
+    }
+  }
+
+  function renderSearchBrowse() {
+    var $list = $('#j-search-browse-list');
+    if (!$list.length) return;
+    $list.empty();
+    searchBrowseList.forEach(function(track, index) {
+      var $li = $('<li class="search-browse__item" role="button" tabindex="0"/>').attr(
+        'data-index',
+        index
+      );
+      $li.append($('<span class="search-browse__index"/>').text(index + 1));
+      var $meta = $('<span class="search-browse__meta"/>');
+      $meta.append($('<span class="search-browse__name"/>').text(track.title || '暂无'));
+      $meta.append($('<span class="search-browse__author"/>').text(track.author || '暂无'));
+      $li.append($meta);
+      $li.append(
+        $('<span class="search-browse__badge"/>')
+          .addClass(track.type === 'qq' ? 'is-qq' : 'is-netease')
+          .text(channelLabel(track.type))
+      );
+      $list.append($li);
+    });
+    requestAnimationFrame(function() {
+      maybeLoadMoreFromScroll();
+    });
+  }
+
+  function showSearchBrowse(visible) {
+    $('#j-search-browse').prop('hidden', !visible);
+    $('.stage-shell').toggleClass('has-search-browse', !!visible);
+  }
+
+  function playFromSearchBrowse(index) {
+    if (!searchBrowseList.length) return;
+    index = Math.max(0, Math.min(index || 0, searchBrowseList.length - 1));
+    var tracks = searchBrowseList.slice();
+    var typeHint = tracks[index] && tracks[index].type;
+    clearSearchBrowse();
+    openPlayerWithTracks(tracks, index, typeHint);
+  }
+
+  function maybeLoadMoreSearchBrowse() {
+    if (!loadMoreState.hasMore || loadMoreState.loading || typeof loadMoreState.requestNext !== 'function') {
+      return;
+    }
+    var el = document.querySelector('.search-browse__scroll');
+    if (!el) return;
+    if (el.scrollHeight <= el.clientHeight + 4) {
+      loadMoreState.requestNext();
+      return;
+    }
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 56) {
+      loadMoreState.requestNext();
+    }
+  }
+
   function maybeLoadMoreFromScroll() {
+    if (searchBrowseActive) {
+      maybeLoadMoreSearchBrowse();
+      return;
+    }
     if (!loadMoreState.hasMore || loadMoreState.loading || typeof loadMoreState.requestNext !== 'function') {
       return;
     }
@@ -1445,6 +1538,18 @@ $(function() {
     if (list.scrollTop + list.clientHeight >= list.scrollHeight - 56) {
       loadMoreState.requestNext();
     }
+  }
+
+  function bindSearchBrowseInfiniteScroll() {
+    var el = document.querySelector('.search-browse__scroll');
+    if (!el) return;
+    if (el._ryanBrowseInfiniteHandler) {
+      el.removeEventListener('scroll', el._ryanBrowseInfiniteHandler);
+    }
+    el._ryanBrowseInfiniteHandler = function() {
+      maybeLoadMoreSearchBrowse();
+    };
+    el.addEventListener('scroll', el._ryanBrowseInfiniteHandler, { passive: true });
   }
 
   function bindPlaylistInfiniteScroll() {
@@ -1635,6 +1740,8 @@ $(function() {
 
     $('#j-submit').button('reset');
     stopSearchProgress(false);
+
+    clearSearchBrowse();
 
     if (player) {
       try {
@@ -2969,7 +3076,11 @@ $(function() {
                 setStageEmptyVisible(false);
                 startSearchProgress();
               } else {
-                setLoadStatus('正在加载更多…');
+                if (searchBrowseActive) {
+                  setSearchBrowseStatus('正在加载更多…');
+                } else {
+                  setLoadStatus('正在加载更多…');
+                }
               }
             },
             success: function success(result) {
@@ -3012,70 +3123,95 @@ $(function() {
                 };
 
                 if (pageNo === 1) {
-                  if (player) {
-                    player.pause();
-                  }
+                  var keepPlayback = shouldKeepPlaybackOnSearch(filter);
 
-                  playerList = result.data;
-                  page = 1;
+                  if (keepPlayback) {
+                    searchBrowseActive = true;
+                    searchBrowseList = result.data;
+                    page = 1;
+                    renderSearchBrowse();
+                    showSearchBrowse(true);
+                    showResultMain(true);
 
-                  setValue(playerList[0]);
-                  addRecent(playerList[0]);
-                  syncLikeButton(playerList[0]);
-                  persistPlaylistFromPlayer();
-                  renderLibrary();
+                    loadMoreState.requestNext = function() {
+                      if (isload || !loadMoreState.hasMore) return;
+                      page += 1;
+                      ajax(input, filter, type, page);
+                    };
+                    bindSearchBrowseInfiniteScroll();
+                  } else {
+                    clearSearchBrowse();
 
-                  $('#j-player').empty();
-                  player = new APlayer({
-                    element: $('#j-player')[0],
-                    autoplay: false,
-                    narrow: false,
-                    showlrc: 1,
-                    mutex: false,
-                    mode: 'circulation',
-                    preload: 'metadata',
-                    theme: '#fa2d55',
-                    music: result.data
-                  });
-                  player._playbackBound = false;
-                  bindPlayerStudio(player);
-                  bindPlayerPlayback(
-                    player,
-                    function() {
-                      return playerList[player.playIndex];
-                    },
-                    setValue,
-                    siteTitle
-                  );
-                  if (ambientGlow) {
-                    ambientGlow.bindPlayer(player, function() {
-                      return playerList[player.playIndex];
-                    });
-                    if (playerList[0] && playerList[0].pic) {
-                      ambientGlow.setCover(playerList[0].pic, playerList[0]);
+                    if (player) {
+                      player.pause();
                     }
-                  }
-                  movePlayButton();
-                  tunePlayerStudio(player);
 
-                  loadMoreState.requestNext = function() {
-                    if (isload || !loadMoreState.hasMore) return;
-                    page += 1;
-                    ajax(input, filter, type, page);
-                  };
-                  // 搜索栏常驻，结果区同页展开
-                  showResultMain(true);
-                  bindPlaylistInfiniteScroll();
+                    playerList = result.data;
+                    page = 1;
+
+                    setValue(playerList[0]);
+                    addRecent(playerList[0]);
+                    syncLikeButton(playerList[0]);
+                    persistPlaylistFromPlayer();
+                    renderLibrary();
+
+                    $('#j-player').empty();
+                    player = new APlayer({
+                      element: $('#j-player')[0],
+                      autoplay: false,
+                      narrow: false,
+                      showlrc: 1,
+                      mutex: false,
+                      mode: 'circulation',
+                      preload: 'metadata',
+                      theme: '#fa2d55',
+                      music: result.data
+                    });
+                    player._playbackBound = false;
+                    bindPlayerStudio(player);
+                    bindPlayerPlayback(
+                      player,
+                      function() {
+                        return playerList[player.playIndex];
+                      },
+                      setValue,
+                      siteTitle
+                    );
+                    if (ambientGlow) {
+                      ambientGlow.bindPlayer(player, function() {
+                        return playerList[player.playIndex];
+                      });
+                      if (playerList[0] && playerList[0].pic) {
+                        ambientGlow.setCover(playerList[0].pic, playerList[0]);
+                      }
+                    }
+                    movePlayButton();
+                    tunePlayerStudio(player);
+
+                    loadMoreState.requestNext = function() {
+                      if (isload || !loadMoreState.hasMore) return;
+                      page += 1;
+                      ajax(input, filter, type, page);
+                    };
+                    // 搜索栏常驻，结果区同页展开
+                    showResultMain(true);
+                    bindPlaylistInfiniteScroll();
+                  }
                 } else {
-                  var prevCount = playerList.length;
-                  player.addMusic(result.data);
-                  playerList = playerList.concat(result.data);
-                  persistPlaylistFromPlayer();
-                  renderLibrary();
-                  refreshPlayerListAfterAppend(player, {
-                    prevCount: prevCount,
-                    scrollToNew: false
-                  });
+                  if (searchBrowseActive) {
+                    searchBrowseList = searchBrowseList.concat(result.data);
+                    renderSearchBrowse();
+                  } else {
+                    var prevCount = playerList.length;
+                    player.addMusic(result.data);
+                    playerList = playerList.concat(result.data);
+                    persistPlaylistFromPlayer();
+                    renderLibrary();
+                    refreshPlayerListAfterAppend(player, {
+                      prevCount: prevCount,
+                      scrollToNew: false
+                    });
+                  }
                 }
 
                 var hasMore =
@@ -3097,10 +3233,17 @@ $(function() {
                 } else {
                   page = Math.max(1, pageNo - 1);
                   updateInfiniteLoadState(false, filter);
-                  setLoadStatus('没有更多了');
-                  setTimeout(function() {
-                    setLoadStatus('');
-                  }, 1200);
+                  if (searchBrowseActive) {
+                    setSearchBrowseStatus('没有更多了');
+                    setTimeout(function() {
+                      setSearchBrowseStatus('');
+                    }, 1200);
+                  } else {
+                    setLoadStatus('没有更多了');
+                    setTimeout(function() {
+                      setLoadStatus('');
+                    }, 1200);
+                  }
                 }
               }
             },
@@ -3120,7 +3263,11 @@ $(function() {
                 }
               } else {
                 page = Math.max(1, pageNo - 1);
-                setLoadStatus('加载失败，继续下滑重试');
+                if (searchBrowseActive) {
+                  setSearchBrowseStatus('加载失败，继续下滑重试');
+                } else {
+                  setLoadStatus('加载失败，继续下滑重试');
+                }
               }
             },
             complete: function complete() {
@@ -3131,7 +3278,11 @@ $(function() {
                 $('#j-input').attr('disabled', false);
                 $('#j-submit').button('reset');
               } else if (loadMoreState.hasMore) {
-                setLoadStatus('');
+                if (searchBrowseActive) {
+                  setSearchBrowseStatus('');
+                } else {
+                  setLoadStatus('');
+                }
               }
               requestAnimationFrame(function() {
                 maybeLoadMoreFromScroll();
@@ -3147,6 +3298,20 @@ $(function() {
 
   $('#j-main input, #j-main textarea').on('focus', function() {
     $(this).select();
+  });
+
+  $('#j-search-browse-list').on('click', '.search-browse__item', function() {
+    var index = parseInt($(this).attr('data-index'), 10);
+    if (isNaN(index)) return;
+    playFromSearchBrowse(index);
+  });
+
+  $('#j-search-browse-list').on('keydown', '.search-browse__item', function(e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    var index = parseInt($(this).attr('data-index'), 10);
+    if (isNaN(index)) return;
+    playFromSearchBrowse(index);
   });
 
   // 点击标题区歌曲名 / 歌手名 → 直接搜索（并切到当前曲音源）
@@ -3241,6 +3406,7 @@ $(function() {
       alert('无法播放，歌曲可能已失效');
       return;
     }
+    clearSearchBrowse();
     playIndex = Math.max(0, Math.min(playIndex || 0, tracks.length - 1));
 
     var setValue = function setValue(data) {

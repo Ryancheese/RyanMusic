@@ -377,6 +377,17 @@ if (!defined('MC_CORE')) {
                         </div>
                     </form>
 
+                    <div id="j-search-browse" class="search-browse" hidden>
+                        <div class="search-browse__head">
+                            <p class="search-browse__title">搜索结果</p>
+                            <p class="search-browse__hint">点击歌曲开始播放，当前音乐将继续播放</p>
+                        </div>
+                        <div class="search-browse__scroll">
+                            <ol id="j-search-browse-list" class="search-browse__list"></ol>
+                        </div>
+                        <p id="j-search-browse-status" class="search-browse__status" hidden></p>
+                    </div>
+
                     <div id="j-stage-empty" class="stage-empty" aria-label="RyanMusic">
                         <div class="stage-empty__glow" aria-hidden="true"></div>
                         <div class="stage-empty__mark" aria-hidden="true">
