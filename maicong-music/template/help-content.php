@@ -40,9 +40,30 @@ if (!defined('MC_CORE')) {
     <li><strong>喜欢</strong>：播放时点「喜欢」（红心）收藏；再点一次可取消。数据保存在本机浏览器存储中。</li>
     <li><strong>最近</strong>：自动记录最近播放过的歌曲，方便回听。</li>
     <li><strong>播放列表</strong>：点「加入播放列表」把当前曲目加入；也可从喜欢 / 最近列表用「＋」加入。</li>
-    <li>顶部 <strong>全部 / 网易云 / QQ</strong> 可按音源筛选左侧列表。</li>
+    <li><strong>网易云</strong>：点右上角「同步网易云」登录账号后，可将「我喜欢」与自建/收藏歌单同步到本机侧栏；点播仍走 RyanMusic 播放，不打开官方 App。</li>
+    <li><strong>QQ</strong>：点右上角「同步QQ」登录账号后，可将 QQ 音乐「我喜欢」与自建/收藏歌单同步到侧栏「QQ」分区；点播同样走 RyanMusic。</li>
+    <li>顶部 <strong>全部 / 网易云 / QQ</strong> 可按音源筛选左侧列表（云端歌单页除外）。</li>
     <li>在列表中点歌即可播放；喜欢与最近支持移出 / 取消喜欢等快捷操作。</li>
     <li>从「喜欢」或「最近」点播时，会从该首起连续播放列表后续曲目。</li>
+</ul>
+
+<h3 class="site-modal__h">四（附）、同步网易云账号</h3>
+<ul>
+    <li><strong>扫码登录</strong>（推荐）：弹层中显示二维码，用手机网易云 App 扫码并确认。</li>
+    <li><strong>Cookie 兜底</strong>：若扫码失败，可在浏览器登录 music.163.com，从开发者工具复制含 <code>MUSIC_U</code> 的 Cookie 粘贴保存。</li>
+    <li>登录 Cookie <strong>只保存在本机</strong>（应用缓存目录），不会上传到 RyanMusic 服务器；点「退出登录」即删除。</li>
+    <li>同步结果出现在侧栏「网易云」分区，<strong>不会覆盖</strong>本地「喜欢」列表。</li>
+    <li>大歌单会截断到约 500 首以便播放；无版权 / VIP 曲目仍可能无法播放（与搜索单曲相同）。</li>
+    <li>网易接口可能变更，导致扫码或同步暂时失败，届时可改用 Cookie 或稍后再试。</li>
+</ul>
+
+<h3 class="site-modal__h">四（附）、同步 QQ 音乐账号</h3>
+<ul>
+    <li><strong>扫码登录</strong>（推荐）：弹层中显示二维码，用手机 QQ / 微信扫码并确认。</li>
+    <li><strong>Cookie 兜底</strong>：若扫码失败，可在浏览器登录 <code>y.qq.com</code>，从开发者工具复制含 <code>uin</code> 与 <code>qm_keyst</code> 的 Cookie 粘贴保存。</li>
+    <li>登录 Cookie <strong>只保存在本机</strong>，不会上传；点「退出登录」即删除。</li>
+    <li>同步结果出现在侧栏「QQ」分区，<strong>不会覆盖</strong>本地「喜欢」列表。</li>
+    <li>大歌单同样约截断到 500 首；无版权 / VIP 曲目可能无法播放。</li>
 </ul>
 
 <h3 class="site-modal__h">五、下载歌曲与歌词</h3>

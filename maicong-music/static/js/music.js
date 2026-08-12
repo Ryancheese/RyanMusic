@@ -100,11 +100,105 @@ $(function() {
     likedKey: 'ryanmusic-liked-v1',
     recentKey: 'ryanmusic-recent-v1',
     playlistKey: 'ryanmusic-playlist-v1',
+    cloudKey: 'ryanmusic-netease-cloud-v1',
+    qqCloudKey: 'ryanmusic-qq-cloud-v1',
     recentMax: 80,
     playlistMax: 200,
+    cloudTrackMax: 500,
     channel: 'all',
     tab: 'liked'
   };
+
+  var CLOUD = {
+    view: 'playlists', // playlists | tracks
+    playlists: [],
+    tracks: [],
+    playlistId: '',
+    playlistName: '',
+    qrTimer: null,
+    qrKey: ''
+  };
+
+  var CLOUD_QQ = {
+    view: 'playlists', // playlists | tracks
+    playlists: [],
+    tracks: [],
+    playlistId: '',
+    playlistName: '',
+    qrTimer: null
+  };
+
+  function neteaseAjax(action, data) {
+    return $.ajax({
+      type: 'POST',
+      url: getUrl(),
+      timeout: 30000,
+      dataType: 'json',
+      data: $.extend({ action: action }, data || {})
+    });
+  }
+
+  function qqAjax(action, data) {
+    return $.ajax({
+      type: 'POST',
+      url: getUrl(),
+      timeout: 30000,
+      dataType: 'json',
+      data: $.extend({ action: action }, data || {})
+    });
+  }
+
+  function readCloudMeta() {
+    try {
+      var raw = localStorage.getItem(LIB.cloudKey);
+      var data = raw ? JSON.parse(raw) : null;
+      if (!data || !Array.isArray(data.playlists)) {
+        return { playlists: [], nickname: '', syncedAt: 0 };
+      }
+      return data;
+    } catch (e) {
+      return { playlists: [], nickname: '', syncedAt: 0 };
+    }
+  }
+
+  function writeCloudMeta(data) {
+    try {
+      localStorage.setItem(LIB.cloudKey, JSON.stringify(data));
+    } catch (e) {}
+  }
+
+  function loadCloudPlaylistsIntoMemory() {
+    var meta = readCloudMeta();
+    CLOUD.playlists = meta.playlists || [];
+  }
+
+  function readQqCloudMeta() {
+    try {
+      var raw = localStorage.getItem(LIB.qqCloudKey);
+      var data = raw ? JSON.parse(raw) : null;
+      if (!data || !Array.isArray(data.playlists)) {
+        return { playlists: [], nickname: '', syncedAt: 0 };
+      }
+      return data;
+    } catch (e) {
+      return { playlists: [], nickname: '', syncedAt: 0 };
+    }
+  }
+
+  function writeQqCloudMeta(data) {
+    try {
+      localStorage.setItem(LIB.qqCloudKey, JSON.stringify(data));
+    } catch (e) {}
+  }
+
+  function loadQqCloudPlaylistsIntoMemory() {
+    var meta = readQqCloudMeta();
+    CLOUD_QQ.playlists = meta.playlists || [];
+  }
+
+  function isCloudLibraryTab(tab) {
+    return tab === 'cloud' || tab === 'qqcloud';
+  }
 
   function channelLabel(type) {
     return CHANNEL_LABELS[type] || type || '未知';
@@ -364,6 +458,12 @@ $(function() {
         ? playerList.map(toLibItem)
         : readLibList(LIB.playlistKey);
     }
+    if (tab === 'cloud') {
+      return CLOUD.view === 'tracks' ? CLOUD.tracks : [];
+    }
+    if (tab === 'qqcloud') {
+      return CLOUD_QQ.view === 'tracks' ? CLOUD_QQ.tracks : [];
+    }
     return readLibList(LIB.likedKey);
   }
 
@@ -379,11 +479,15 @@ $(function() {
 
   /** 从列表某首起播到结尾，整表替换播放列表（不含该首之前，也不混入中途手动加入的歌） */
   function playFromListContext(tab, item) {
-    var items = filterLibByChannel(librarySourceForTab(tab), LIB.channel);
+    var source = librarySourceForTab(tab);
+    var items = isCloudLibraryTab(tab) ? source : filterLibByChannel(source, LIB.channel);
     if (!items.length) return;
     var idx = indexOfLibItem(items, item);
     var queue = items.slice(idx);
     if (!queue.length) return;
+    if (queue.length > LIB.cloudTrackMax) {
+      queue = queue.slice(0, LIB.cloudTrackMax);
+    }
     playLibraryItems(queue, 0);
   }
 
@@ -444,20 +548,42 @@ $(function() {
   function renderLibrary() {
     var $list = $('#j-library-list');
     var $empty = $('#j-library-empty');
+    var $cloudBar = $('#j-cloud-bar');
     if (!$list.length) return;
+
+    if (LIB.tab === 'cloud') {
+      $cloudBar.prop('hidden', CLOUD.view !== 'tracks');
+      $('#j-cloud-title').text(CLOUD.playlistName || '');
+      if (CLOUD.view === 'playlists') {
+        renderCloudPlaylists($list, $empty);
+        return;
+      }
+    } else if (LIB.tab === 'qqcloud') {
+      $cloudBar.prop('hidden', CLOUD_QQ.view !== 'tracks');
+      $('#j-cloud-title').text(CLOUD_QQ.playlistName || '');
+      if (CLOUD_QQ.view === 'playlists') {
+        renderQqCloudPlaylists($list, $empty);
+        return;
+      }
+    } else if ($cloudBar.length) {
+      $cloudBar.prop('hidden', true);
+    }
 
     var source;
     if (LIB.tab === 'recent') {
       source = readLibList(LIB.recentKey);
     } else if (LIB.tab === 'playlist') {
-      // 播放中以播放器队列为准，与下方列表保持一致
       source = playerList.length
         ? playerList.map(toLibItem)
         : readLibList(LIB.playlistKey);
+    } else if (LIB.tab === 'cloud') {
+      source = CLOUD.tracks;
+    } else if (LIB.tab === 'qqcloud') {
+      source = CLOUD_QQ.tracks;
     } else {
       source = readLibList(LIB.likedKey);
     }
-    var items = filterLibByChannel(source, LIB.channel);
+    var items = isCloudLibraryTab(LIB.tab) ? source : filterLibByChannel(source, LIB.channel);
     $list.empty();
 
     if (!items.length) {
@@ -466,7 +592,9 @@ $(function() {
           ? '还没有最近播放。'
           : LIB.tab === 'playlist'
             ? '播放列表还是空的。从喜欢/最近点歌即可生成。'
-            : '还没有喜欢的歌。播放后点红心即可收藏。'
+            : isCloudLibraryTab(LIB.tab)
+              ? '该歌单没有可同步的曲目。'
+              : '还没有喜欢的歌。播放后点红心即可收藏。'
       );
       return;
     }
@@ -528,6 +656,80 @@ $(function() {
         );
       }
       $li.data('track', item);
+      $list.append($li);
+    });
+  }
+
+  function renderCloudPlaylists($list, $empty) {
+    loadCloudPlaylistsIntoMemory();
+    $list.empty();
+    if (!CLOUD.playlists.length) {
+      $empty
+        .show()
+        .text('还没有同步网易云歌单。点右上角「同步网易云」登录后同步。');
+      return;
+    }
+    $empty.hide();
+    CLOUD.playlists.forEach(function(pl, index) {
+      var $li = $(
+        '<li class="local-library__item local-library__item--text local-library__item--playlist">' +
+          '<span class="local-library__index"></span>' +
+          '<div class="local-library__meta">' +
+          '<p class="local-library__name"></p>' +
+          '<p class="local-library__sub"></p>' +
+          '</div>' +
+          '</li>'
+      );
+      $li.find('.local-library__index').text(index + 1);
+      $li.find('.local-library__name').text(pl.name || '未命名歌单');
+      var count = pl.trackCount != null ? pl.trackCount : '—';
+      var tag = pl.specialType === 5 ? '我喜欢' : pl.subscribed ? '收藏' : '自建';
+      $li.find('.local-library__sub').html(
+        '<span class="local-library__badge local-library__badge--netease">网易云</span> ' +
+          '<span class="local-library__meta-count">' +
+          tag +
+          ' · ' +
+          count +
+          ' 首</span>'
+      );
+      $li.data('playlist', pl);
+      $list.append($li);
+    });
+  }
+
+  function renderQqCloudPlaylists($list, $empty) {
+    loadQqCloudPlaylistsIntoMemory();
+    $list.empty();
+    if (!CLOUD_QQ.playlists.length) {
+      $empty
+        .show()
+        .text('还没有同步 QQ 歌单。点右上角「同步QQ」登录后同步。');
+      return;
+    }
+    $empty.hide();
+    CLOUD_QQ.playlists.forEach(function(pl, index) {
+      var $li = $(
+        '<li class="local-library__item local-library__item--text local-library__item--playlist">' +
+          '<span class="local-library__index"></span>' +
+          '<div class="local-library__meta">' +
+          '<p class="local-library__name"></p>' +
+          '<p class="local-library__sub"></p>' +
+          '</div>' +
+          '</li>'
+      );
+      $li.find('.local-library__index').text(index + 1);
+      $li.find('.local-library__name').text(pl.name || '未命名歌单');
+      var count = pl.trackCount != null ? pl.trackCount : '—';
+      var tag = Number(pl.dirid) === 201 ? '我喜欢' : pl.subscribed ? '收藏' : '自建';
+      $li.find('.local-library__sub').html(
+        '<span class="local-library__badge local-library__badge--qq">QQ</span> ' +
+          '<span class="local-library__meta-count">' +
+          tag +
+          ' · ' +
+          count +
+          ' 首</span>'
+      );
+      $li.data('playlist', pl);
       $list.append($li);
     });
   }
@@ -2275,7 +2477,11 @@ $(function() {
     var closing = false;
 
     function modalEl(id) {
-      return document.getElementById(id === 'help' ? 'j-modal-help' : id === 'disclaimer' ? 'j-modal-disclaimer' : id);
+      if (id === 'help') return document.getElementById('j-modal-help');
+      if (id === 'disclaimer') return document.getElementById('j-modal-disclaimer');
+      if (id === 'netease') return document.getElementById('j-modal-netease');
+      if (id === 'qq') return document.getElementById('j-modal-qq');
+      return document.getElementById(id);
     }
 
     function openModal(name) {
@@ -3185,6 +3391,13 @@ $(function() {
 
   $('#j-library').on('click', '.local-library__tab', function() {
     LIB.tab = $(this).data('tab') || 'liked';
+    if (LIB.tab === 'cloud') {
+      CLOUD.view = 'playlists';
+      loadCloudPlaylistsIntoMemory();
+    } else if (LIB.tab === 'qqcloud') {
+      CLOUD_QQ.view = 'playlists';
+      loadQqCloudPlaylistsIntoMemory();
+    }
     $(this)
       .addClass('is-active')
       .siblings('.local-library__tab')
@@ -3192,9 +3405,36 @@ $(function() {
     renderLibrary();
   });
 
+  $('#j-cloud-back').on('click', function() {
+    if (LIB.tab === 'qqcloud') {
+      CLOUD_QQ.view = 'playlists';
+      CLOUD_QQ.tracks = [];
+      CLOUD_QQ.playlistId = '';
+      CLOUD_QQ.playlistName = '';
+    } else {
+      CLOUD.view = 'playlists';
+      CLOUD.tracks = [];
+      CLOUD.playlistId = '';
+      CLOUD.playlistName = '';
+    }
+    renderLibrary();
+  });
+
   $('#j-library-list').on('click', '.local-library__item', function(e) {
     var $target = $(e.target);
-    var item = $(this).data('track');
+    var $row = $(this);
+    var playlist = $row.data('playlist');
+    if (playlist && LIB.tab === 'cloud' && CLOUD.view === 'playlists') {
+      e.preventDefault();
+      openCloudPlaylist(playlist);
+      return;
+    }
+    if (playlist && LIB.tab === 'qqcloud' && CLOUD_QQ.view === 'playlists') {
+      e.preventDefault();
+      openQqCloudPlaylist(playlist);
+      return;
+    }
+    var item = $row.data('track');
     if (!item) return;
     if ($target.closest('.local-library__author').length) {
       e.preventDefault();
@@ -3234,7 +3474,6 @@ $(function() {
     }
     if ($target.closest('[data-act="add-pl"]').length) {
       e.stopPropagation();
-      // 仅追加到当前播放队列；下次从「喜欢/最近」点播时会被整表替换，中途加入的不算进新上下文
       enqueueToPlayer(item, function() {
         renderLibrary();
         if (player && playerList[player.playIndex]) {
@@ -3244,6 +3483,369 @@ $(function() {
       return;
     }
     playFromListContext(LIB.tab, item);
+  });
+
+  function stopNeteaseQrPoll() {
+    if (CLOUD.qrTimer) {
+      clearInterval(CLOUD.qrTimer);
+      CLOUD.qrTimer = null;
+    }
+    CLOUD.qrKey = '';
+  }
+
+  function setNeteaseLoggedInUI(status) {
+    var loggedIn = !!(status && status.loggedIn);
+    $('#j-ne-logged-out').prop('hidden', loggedIn);
+    $('#j-ne-logged-in').prop('hidden', !loggedIn);
+    if (loggedIn) {
+      $('#j-ne-nickname').text(status.nickname || ('UID ' + status.uid));
+      stopNeteaseQrPoll();
+    }
+  }
+
+  function startNeteaseQr() {
+    stopNeteaseQrPoll();
+    $('#j-ne-qr-status').text('正在生成二维码…');
+    $('#j-ne-qr').attr('src', '');
+    neteaseAjax('netease_qr_key')
+      .done(function(res) {
+        if (!res || res.code !== 200 || !res.data || !res.data.key) {
+          $('#j-ne-qr-status').text((res && res.error) || '无法生成二维码，请改用 Cookie');
+          return;
+        }
+        CLOUD.qrKey = res.data.key;
+        var qrurl = res.data.qrurl || ('https://music.163.com/login?codekey=' + encodeURIComponent(CLOUD.qrKey));
+        $('#j-ne-qr').attr(
+          'src',
+          'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(qrurl)
+        );
+        $('#j-ne-qr-status').text('请使用网易云 App 扫码');
+        CLOUD.qrTimer = setInterval(function() {
+          neteaseAjax('netease_qr_check', { key: CLOUD.qrKey }).done(function(check) {
+            if (!check || check.code !== 200 || !check.data) return;
+            var st = check.data.status;
+            if (st === 801) {
+              $('#j-ne-qr-status').text('等待扫码…');
+            } else if (st === 802) {
+              $('#j-ne-qr-status').text('已扫码，请在手机上确认');
+            } else if (st === 800) {
+              $('#j-ne-qr-status').text('二维码已过期，请刷新');
+              stopNeteaseQrPoll();
+            } else if (st === 803 && check.data.loggedIn) {
+              $('#j-ne-qr-status').text('登录成功');
+              setNeteaseLoggedInUI(check.data);
+              stopNeteaseQrPoll();
+            } else if (st === 803) {
+              $('#j-ne-qr-status').text(check.error || '登录成功但凭证异常，请改用 Cookie');
+              stopNeteaseQrPoll();
+            }
+          });
+        }, 2000);
+      })
+      .fail(function() {
+        $('#j-ne-qr-status').text('网络错误，请改用 Cookie 登录');
+      });
+  }
+
+  function openCloudPlaylist(pl) {
+    if (!pl || !pl.id) return;
+    $('#j-library-empty').show().text('正在加载歌单…');
+    $('#j-library-list').empty();
+    var req =
+      pl.specialType === 5
+        ? neteaseAjax('netease_likelist')
+        : neteaseAjax('netease_playlist_detail', { id: String(pl.id) });
+    req
+      .done(function(res) {
+        if (!res || res.code !== 200 || !res.data) {
+          $('#j-library-empty').text((res && res.error) || '加载失败');
+          return;
+        }
+        var tracks = res.data.tracks || [];
+        if (tracks.length > LIB.cloudTrackMax) {
+          tracks = tracks.slice(0, LIB.cloudTrackMax);
+        }
+        CLOUD.view = 'tracks';
+        CLOUD.tracks = tracks.map(function(t) {
+          return toLibItem(t);
+        });
+        CLOUD.playlistId = String(pl.id);
+        CLOUD.playlistName = res.data.name || pl.name || '歌单';
+        renderLibrary();
+      })
+      .fail(function() {
+        $('#j-library-empty').text('加载失败，请检查登录态后重试');
+      });
+  }
+
+  function openQqCloudPlaylist(pl) {
+    if (!pl || !pl.id) return;
+    $('#j-library-empty').show().text('正在加载歌单…');
+    $('#j-library-list').empty();
+    var req =
+      Number(pl.dirid) === 201
+        ? qqAjax('qq_likelist')
+        : qqAjax('qq_playlist_detail', { id: String(pl.id) });
+    req
+      .done(function(res) {
+        if (!res || res.code !== 200 || !res.data) {
+          $('#j-library-empty').text((res && res.error) || '加载失败');
+          return;
+        }
+        var tracks = res.data.tracks || [];
+        if (tracks.length > LIB.cloudTrackMax) {
+          tracks = tracks.slice(0, LIB.cloudTrackMax);
+        }
+        CLOUD_QQ.view = 'tracks';
+        CLOUD_QQ.tracks = tracks.map(function(t) {
+          return toLibItem(t);
+        });
+        CLOUD_QQ.playlistId = String(pl.id);
+        CLOUD_QQ.playlistName = res.data.name || pl.name || '歌单';
+        renderLibrary();
+      })
+      .fail(function() {
+        $('#j-library-empty').text('加载失败，请检查登录态后重试');
+      });
+  }
+
+  function syncNeteasePlaylists() {
+    var $msg = $('#j-ne-sync-msg');
+    $msg.text('正在同步…');
+    neteaseAjax('netease_playlists')
+      .done(function(res) {
+        if (!res || res.code !== 200 || !res.data) {
+          $msg.text((res && res.error) || '同步失败');
+          return;
+        }
+        var playlists = res.data.playlists || [];
+        writeCloudMeta({
+          playlists: playlists,
+          nickname: $('#j-ne-nickname').text() || '',
+          syncedAt: Date.now()
+        });
+        CLOUD.playlists = playlists;
+        CLOUD.view = 'playlists';
+        $msg.text('已同步 ' + playlists.length + ' 个歌单，可在左侧「网易云」查看');
+        LIB.tab = 'cloud';
+        $('.local-library__tab[data-tab="cloud"]')
+          .addClass('is-active')
+          .siblings('.local-library__tab')
+          .removeClass('is-active');
+        renderLibrary();
+      })
+      .fail(function(xhr) {
+        var err = '同步失败';
+        try {
+          var body = JSON.parse(xhr.responseText);
+          if (body && body.error) err = body.error;
+        } catch (e) {}
+        $msg.text(err);
+      });
+  }
+
+  function stopQqQrPoll() {
+    if (CLOUD_QQ.qrTimer) {
+      clearInterval(CLOUD_QQ.qrTimer);
+      CLOUD_QQ.qrTimer = null;
+    }
+  }
+
+  function setQqLoggedInUI(status) {
+    var loggedIn = !!(status && status.loggedIn);
+    $('#j-qq-logged-out').prop('hidden', loggedIn);
+    $('#j-qq-logged-in').prop('hidden', !loggedIn);
+    if (loggedIn) {
+      $('#j-qq-nickname').text(status.nickname || ('QQ ' + (status.uin || '')));
+      stopQqQrPoll();
+    }
+  }
+
+  function startQqQr() {
+    stopQqQrPoll();
+    $('#j-qq-qr-status').text('正在生成二维码…');
+    $('#j-qq-qr').attr('src', '');
+    qqAjax('qq_qr_key')
+      .done(function(res) {
+        if (!res || res.code !== 200 || !res.data || !res.data.qrimg) {
+          $('#j-qq-qr-status').text((res && res.error) || '无法生成二维码，请改用 Cookie');
+          return;
+        }
+        $('#j-qq-qr').attr('src', res.data.qrimg);
+        $('#j-qq-qr-status').text('请使用 QQ / 微信扫码');
+        CLOUD_QQ.qrTimer = setInterval(function() {
+          qqAjax('qq_qr_check').done(function(check) {
+            if (!check || check.code !== 200 || !check.data) return;
+            var st = check.data.status;
+            if (st === 66) {
+              $('#j-qq-qr-status').text(check.data.message || '等待扫码…');
+            } else if (st === 67) {
+              $('#j-qq-qr-status').text(check.data.message || '已扫码，请在手机上确认');
+            } else if (st === 65) {
+              $('#j-qq-qr-status').text(check.data.message || '二维码已过期，请刷新');
+              stopQqQrPoll();
+            } else if (st === 0 && check.data.loggedIn) {
+              $('#j-qq-qr-status').text('登录成功');
+              setQqLoggedInUI(check.data);
+              stopQqQrPoll();
+            } else if (st === 0) {
+              $('#j-qq-qr-status').text(check.error || check.data.message || '登录成功但凭证异常，请改用 Cookie');
+              stopQqQrPoll();
+            }
+          });
+        }, 2000);
+      })
+      .fail(function() {
+        $('#j-qq-qr-status').text('网络错误，请改用 Cookie 登录');
+      });
+  }
+
+  function syncQqPlaylists() {
+    var $msg = $('#j-qq-sync-msg');
+    $msg.text('正在同步…');
+    qqAjax('qq_playlists')
+      .done(function(res) {
+        if (!res || res.code !== 200 || !res.data) {
+          $msg.text((res && res.error) || '同步失败');
+          return;
+        }
+        var playlists = res.data.playlists || [];
+        writeQqCloudMeta({
+          playlists: playlists,
+          nickname: $('#j-qq-nickname').text() || '',
+          syncedAt: Date.now()
+        });
+        CLOUD_QQ.playlists = playlists;
+        CLOUD_QQ.view = 'playlists';
+        $msg.text('已同步 ' + playlists.length + ' 个歌单，可在左侧「QQ」查看');
+        LIB.tab = 'qqcloud';
+        $('.local-library__tab[data-tab="qqcloud"]')
+          .addClass('is-active')
+          .siblings('.local-library__tab')
+          .removeClass('is-active');
+        renderLibrary();
+      })
+      .fail(function(xhr) {
+        var err = '同步失败';
+        try {
+          var body = JSON.parse(xhr.responseText);
+          if (body && body.error) err = body.error;
+        } catch (e) {}
+        $msg.text(err);
+      });
+  }
+
+  $(document).on('click', '[data-modal="netease"]', function() {
+    setTimeout(function() {
+      neteaseAjax('netease_status').done(function(res) {
+        if (res && res.code === 200 && res.data && res.data.loggedIn) {
+          setNeteaseLoggedInUI(res.data);
+        } else {
+          setNeteaseLoggedInUI({ loggedIn: false });
+          startNeteaseQr();
+        }
+      }).fail(function() {
+        setNeteaseLoggedInUI({ loggedIn: false });
+        startNeteaseQr();
+      });
+    }, 0);
+  });
+
+  $('#j-ne-qr-refresh').on('click', function() {
+    startNeteaseQr();
+  });
+
+  $('#j-ne-cookie-save').on('click', function() {
+    var cookie = $.trim($('#j-ne-cookie').val() || '');
+    $('#j-ne-qr-status').text('正在校验 Cookie…');
+    neteaseAjax('netease_cookie_save', { cookie: cookie })
+      .done(function(res) {
+        if (!res || res.code !== 200 || !res.data || !res.data.loggedIn) {
+          $('#j-ne-qr-status').text((res && res.error) || 'Cookie 无效');
+          return;
+        }
+        setNeteaseLoggedInUI(res.data);
+        $('#j-ne-sync-msg').text('登录成功，可点击同步歌单');
+      })
+      .fail(function(xhr) {
+        var err = 'Cookie 登录失败';
+        try {
+          var body = JSON.parse(xhr.responseText);
+          if (body && body.error) err = body.error;
+        } catch (e) {}
+        $('#j-ne-qr-status').text(err);
+      });
+  });
+
+  $('#j-ne-logout').on('click', function() {
+    neteaseAjax('netease_logout').always(function() {
+      setNeteaseLoggedInUI({ loggedIn: false });
+      startNeteaseQr();
+      $('#j-ne-sync-msg').text('');
+    });
+  });
+
+  $('#j-ne-do-sync').on('click', function() {
+    syncNeteasePlaylists();
+  });
+
+  $(document).on('click', '[data-modal="qq"]', function() {
+    setTimeout(function() {
+      qqAjax('qq_status').done(function(res) {
+        if (res && res.code === 200 && res.data && res.data.loggedIn) {
+          setQqLoggedInUI(res.data);
+        } else {
+          setQqLoggedInUI({ loggedIn: false });
+          startQqQr();
+        }
+      }).fail(function() {
+        setQqLoggedInUI({ loggedIn: false });
+        startQqQr();
+      });
+    }, 0);
+  });
+
+  $('#j-qq-qr-refresh').on('click', function() {
+    startQqQr();
+  });
+
+  $('#j-qq-cookie-save').on('click', function() {
+    var cookie = $.trim($('#j-qq-cookie').val() || '');
+    $('#j-qq-qr-status').text('正在校验 Cookie…');
+    qqAjax('qq_cookie_save', { cookie: cookie })
+      .done(function(res) {
+        if (!res || res.code !== 200 || !res.data || !res.data.loggedIn) {
+          $('#j-qq-qr-status').text((res && res.error) || 'Cookie 无效');
+          return;
+        }
+        setQqLoggedInUI(res.data);
+        $('#j-qq-sync-msg').text('登录成功，可点击同步歌单');
+      })
+      .fail(function(xhr) {
+        var err = 'Cookie 登录失败';
+        try {
+          var body = JSON.parse(xhr.responseText);
+          if (body && body.error) err = body.error;
+        } catch (e) {}
+        $('#j-qq-qr-status').text(err);
+      });
+  });
+
+  $('#j-qq-logout').on('click', function() {
+    qqAjax('qq_logout').always(function() {
+      setQqLoggedInUI({ loggedIn: false });
+      startQqQr();
+      $('#j-qq-sync-msg').text('');
+    });
+  });
+
+  $('#j-qq-do-sync').on('click', function() {
+    syncQqPlaylists();
+  });
+
+  $(document).on('click', '[data-modal-close]', function() {
+    stopNeteaseQrPoll();
+    stopQqQrPoll();
   });
 
   $('#j-library-list').on('keydown', '.local-library__author', function(e) {
@@ -3256,6 +3858,8 @@ $(function() {
     searchByArtist(name, type);
   });
 
+  loadCloudPlaylistsIntoMemory();
+  loadQqCloudPlaylistsIntoMemory();
   renderLibrary();
   syncLikeButton(null);
 });

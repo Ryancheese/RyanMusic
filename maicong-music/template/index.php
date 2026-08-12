@@ -161,6 +161,76 @@ if (!defined('MC_CORE')) {
         </div>
     </div>
 
+    <div class="site-modal" id="j-modal-netease" hidden aria-hidden="true">
+        <button type="button" class="site-modal__backdrop" data-modal-close aria-label="关闭"></button>
+        <div class="site-modal__panel site-modal__panel--netease" role="dialog" aria-modal="true" aria-labelledby="j-modal-netease-title" tabindex="-1">
+            <header class="site-modal__head">
+                <h2 class="site-modal__title" id="j-modal-netease-title">同步网易云</h2>
+                <button type="button" class="site-modal__close" data-modal-close aria-label="关闭">×</button>
+            </header>
+            <div class="site-modal__body">
+                <div id="j-ne-logged-out">
+                    <p class="ne-sync__lead">用网易云 App 扫码登录，同步「我喜欢」与自建/收藏歌单。播放仍在 RyanMusic。</p>
+                    <div class="ne-sync__qr-wrap">
+                        <img id="j-ne-qr" class="ne-sync__qr" alt="网易云登录二维码" width="180" height="180">
+                        <p id="j-ne-qr-status" class="ne-sync__status">正在生成二维码…</p>
+                        <button type="button" class="ne-sync__btn ne-sync__btn--ghost" id="j-ne-qr-refresh">刷新二维码</button>
+                    </div>
+                    <details class="ne-sync__cookie">
+                        <summary>扫码不行？改用 Cookie</summary>
+                        <p class="ne-sync__hint">浏览器登录 <code>music.163.com</code> → 开发者工具 → Network → 任意请求 → 复制请求头里的 Cookie（需含 <code>MUSIC_U</code>）。Cookie 仅存本机，退出即删除。</p>
+                        <textarea id="j-ne-cookie" class="ne-sync__textarea" rows="4" placeholder="粘贴 Cookie…" spellcheck="false"></textarea>
+                        <button type="button" class="ne-sync__btn" id="j-ne-cookie-save">保存并登录</button>
+                    </details>
+                </div>
+                <div id="j-ne-logged-in" hidden>
+                    <p class="ne-sync__user">已登录：<strong id="j-ne-nickname">—</strong></p>
+                    <p class="ne-sync__hint">登录态保存在本机。同步不会覆盖左侧「喜欢」列表。</p>
+                    <div class="ne-sync__actions">
+                        <button type="button" class="ne-sync__btn" id="j-ne-do-sync">同步歌单</button>
+                        <button type="button" class="ne-sync__btn ne-sync__btn--ghost" id="j-ne-logout">退出登录</button>
+                    </div>
+                    <p id="j-ne-sync-msg" class="ne-sync__status" aria-live="polite"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="site-modal" id="j-modal-qq" hidden aria-hidden="true">
+        <button type="button" class="site-modal__backdrop" data-modal-close aria-label="关闭"></button>
+        <div class="site-modal__panel site-modal__panel--qq" role="dialog" aria-modal="true" aria-labelledby="j-modal-qq-title" tabindex="-1">
+            <header class="site-modal__head">
+                <h2 class="site-modal__title" id="j-modal-qq-title">同步 QQ 音乐</h2>
+                <button type="button" class="site-modal__close" data-modal-close aria-label="关闭">×</button>
+            </header>
+            <div class="site-modal__body">
+                <div id="j-qq-logged-out">
+                    <p class="ne-sync__lead">用 QQ / 微信扫码登录 QQ 音乐，同步「我喜欢」与自建/收藏歌单。播放仍在 RyanMusic。</p>
+                    <div class="ne-sync__qr-wrap">
+                        <img id="j-qq-qr" class="ne-sync__qr" alt="QQ 音乐登录二维码" width="180" height="180">
+                        <p id="j-qq-qr-status" class="ne-sync__status">正在生成二维码…</p>
+                        <button type="button" class="ne-sync__btn ne-sync__btn--ghost" id="j-qq-qr-refresh">刷新二维码</button>
+                    </div>
+                    <details class="ne-sync__cookie">
+                        <summary>扫码不行？改用 Cookie</summary>
+                        <p class="ne-sync__hint">浏览器登录 <code>y.qq.com</code> → 开发者工具 → Network → 任意请求 → 复制请求头里的 Cookie（需含 <code>uin</code> 与 <code>qm_keyst</code>）。Cookie 仅存本机，退出即删除。</p>
+                        <textarea id="j-qq-cookie" class="ne-sync__textarea" rows="4" placeholder="粘贴 Cookie…" spellcheck="false"></textarea>
+                        <button type="button" class="ne-sync__btn" id="j-qq-cookie-save">保存并登录</button>
+                    </details>
+                </div>
+                <div id="j-qq-logged-in" hidden>
+                    <p class="ne-sync__user">已登录：<strong id="j-qq-nickname">—</strong></p>
+                    <p class="ne-sync__hint">登录态保存在本机。同步不会覆盖左侧「喜欢」列表。</p>
+                    <div class="ne-sync__actions">
+                        <button type="button" class="ne-sync__btn" id="j-qq-do-sync">同步歌单</button>
+                        <button type="button" class="ne-sync__btn ne-sync__btn--ghost" id="j-qq-logout">退出登录</button>
+                    </div>
+                    <p id="j-qq-sync-msg" class="ne-sync__status" aria-live="polite"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div
         id="j-onboarding"
         class="onboarding"
@@ -243,6 +313,10 @@ if (!defined('MC_CORE')) {
             <aside id="j-library" class="local-library glass-panel" aria-label="我的音乐">
                 <div class="local-library__head">
                     <h2 class="local-library__title">我的音乐</h2>
+                    <div class="local-library__sync-group">
+                        <button type="button" class="local-library__sync" id="j-netease-sync-btn" data-modal="netease" title="同步网易云歌单">同步网易云</button>
+                        <button type="button" class="local-library__sync" id="j-qq-sync-btn" data-modal="qq" title="同步 QQ 音乐歌单">同步QQ</button>
+                    </div>
                 </div>
                 <div class="local-library__channels" role="tablist" aria-label="音源渠道">
                     <button type="button" class="local-library__chip is-active" data-channel="all">全部</button>
@@ -253,6 +327,12 @@ if (!defined('MC_CORE')) {
                     <button type="button" class="local-library__tab is-active" data-tab="liked">喜欢</button>
                     <button type="button" class="local-library__tab" data-tab="recent">最近</button>
                     <button type="button" class="local-library__tab" data-tab="playlist">播放列表</button>
+                    <button type="button" class="local-library__tab" data-tab="cloud">网易云</button>
+                    <button type="button" class="local-library__tab" data-tab="qqcloud">QQ</button>
+                </div>
+                <div class="local-library__cloud-bar" id="j-cloud-bar" hidden>
+                    <button type="button" class="local-library__cloud-back" id="j-cloud-back">← 返回歌单</button>
+                    <span class="local-library__cloud-title" id="j-cloud-title"></span>
                 </div>
                 <div class="local-library__scroll">
                     <ul id="j-library-list" class="local-library__list"></ul>

@@ -2328,6 +2328,9 @@ function mc_api_handle_request()
     }
 }
 
+require_once __DIR__ . '/netease_account.php';
+require_once __DIR__ . '/qq_account.php';
+
 // Server
 function server($key)
 {

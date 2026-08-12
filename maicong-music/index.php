@@ -13,7 +13,7 @@
 define('MC_CORE', true);
 
 // 定义版本
-define('MC_VERSION', '1.8.46');
+define('MC_VERSION', '1.8.48');
 
 // 核心文件目录
 define('MC_CORE_DIR', __DIR__ . '/core');
@@ -101,6 +101,14 @@ $music_type_list = array(
 );
 
 if (server('HTTP_X_REQUESTED_WITH') === 'XMLHttpRequest') {
+    $music_action = trim((string) post('action'));
+    if ($music_action !== '' && strpos($music_action, 'netease_') === 0) {
+        mc_netease_account_handle($music_action);
+    }
+    if ($music_action !== '' && strpos($music_action, 'qq_') === 0) {
+        mc_qq_account_handle($music_action);
+    }
+
     $music_input          = trim(post('input'));
     $music_filter         = post('filter');
     $music_type           = post('type');
