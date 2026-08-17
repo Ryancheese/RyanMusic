@@ -17,6 +17,8 @@ function normalizeTrack(track: Track): Track {
     url: resolveMediaUrl(track.url),
     pic: resolveMediaUrl(track.pic),
     lrc: track.lrc || '',
+    yrc: track.yrc || '',
+    tlyric: track.tlyric || '',
   };
 }
 

@@ -69,9 +69,10 @@ App / ThemePark / VisPlayground / OBS source
 
 ### Lyrics pipeline
 
-Visualizer 消费已解析的 `LyricData` / `Line` / `Word`，不负责解析 `.lrc`、`.vtt`、`.yrc` 或 `.qrc`。
+Visualizer 消费已解析的 `LyricData` / `Line` / `Word`，不负责从网络拉歌词。
 
-- `src/utils/lyrics/parserCore.ts`：解析真源
+- `src/utils/lyrics/parserCore.ts`：Folia 同源解析（YRC / QRC / KRC / enhanced LRC / LRC）
+- `src/lib/lyrics.ts`：把歌曲的 `yrc` / `lrc` / `tlyric` 转成 visualizer 时间轴
 - `src/utils/lyrics/renderHints.ts`：`getLineRenderHints`、`getLineRenderEndTime`、短句/快速 reveal
 - `src/utils/lyrics/cjkSemanticLayout.ts`：CJK semantic grouping、sticky punctuation、display units
 - `src/utils/lyrics/graphemeTiming.ts`：逐 grapheme timing

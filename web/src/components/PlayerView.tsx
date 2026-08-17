@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useMotionValueEvent, type MotionValue } from 'framer-motion';
+import type { MotionValue } from 'framer-motion';
 import { ListMusic, Palette } from 'lucide-react';
-import type { ThemeTokens, Track, VisualizerMode } from '../types';
-import { findLatestActiveLineIndex, lrcToVisualizerLines } from '../lib/lyrics';
-import { createAudioBands, toFoliaTheme } from '../lib/visualizer';
+import type { AudioBands, ThemeTokens, Track, VisualizerMode } from '../types';
+import { findLatestActiveLineIndex, trackToVisualizerLines } from '../lib/lyrics';
+import { prefersLightweightVisualizer } from '../lib/media';
+import { toFoliaTheme } from '../lib/visualizer';
 import VisualizerRenderer from './visualizer/VisualizerRenderer';
 import LyricsStylePicker from './LyricsStylePicker';
 
@@ -17,6 +18,11 @@ interface PlayerViewProps {
   visualizerMode: VisualizerMode;
   onVisualizerModeChange: (mode: VisualizerMode) => void;
   audioPower: MotionValue<number>;
+  audioBands: AudioBands;
+  paused?: boolean;
+  isPanelOpen?: boolean;
+  styleOpen: boolean;
+  onStyleOpenChange: (open: boolean) => void;
   onToggleChrome: () => void;
   onOpenPanel?: () => void;
 }
@@ -31,22 +37,18 @@ const PlayerView: React.FC<PlayerViewProps> = ({
   visualizerMode,
   onVisualizerModeChange,
   audioPower,
+  audioBands,
+  paused = false,
+  isPanelOpen = false,
+  styleOpen,
+  onStyleOpenChange,
   onToggleChrome,
   onOpenPanel,
 }) => {
-  const lines = useMemo(() => lrcToVisualizerLines(track?.lrc), [track?.lrc]);
-  const audioBands = useMemo(() => createAudioBands(), []);
+  const lines = useMemo(() => trackToVisualizerLines(track), [track]);
   const foliaTheme = useMemo(() => toFoliaTheme(theme, accent), [accent, theme]);
+  const lightweight = useMemo(() => prefersLightweightVisualizer(), []);
   const [lineIndex, setLineIndex] = useState(-1);
-  const [styleOpen, setStyleOpen] = useState(false);
-
-  useMotionValueEvent(audioPower, 'change', (power) => {
-    audioBands.bass.set(power);
-    audioBands.lowMid.set(power * 0.85);
-    audioBands.mid.set(power * 0.7);
-    audioBands.vocal.set(power * 0.8);
-    audioBands.treble.set(power * 0.6);
-  });
 
   useEffect(() => {
     let frame = 0;
@@ -76,9 +78,16 @@ const PlayerView: React.FC<PlayerViewProps> = ({
           songArtist={track.author}
           coverUrl={track.pic}
           seed={track.songid}
-          paused={false}
+          paused={paused}
+          isPanelOpen={isPanelOpen}
           isPlayerChromeHidden={chromeHidden}
-          background={{ mode: 'common', common: { useCoverColorBg: true } }}
+          background={{
+            mode: 'common',
+            common: {
+              useCoverColorBg: true,
+              disableGeometricBackground: lightweight,
+            },
+          }}
         />
       ) : (
         <div className="flex h-full items-center justify-center text-sm opacity-40">
@@ -90,13 +99,13 @@ const PlayerView: React.FC<PlayerViewProps> = ({
         <>
           <button
             type="button"
-            className={`absolute left-4 z-40 rounded-full px-3 py-2 text-xs backdrop-blur-xl md:left-6 ${
+            className={`absolute left-4 z-40 rounded-full px-3 py-2 text-xs backdrop-blur-md md:left-6 ${
               isDaylight ? 'bg-white/70' : 'bg-black/40'
             }`}
             style={{ top: 'max(1rem, calc(var(--safe-top) + 0.75rem))' }}
             onClick={(event) => {
               event.stopPropagation();
-              setStyleOpen(true);
+              onStyleOpenChange(true);
             }}
           >
             <span className="flex items-center gap-1.5">
@@ -107,7 +116,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
           {onOpenPanel && (
             <button
               type="button"
-              className={`absolute right-4 z-40 rounded-full p-2.5 backdrop-blur-xl md:hidden ${
+              className={`absolute right-4 z-40 rounded-full p-2.5 backdrop-blur-md md:hidden ${
                 isDaylight ? 'bg-white/70' : 'bg-black/40'
               }`}
               style={{ top: 'max(1rem, calc(var(--safe-top) + 0.75rem))' }}
@@ -127,10 +136,10 @@ const PlayerView: React.FC<PlayerViewProps> = ({
         open={styleOpen}
         mode={visualizerMode}
         isDaylight={isDaylight}
-        onClose={() => setStyleOpen(false)}
+        onClose={() => onStyleOpenChange(false)}
         onChange={(mode) => {
           onVisualizerModeChange(mode);
-          setStyleOpen(false);
+          onStyleOpenChange(false);
         }}
       />
     </div>

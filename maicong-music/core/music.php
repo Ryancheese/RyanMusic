@@ -853,7 +853,11 @@ function mc_song_urls($value, $type = 'query', $site = 'netease', $page = 1)
                 'url'       => 'http://music.163.com/api/song/lyric',
                 'params'    => [
                   'id' => $songid,
-                  'lv' => 1
+                  'lv' => -1,
+                  'tv' => -1,
+                  'rv' => -1,
+                  'kv' => -1,
+                  'yv' => -1
                 ]
             ])
         ],
@@ -1286,6 +1290,7 @@ function mc_get_song_by_id($songid, $site = 'netease', $multi = false)
                         'title'  => $value['title'],
                         'author' => $radio_author,
                         'lrc'    => str_decode($radio_lrc['lyric'] ?? ''),
+                        'tlyric' => str_decode($radio_lrc['trans'] ?? ''),
                         'url'    => '',
                         'pic'    => $radio_pic,
                     ]);
@@ -1522,7 +1527,9 @@ function mc_get_song_by_id($songid, $site = 'netease', $multi = false)
                             'songid' => $radio_song_id,
                             'title'  => $value['name'],
                             'author' => $radio_author,
-                            'lrc'    => !empty($radio_lrc['lrc']) ? $radio_lrc['lrc']['lyric'] : '',
+                            'lrc'    => mc_netease_lyric_text($radio_lrc, 'lrc'),
+                            'yrc'    => mc_netease_lyric_text($radio_lrc, 'yrc'),
+                            'tlyric' => mc_netease_lyric_text($radio_lrc, 'tlyric'),
                             'url'    => '',
                             'pic'    => $radio_pic
                         ]);
@@ -1634,6 +1641,35 @@ function decode_xiami_location($location)
     $url          = urldecode($url);
     $url          = str_replace('^', '0', $url);
     return $url;
+}
+
+function mc_netease_lyric_text($payload, $field)
+{
+    if (!is_array($payload)) {
+        return '';
+    }
+    if ($field === 'yrc') {
+        if (!empty($payload['yrc']['lyric'])) {
+            return $payload['yrc']['lyric'];
+        }
+        if (!empty($payload['lrc']['yrc']['lyric'])) {
+            return $payload['lrc']['yrc']['lyric'];
+        }
+        return '';
+    }
+    if ($field === 'tlyric') {
+        if (!empty($payload['yrc']['lyric']) && !empty($payload['ytlrc']['lyric'])) {
+            return $payload['ytlrc']['lyric'];
+        }
+        if (!empty($payload['lrc']['ytlrc']['lyric'])) {
+            return $payload['lrc']['ytlrc']['lyric'];
+        }
+        if (!empty($payload['tlyric']['lyric'])) {
+            return $payload['tlyric']['lyric'];
+        }
+        return '';
+    }
+    return !empty($payload['lrc']['lyric']) ? $payload['lrc']['lyric'] : '';
 }
 
 // 加密网易云音乐 api 参数

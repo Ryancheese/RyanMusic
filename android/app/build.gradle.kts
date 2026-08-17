@@ -11,8 +11,8 @@ android {
         applicationId = "cn.ryanmusic.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1853
-        versionName = "1.8.53"
+        versionCode = 1854
+        versionName = "1.8.54"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }

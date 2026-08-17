@@ -16,6 +16,8 @@ export interface Track {
   title: string;
   author: string;
   lrc: string;
+  yrc?: string;
+  tlyric?: string;
   url: string;
   pic: string;
   link?: string;

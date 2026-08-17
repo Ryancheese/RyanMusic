@@ -28,14 +28,14 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
 
   return (
     <div
-      className={`absolute inset-0 z-50 flex ${isMobile ? 'items-end' : 'justify-end'}`}
+      className={`absolute inset-0 z-50 flex ${isMobile ? 'items-end' : 'items-start justify-start'}`}
       onClick={onClose}
     >
       <aside
-        className={`flex flex-col overflow-hidden border shadow-2xl backdrop-blur-3xl ${panel} ${
+        className={`flex flex-col overflow-hidden border shadow-2xl backdrop-blur-xl ${panel} ${
           isMobile
             ? 'max-h-[min(70dvh,100%)] w-full rounded-t-3xl'
-            : 'm-4 h-[calc(100%-2rem)] w-[min(380px,100vw-2rem)] rounded-3xl'
+            : 'ml-4 mt-[max(4.5rem,calc(var(--safe-top)+3.75rem))] h-auto max-h-[min(72vh,36rem)] w-[min(360px,calc(100vw-2rem))] rounded-3xl'
         }`}
         style={isMobile ? { paddingBottom: 'var(--safe-bottom)' } : undefined}
         onClick={(event) => event.stopPropagation()}

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { AnimatePresence, motion, MotionValue, useSpring, useTransform } from 'framer-motion';
 import * as LucideIcons from 'lucide-react';
 import { AudioBands, Theme } from '../../../../types';
+import { prefersLightweightVisualizer } from '../../../../lib/media';
 
 // src/components/visualizer/backgrounds/common/GeometricBackground.tsx
 
@@ -305,7 +306,7 @@ const GeometricLayer: React.FC<GeometricBackgroundProps> = ({
     const availableIcons = theme.lyricsIcons || [];
 
     let iconCount = 0;
-    return Array.from({ length: 15 }).map((_, index) => {
+    return Array.from({ length: prefersLightweightVisualizer() ? 6 : 15 }).map((_, index) => {
       const wantIcon = availableIcons.length > 0 && Math.random() > 0.7;
       const useIcon = wantIcon && iconCount < 6;
       if (useIcon) {
@@ -332,7 +333,7 @@ const GeometricLayer: React.FC<GeometricBackgroundProps> = ({
   }, [theme.lyricsIcons, seed]);
 
   const particles = useMemo<BackgroundParticle[]>(() => (
-    Array.from({ length: 20 }).map((_, index) => ({
+  Array.from({ length: prefersLightweightVisualizer() ? 8 : 20 }).map((_, index) => ({
       id: index,
       size: Math.random() * 4 + 1,
       left: Math.random() * 100,

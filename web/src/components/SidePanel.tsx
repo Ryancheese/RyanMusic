@@ -61,7 +61,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
             animate={isMobile ? { opacity: 1, y: 0 } : { opacity: 1, x: 0 }}
             exit={isMobile ? { opacity: 1, y: '100%' } : { opacity: 0, x: 24 }}
             transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-            className={`absolute z-40 flex flex-col overflow-hidden border shadow-2xl backdrop-blur-3xl theme-glass-panel ${
+            className={`absolute z-40 flex flex-col overflow-hidden border shadow-2xl backdrop-blur-xl theme-glass-panel ${
               isMobile
                 ? 'inset-x-0 bottom-0 h-[min(72dvh,calc(100%-4rem))] rounded-t-3xl'
                 : 'top-6 right-4 w-[min(360px,calc(100vw-2rem))] rounded-3xl'

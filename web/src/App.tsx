@@ -3,8 +3,8 @@ import { useMotionValue } from 'framer-motion';
 import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type Track, type VisualizerMode } from './types';
 import { buildDownloadUrl, canNativeSave, nativeSave, searchMusic } from './api';
 import { extractAccentFromImage } from './lib/color';
-import { isMobileViewport } from './lib/media';
-import { readVisualizerMode, writeVisualizerMode } from './lib/visualizer';
+import { isMobileViewport, isWindowsApp } from './lib/media';
+import { createAudioBands, pulseAudioBands, readVisualizerMode, writeVisualizerMode } from './lib/visualizer';
 import { useLibraryStore } from './store/libraryStore';
 import { usePlayerStore } from './store/playerStore';
 import FloatingPlayerControls from './components/FloatingPlayerControls';
@@ -23,6 +23,7 @@ const App: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const currentTime = useMotionValue(0);
   const audioPower = useMotionValue(0);
+  const audioBands = useMemo(() => createAudioBands(), []);
   const [view, setView] = useState<AppView>('home');
   const [isDaylight, setIsDaylight] = useState(readTheme);
   const [visualizerMode, setVisualizerMode] = useState<VisualizerMode>(readVisualizerMode);
@@ -35,6 +36,7 @@ const App: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [panelOpen, setPanelOpen] = useState(() => !isMobileViewport());
+  const [styleOpen, setStyleOpen] = useState(false);
   const [chromeHidden, setChromeHidden] = useState(false);
   const [accent, setAccent] = useState<string | null>(null);
   const lastQueryRef = useRef('');
@@ -175,33 +177,58 @@ const App: React.FC = () => {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    let context: AudioContext;
-    let analyser: AnalyserNode;
+    let context: AudioContext | null = null;
+    let analyser: AnalyserNode | null = null;
     try {
       context = new AudioContext();
       const source = context.createMediaElementSource(audio);
       analyser = context.createAnalyser();
-      analyser.fftSize = 256;
+      analyser.fftSize = isWindowsApp() ? 128 : 256;
       source.connect(analyser);
       analyser.connect(context.destination);
     } catch {
-      return;
+      analyser = null;
     }
-    const data = new Uint8Array(analyser.frequencyBinCount);
+
     let frame = 0;
-    const tick = () => {
-      analyser.getByteFrequencyData(data);
-      let sum = 0;
-      for (let i = 0; i < data.length; i += 1) sum += data[i];
-      audioPower.set(sum / data.length / 255);
-      if (context.state === 'suspended' && !audio.paused) {
+    let lastShown = -1;
+    const syncClock = () => {
+      const next = audio.currentTime;
+      if (Math.abs(next - lastShown) >= 0.008) {
+        currentTime.set(next);
+        lastShown = next;
+      }
+      pulseAudioBands(audioBands, analyser, !audio.paused);
+      audioPower.set((
+        audioBands.bass.get()
+        + audioBands.lowMid.get()
+        + audioBands.mid.get()
+        + audioBands.vocal.get()
+        + audioBands.treble.get()
+      ) / 5);
+      if (context && context.state === 'suspended' && !audio.paused) {
         void context.resume();
       }
-      frame = requestAnimationFrame(tick);
+      frame = requestAnimationFrame(syncClock);
     };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [audioPower]);
+    frame = requestAnimationFrame(syncClock);
+
+    const snapClock = () => {
+      lastShown = audio.currentTime;
+      currentTime.set(lastShown);
+    };
+    audio.addEventListener('seeking', snapClock);
+    audio.addEventListener('seeked', snapClock);
+    audio.addEventListener('timeupdate', snapClock);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      audio.removeEventListener('seeking', snapClock);
+      audio.removeEventListener('seeked', snapClock);
+      audio.removeEventListener('timeupdate', snapClock);
+      void context?.close();
+    };
+  }, [audioBands, audioPower, currentTime]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -316,7 +343,6 @@ const App: React.FC = () => {
         preload="metadata"
         onPlay={() => setStatus('playing')}
         onPause={() => setStatus('paused')}
-        onTimeUpdate={(event) => currentTime.set(event.currentTarget.currentTime)}
         onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
         onEnded={() => playNext(true)}
       />
@@ -369,10 +395,23 @@ const App: React.FC = () => {
             writeVisualizerMode(mode);
           }}
           audioPower={audioPower}
-          onOpenPanel={() => setPanelOpen(true)}
+          audioBands={audioBands}
+          paused={status !== 'playing'}
+          isPanelOpen={panelOpen}
+          styleOpen={styleOpen}
+          onStyleOpenChange={(open) => {
+            setStyleOpen(open);
+            if (open) setPanelOpen(false);
+            else if (!isMobileViewport() && !chromeHidden) setPanelOpen(true);
+          }}
+          onOpenPanel={() => {
+            setStyleOpen(false);
+            setPanelOpen(true);
+          }}
           onToggleChrome={() => {
             setChromeHidden((hidden) => {
               const nextHidden = !hidden;
+              setStyleOpen(false);
               if (!isMobileViewport()) setPanelOpen(!nextHidden);
               else if (nextHidden) setPanelOpen(false);
               return nextHidden;
