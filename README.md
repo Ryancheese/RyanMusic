@@ -1,15 +1,16 @@
 # RyanMusic
 
-基于 [maicong/music](https://github.com/maicong/music) 二次开发的音乐搜索与播放站点（网易云、QQ）。
+基于 [maicong/music](https://github.com/maicong/music) 二次开发的音乐搜索与播放站点（网易云、QQ）。界面采用 Folia 风格的沉浸式歌词播放器，搜索与取流仍由 PHP 后端完成。
 
 ## 仓库结构
 
 | 路径 | 说明 |
 |------|------|
+| `web/` | Folia 风格 React 前端（Vite） |
 | `maicong-music/index.php` | 后端入口（搜索 API、下载代理） |
 | `maicong-music/core/music.php` | 平台聚合与 curl 逻辑 |
-| `maicong-music/template/` | 前端页面模板 |
-| `maicong-music/static/` | 前端 CSS / JS / 图片 |
+| `maicong-music/template/` | 页面模板（SPA 入口 + 经典回退） |
+| `maicong-music/static/` | 前端构建产物与静态资源 |
 | `maicong-music/docker-compose.yml` | Docker 部署 |
 | `macos/` | macOS 原生窗口 App（WKWebView）与一键安装脚本 |
 | `windows/` | Windows 原生窗口 App（WebView2）与一键安装脚本 |
@@ -113,6 +114,14 @@ docker compose up -d
 ```
 
 浏览器访问：**http://localhost:8088**
+
+前端为 Folia 风格的全屏歌词播放器：首页 3D 封面轨、搜索覆层、底部玻璃浮控。播放仍走 PHP 签名代理流（网易云 / QQ）。
+
+修改 `web/` 后需重新构建：
+
+```bash
+cd web && npm install && npm run build
+```
 
 ## 同步代码到容器
 
