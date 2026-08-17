@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Theme } from '../../../../types';
+import { prefersLightweightVisualizer } from '../../../../lib/media';
 
 // src/components/visualizer/backgrounds/common/FluidBackground.tsx
 
@@ -169,12 +170,13 @@ const buildDownscaledCover = (coverUrl: string, maxSize: number): Promise<string
 
 const FluidBackground: React.FC<FluidBackgroundProps> = memo(({ coverUrl, theme }) => {
     const isIOSSafari = useMemo(detectIOSSafari, []);
+    const useCanvasBlur = useMemo(() => isIOSSafari || prefersLightweightVisualizer(), [isIOSSafari]);
     const [softFocusCoverUrl, setSoftFocusCoverUrl] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
 
-        if (!isIOSSafari || !coverUrl) {
+        if (!useCanvasBlur || !coverUrl) {
             setSoftFocusCoverUrl(null);
             return () => {
                 cancelled = true;
@@ -192,7 +194,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = memo(({ coverUrl, theme 
         return () => {
             cancelled = true;
         };
-    }, [coverUrl, isIOSSafari]);
+    }, [coverUrl, useCanvasBlur]);
 
     // Non-iOS cross-fade layers. The blur SOURCE is a downscaled copy of the cover (see
     // COVER_BLUR_SOURCE_MAX / buildDownscaledCover): building it off-screen first, then stacking the small
@@ -204,7 +206,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = memo(({ coverUrl, theme 
     const [coverLayers, setCoverLayers] = useState<Array<{ url: string; sourceCover: string; key: number }>>([]);
     const [readyCoverKeys, setReadyCoverKeys] = useState<Set<number>>(() => new Set());
     useEffect(() => {
-        if (isIOSSafari) return undefined;
+        if (useCanvasBlur) return undefined;
         if (!coverUrl) { setCoverLayers([]); return undefined; }
         let cancelled = false;
         void buildDownscaledCover(coverUrl, COVER_BLUR_SOURCE_MAX).then((smallUrl) => {
@@ -219,15 +221,15 @@ const FluidBackground: React.FC<FluidBackgroundProps> = memo(({ coverUrl, theme 
             });
         });
         return () => { cancelled = true; };
-    }, [coverUrl, isIOSSafari]);
+    }, [coverUrl, useCanvasBlur]);
     const markCoverReady = useCallback((key: number) => {
         setReadyCoverKeys((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
     }, []);
 
-    const iosDisplayCoverUrl = isIOSSafari ? (softFocusCoverUrl ?? coverUrl ?? null) : null;
-    const isSoftFocusReady = isIOSSafari && Boolean(softFocusCoverUrl);
+    const iosDisplayCoverUrl = useCanvasBlur ? (softFocusCoverUrl ?? coverUrl ?? null) : null;
+    const isSoftFocusReady = useCanvasBlur && Boolean(softFocusCoverUrl);
     const coverLayerStyle = useMemo<React.CSSProperties>(() => {
-        if (isIOSSafari) {
+        if (useCanvasBlur) {
             return {
                 transform: `scale(${isSoftFocusReady ? 1.28 : 1.2}) translateZ(0)`,
                 opacity: isSoftFocusReady ? 0.94 : 0.3,
@@ -245,7 +247,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = memo(({ coverUrl, theme 
             backfaceVisibility: 'hidden',
             WebkitBackfaceVisibility: 'hidden',
         };
-    }, [isIOSSafari, isSoftFocusReady]);
+    }, [useCanvasBlur, isSoftFocusReady]);
 
     return (
         <div
@@ -259,7 +261,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = memo(({ coverUrl, theme 
             {/* Background Image / Fallback */}
             {coverUrl ? (
                 <>
-                    {isIOSSafari ? (
+                    {useCanvasBlur ? (
                         <img
                             src={iosDisplayCoverUrl ?? coverUrl}
                             alt=""
@@ -328,7 +330,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = memo(({ coverUrl, theme 
                         })
                     )}
 
-                    {isIOSSafari && (
+                    {useCanvasBlur && (
                         <>
                             {!isSoftFocusReady && (
                                 <img
@@ -381,8 +383,8 @@ const FluidBackground: React.FC<FluidBackgroundProps> = memo(({ coverUrl, theme 
                 className="absolute inset-0 w-full h-full"
                 style={{
                     background: `linear-gradient(to bottom right, ${theme.primaryColor}, transparent, ${theme.secondaryColor})`,
-                    opacity: isIOSSafari ? 0.2 : 0.4,
-                    mixBlendMode: isIOSSafari ? 'normal' : 'overlay',
+                    opacity: useCanvasBlur ? 0.2 : 0.4,
+                    mixBlendMode: useCanvasBlur ? 'normal' : 'overlay',
                 }}
             />
         </div>

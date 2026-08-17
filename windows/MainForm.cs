@@ -295,8 +295,19 @@ public sealed class MainForm : Form
             StartPhp(php, webRoot, _port);
 
             // Program Files 下默认 UserData 无写权限 → E_ACCESSDENIED
+            var options = new CoreWebView2EnvironmentOptions
+            {
+                AdditionalBrowserArguments = string.Join(" ",
+                    "--enable-gpu",
+                    "--enable-gpu-rasterization",
+                    "--enable-zero-copy",
+                    "--ignore-gpu-blocklist",
+                    "--disable-features=CalculateNativeWinOcclusion")
+            };
             var env = await CoreWebView2Environment.CreateAsync(
-                userDataFolder: ResolveDataDir("WebView2"));
+                browserExecutableFolder: null,
+                userDataFolder: ResolveDataDir("WebView2"),
+                options);
             await _webView.EnsureCoreWebView2Async(env);
             _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
             _webView.CoreWebView2.Settings.IsStatusBarEnabled = false;

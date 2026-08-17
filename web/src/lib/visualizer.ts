@@ -37,6 +37,8 @@ export function writeVisualizerMode(mode: VisualizerMode) {
   localStorage.setItem(VISUALIZER_MODE_KEY, mode);
 }
 
+let analyserBuffer: Uint8Array | null = null;
+
 export function pulseAudioBands(bands: AudioBands, analyser: AnalyserNode | null, playing: boolean) {
   if (!analyser || !playing) {
     const decay = (value: MotionValue<number>) => value.set(value.get() * 0.92);
@@ -47,8 +49,11 @@ export function pulseAudioBands(bands: AudioBands, analyser: AnalyserNode | null
     decay(bands.treble);
     return;
   }
-  const data = new Uint8Array(analyser.frequencyBinCount);
-  analyser.getByteFrequencyData(data);
+  if (!analyserBuffer || analyserBuffer.length !== analyser.frequencyBinCount) {
+    analyserBuffer = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
+  }
+  analyser.getByteFrequencyData(analyserBuffer as never);
+  const data = analyserBuffer;
   const avg = (from: number, to: number) => {
     let sum = 0;
     const end = Math.min(to, data.length);

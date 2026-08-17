@@ -29,3 +29,15 @@ export function useIsMobile() {
 export function useCoarsePointer() {
   return useMediaQuery('(pointer: coarse)');
 }
+
+export function isWindowsApp() {
+  return typeof document !== 'undefined' && document.documentElement.classList.contains('platform-windows-app');
+}
+
+export function prefersLightweightVisualizer() {
+  if (typeof window === 'undefined') return false;
+  if (isWindowsApp()) return true;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return true;
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  return typeof memory === 'number' && memory > 0 && memory <= 4;
+}

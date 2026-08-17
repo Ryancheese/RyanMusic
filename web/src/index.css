@@ -81,6 +81,10 @@ a {
   font-family: 'Folia Noto Serif SC', 'Noto Serif SC', 'Songti SC', serif;
 }
 
+html.platform-windows-app .theme-glass-panel {
+  backdrop-filter: blur(12px);
+}
+
 .platform-macos-app .titlebar-drag {
   -webkit-app-region: drag;
 }
