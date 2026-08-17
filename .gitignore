@@ -12,3 +12,14 @@ macos/AppIcon.iconset/
 windows/bin/
 windows/obj/
 windows/*.user
+
+# Android
+android/.gradle/
+android/local.properties
+android/**/build/
+android/app/src/main/assets/maicong-music/
+android/app/src/main/jniLibs/**/libphp.so
+android/.idea/
+*.apk
+*.aab
+*.iml

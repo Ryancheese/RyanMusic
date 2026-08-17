@@ -14,6 +14,7 @@
 | `maicong-music/docker-compose.yml` | Docker 部署 |
 | `macos/` | macOS 原生窗口 App（WKWebView）与一键安装脚本 |
 | `windows/` | Windows 原生窗口 App（WebView2）与一键安装脚本 |
+| `android/` | Android 独立 APK（内嵌 PHP + WebView） |
 
 ## 下载安装包（推荐发给朋友）
 
@@ -25,6 +26,7 @@
 |------|------|------|
 | Windows | `RyanMusic-Setup-x64.exe` | 双击按安装向导完成（已内嵌 PHP；需 WebView2） |
 | macOS Apple Silicon | `RyanMusic-mac-arm64.dmg` | 拖到「应用程序」；首次请右键 → 打开 |
+| Android | `RyanMusic-android.apk` | 允许「安装未知应用」后安装（arm64） |
 
 > Intel Mac 暂请使用下方「一键安装」脚本编译安装。
 
@@ -42,6 +44,14 @@ powershell -ExecutionPolicy Bypass -File windows\build-app.ps1 -BundlePhp
 # macOS（需本机已 brew install php）
 ./macos/build-app.sh --bundle-php --dmg
 # 产物：dist/RyanMusic-mac-arm64.dmg 或 dist/RyanMusic-mac-x64.dmg
+```
+
+```bash
+# Android（需 Android SDK / JDK 17）
+cd web && npm ci && npm run build
+bash android/scripts/fetch-php.sh
+cd android && ./gradlew assembleRelease
+# 产物：android/app/build/outputs/apk/release/app-release.apk
 ```
 
 ## macOS 一键安装（从源码编译）
