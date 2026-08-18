@@ -220,7 +220,9 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
             ? 'max-h-[min(78dvh,100%)] w-full rounded-t-3xl'
             : 'ml-4 mt-[max(4.5rem,calc(var(--safe-top)+3.75rem))] h-auto max-h-[min(78vh,40rem)] w-[min(380px,calc(100vw-2rem))] rounded-3xl'
         }`}
-        style={isMobile ? { paddingBottom: 'var(--safe-bottom)' } : undefined}
+        style={isMobile
+          ? { paddingBottom: 'max(var(--safe-bottom), var(--player-dock-safe))' }
+          : undefined}
         onClick={(event) => event.stopPropagation()}
       >
         {isMobile && (

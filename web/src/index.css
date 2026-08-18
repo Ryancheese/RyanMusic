@@ -62,6 +62,25 @@ html.platform-macos-app .app-shell {
   --scrollbar-thumb: #3f3f46;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --player-dock-safe: 1.5rem;
+}
+
+html.player-dock-visible {
+  --player-dock-safe: calc(5.75rem + var(--safe-bottom));
+}
+
+html.player-dock-visible.player-dock-expanded {
+  --player-dock-safe: calc(8.5rem + var(--safe-bottom));
+}
+
+@media (max-width: 767px) {
+  html.player-dock-visible {
+    --player-dock-safe: calc(6.25rem + var(--safe-bottom));
+  }
+
+  html.player-dock-visible.player-dock-expanded {
+    --player-dock-safe: calc(9.25rem + var(--safe-bottom));
+  }
 }
 
 @media (max-width: 767px) {

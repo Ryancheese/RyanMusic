@@ -23,7 +23,13 @@ const WhatsNewModal: React.FC<WhatsNewModalProps> = ({
   const panel = isDaylight ? 'bg-white/92 text-black' : 'bg-zinc-900/95 text-white';
 
   return (
-    <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-[85] flex items-center justify-center px-4"
+      style={{
+        paddingTop: 'max(1rem, var(--safe-top))',
+        paddingBottom: 'max(1rem, calc(var(--safe-bottom) + 0.5rem))',
+      }}
+    >
       <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-label="关闭" />
       <div
         className={`relative z-10 w-full max-w-md overflow-hidden rounded-3xl border border-white/10 p-5 shadow-2xl ${panel}`}

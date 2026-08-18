@@ -217,7 +217,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       <div className="titlebar-drag pointer-events-none absolute inset-x-0 top-0 z-20 h-8" />
       <div
         className="relative z-10 px-4 pb-2 md:px-8"
-        style={{ paddingTop: 'max(2.5rem, calc(var(--safe-top) + 0.75rem))' }}
+        style={{ paddingTop: 'max(3rem, calc(var(--safe-top) + 0.85rem))' }}
       >
         <div className="titlebar-no-drag flex flex-col gap-3 md:grid md:grid-cols-3 md:items-center">
           <div className="flex items-center gap-3">

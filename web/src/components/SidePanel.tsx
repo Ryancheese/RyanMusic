@@ -137,7 +137,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
               : 'top-4 right-0 bottom-0 w-[min(380px,calc(100%-1rem))] rounded-l-3xl border-y-0 border-r-0 border-l border-white/10'
         }`}
         style={{
-          ...(isMobile ? { paddingBottom: 'var(--safe-bottom)' } : undefined),
+          ...(isMobile ? { paddingBottom: 'var(--player-dock-safe)' } : undefined),
           backgroundColor: isDaylight
             ? 'color-mix(in srgb, var(--bg-color) 94%, transparent)'
             : 'color-mix(in srgb, var(--bg-color) 90%, transparent)',

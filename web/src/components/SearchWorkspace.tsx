@@ -73,7 +73,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
           style={{
             color: theme.primaryColor,
             backgroundColor: isDaylight ? 'rgb(250, 250, 250)' : 'rgb(9, 9, 11)',
-            paddingTop: 'max(1rem, var(--safe-top))',
+            paddingTop: 'max(1rem, calc(var(--safe-top) + 0.5rem))',
             paddingBottom: 'max(1rem, var(--safe-bottom))',
           }}
         >
@@ -158,7 +158,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
             ) : tracks.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm opacity-50">输入关键词开始搜索</div>
             ) : (
-              <div className="pb-[max(6rem,calc(var(--safe-bottom)+4rem))]">
+              <div className="pb-[max(7.5rem,var(--player-dock-safe))]">
                 {tracks.map((track, index) => (
                   <div key={`${track.type}-${track.songid}-${index}`} className="app-scroll-item px-2 py-1.5">
                     <div

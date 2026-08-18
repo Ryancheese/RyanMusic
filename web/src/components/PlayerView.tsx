@@ -65,7 +65,11 @@ const PlayerView: React.FC<PlayerViewProps> = ({
   }, [currentTime, lines]);
 
   return (
-    <div className="absolute inset-0 z-20 h-full w-full overflow-hidden" onClick={onToggleChrome}>
+    <div
+      className="absolute inset-x-0 top-0 z-20 w-full overflow-hidden"
+      style={{ bottom: chromeHidden ? 0 : 'var(--player-dock-safe)' }}
+      onClick={onToggleChrome}
+    >
       {track ? (
         <div className="absolute inset-0 h-full w-full">
           <VisualizerRenderer

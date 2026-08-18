@@ -367,7 +367,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         key="library-list"
         ref={containerRef}
         className="app-scroll hide-scrollbar relative min-h-0 w-full flex-1 overflow-y-auto"
-        style={{ paddingBottom: hasFloatingPlayer ? '5.5rem' : '1.5rem' }}
+        style={{ paddingBottom: hasFloatingPlayer ? 'var(--player-dock-safe)' : '1.5rem' }}
       >
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-2 px-4 pb-4 md:px-8">
           {showSkeleton
@@ -438,7 +438,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       key={`library-grid-${layoutMode}`}
       ref={containerRef}
       className="relative min-h-0 w-full flex-1 cursor-grab overflow-hidden touch-none select-none active:cursor-grabbing"
-      style={{ paddingBottom: hasFloatingPlayer ? '5.5rem' : '1.5rem', contain: 'layout paint' }}
+      style={{ paddingBottom: hasFloatingPlayer ? 'var(--player-dock-safe)' : '1.5rem', contain: 'layout paint' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

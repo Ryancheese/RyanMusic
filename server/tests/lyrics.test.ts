@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { decodeEntities, firstTruthy, neteaseLyricText, nameSearchSourcePage, sliceNameSearchSongids, timedLyricScore } from '../src/util.ts';
+import { decodeEntities, firstTruthy, isBadMediaUrl, isTrialMediaUrl, neteaseLyricText, nameSearchSourcePage, sliceNameSearchSongids, timedLyricScore } from '../src/util.ts';
 
 test('netease lyric payload prefers yrc and word-level translation', () => {
   const payload = {
@@ -48,4 +48,11 @@ test('play URL race returns first usable result', async () => {
   const late = () => new Promise<string>((resolve) => setTimeout(() => resolve('late'), 20));
   assert.equal(await firstTruthy([() => Promise.resolve(null), () => Promise.resolve('fast'), late]), 'fast');
   assert.equal(await firstTruthy([() => Promise.resolve(null), () => Promise.reject(new Error('no'))]), null);
+});
+
+test('trial media urls are rejected', () => {
+  assert.equal(isTrialMediaUrl('https://m801.music.126.net/trial/foo.mp3'), true);
+  assert.equal(isBadMediaUrl('https://m801.music.126.net/freeTrial/foo.mp3'), true);
+  assert.equal(isBadMediaUrl('https://music.163.com/404'), true);
+  assert.equal(isBadMediaUrl('https://m801.music.126.net/full.mp3'), false);
 });

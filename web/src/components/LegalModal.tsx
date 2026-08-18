@@ -29,7 +29,10 @@ const LegalModal: React.FC<LegalModalProps> = ({
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 p-0 md:items-center md:p-6" onClick={onClose}>
       <aside
         className={`flex max-h-[min(88dvh,760px)] w-full max-w-2xl flex-col overflow-hidden border border-white/10 shadow-2xl ${panel} md:rounded-3xl`}
-        style={{ paddingBottom: 'var(--safe-bottom)' }}
+        style={{
+          paddingTop: 'max(1rem, var(--safe-top))',
+          paddingBottom: 'max(1rem, var(--safe-bottom))',
+        }}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4">

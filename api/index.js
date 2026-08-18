@@ -3877,7 +3877,11 @@ function isBadMediaUrl(url) {
   if (!url) return true;
   if (!/^https?:\/\//i.test(url)) return true;
   if (/\/404/i.test(url) || /music\.163\.com\/404/i.test(url)) return true;
-  return false;
+  return isTrialMediaUrl(url);
+}
+function isTrialMediaUrl(url) {
+  if (!url) return true;
+  return /trial|preview|freeTrial|limit=1/i.test(url);
 }
 function httpsNeteaseUrl(url) {
   if (url.startsWith("http://") && /(126\.net|163\.com)/i.test(url)) {
@@ -4094,7 +4098,6 @@ var NeteaseService = class _NeteaseService {
       }
     }
     let url = await this.bootstrapPlayUrl(songid);
-    if (!url) url = await this.metingPlayUrl(songid);
     if (url && !isBadMediaUrl(url) && !/\/404/.test(url)) {
       const safeUrl = httpsNeteaseUrl(url);
       this.cache.setTtl("netease_play_v4", songid, safeUrl, 600);

@@ -675,7 +675,13 @@ const App: React.FC = () => {
         }}
         onPlaying={() => setBuffering(false)}
         onCanPlay={() => setBuffering(false)}
-        onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
+        onDurationChange={(event) => {
+          const next = event.currentTarget.duration || 0;
+          setDuration(next);
+          if (authedPlay && Number.isFinite(next) && next > 1 && next <= 32.5) {
+            setAuthFallback(true);
+          }
+        }}
         onEnded={() => playNext(true)}
         onError={() => {
           setBuffering(false);

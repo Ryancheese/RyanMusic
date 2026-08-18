@@ -135,7 +135,6 @@ export class NeteaseService {
     }
 
     let url = await this.bootstrapPlayUrl(songid);
-    if (!url) url = await this.metingPlayUrl(songid);
     if (url && !isBadMediaUrl(url) && !/\/404/.test(url)) {
       const safeUrl = httpsNeteaseUrl(url);
       this.cache.setTtl('netease_play_v4', songid, safeUrl, 600);

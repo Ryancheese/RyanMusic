@@ -136,7 +136,12 @@ export function isBadMediaUrl(url?: string | null): boolean {
   if (!url) return true;
   if (!/^https?:\/\//i.test(url)) return true;
   if (/\/404/i.test(url) || /music\.163\.com\/404/i.test(url)) return true;
-  return false;
+  return isTrialMediaUrl(url);
+}
+
+export function isTrialMediaUrl(url?: string | null): boolean {
+  if (!url) return true;
+  return /trial|preview|freeTrial|limit=1/i.test(url);
 }
 
 export function httpsNeteaseUrl(url: string): string {

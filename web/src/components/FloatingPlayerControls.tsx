@@ -57,10 +57,13 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const coarsePointer = useCoarsePointer();
   const canAutoExpand = canTogglePlay && duration > 0;
   const showExpanded =
-    isHovered
-    || coarsePointer
-    || buffering
-    || (canAutoExpand && status !== 'playing' && currentView !== 'home');
+    !isHidden
+    && (
+      currentView === 'player'
+      || isHovered
+      || buffering
+      || (canAutoExpand && status !== 'playing' && !coarsePointer)
+    );
   const trackColor = isDaylight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.1)';
   const primaryColor = 'var(--text-primary)';
   const secondaryColor = 'var(--text-secondary)';
@@ -89,6 +92,16 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     if (expandTimeoutRef.current) window.clearTimeout(expandTimeoutRef.current);
     if (collapseTimeoutRef.current) window.clearTimeout(collapseTimeoutRef.current);
   }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const visible = !isHidden && canTogglePlay;
+    root.classList.toggle('player-dock-visible', visible);
+    root.classList.toggle('player-dock-expanded', visible && showExpanded);
+    return () => {
+      root.classList.remove('player-dock-visible', 'player-dock-expanded');
+    };
+  }, [canTogglePlay, isHidden, showExpanded]);
 
   return (
     <motion.div
