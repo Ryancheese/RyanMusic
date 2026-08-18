@@ -1,14 +1,13 @@
 /** 当前应用版本（与 Info.plist / Windows Version / server package 保持一致） */
-export const APP_VERSION = '1.8.62';
+export const APP_VERSION = '1.8.63';
 
 const SEEN_KEY = 'ryanmusic-whats-new-seen';
 
 /** 本版启动后弹窗展示的更新说明 */
-export const WHATS_NEW_NOTES = `• 设置页固定高度，切换分类不再忽高忽矮，小窗口也能自适应滚动
-• Windows 支持应用内下载更新：可见进度条，下载完成后静默覆盖安装并重启
-• 方形歌单改为自适应网格，仅上下滚动；铭牌卡片样式优化
-• 深色模式开关对比度提升
-• 帮助 / 隐私政策等文案更新，去掉无关第三方项目名`;
+export const WHATS_NEW_NOTES = `• 蜂窝铭牌卡片与方形样式对齐
+• 曲目副标题去掉「网易云 / QQ」后缀
+• 设置页固定高度；Windows 应用内更新带进度条并可覆盖安装
+• 方形歌单自适应网格，仅上下滚动`;
 
 export function shouldShowWhatsNew(currentVersion = APP_VERSION): boolean {
   try {

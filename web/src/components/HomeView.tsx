@@ -99,23 +99,25 @@ const HomeView: React.FC<HomeViewProps> = ({
   const showingCloudTracks = Boolean(openPlaylist);
 
   const account = homeTab === 'netease' ? netease : qq;
-  const ownerLabel = account?.nickname?.trim() || (homeTab === 'netease' ? '网易云' : 'QQ');
+  const ownerLabel = account?.nickname?.trim() || '';
 
   const items: AlbumWaterfallItem[] = useMemo(() => {
     if (showingPlaylists) {
       return cloudPlaylists.map((item) => ({
         id: `pl-${item.id}`,
         name: item.name,
-        description: item.subscribed
-          ? `${ownerLabel} · 收藏`
-          : `${ownerLabel}${item.trackCount ? ` · ${item.trackCount} 首` : ''}`,
+        description: ownerLabel
+          ? (item.subscribed
+            ? `${ownerLabel} · 收藏`
+            : `${ownerLabel}${item.trackCount ? ` · ${item.trackCount} 首` : ''}`)
+          : `${item.trackCount || 0} 首${item.subscribed ? ' · 收藏' : ''}`,
         coverUrl: coverImageUrl(item.cover, 400),
       }));
     }
     return cloudTracks.map((item) => ({
       id: `${item.type}-${item.songid}`,
       name: item.title,
-      description: `${item.author} · ${item.type === 'qq' ? 'QQ' : '网易云'}`,
+      description: item.author || '',
       coverUrl: coverRefreshUrl(item.type, item.songid),
     }));
   }, [cloudPlaylists, cloudTracks, ownerLabel, showingPlaylists]);

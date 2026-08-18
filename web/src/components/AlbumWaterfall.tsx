@@ -88,7 +88,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   const isSquare = layoutMode === 'square';
   const isPlaque = layoutMode === 'honeycomb' && cardStyle === 'plaque';
   const layout = layoutForWidth(size.width, isSquare ? 'square' : layoutMode, zoom);
-  const textReserve = isPlaque ? Math.round(layout.card * 0.42) : 0;
+  const textReserve = isPlaque ? Math.round(layout.card * 0.46) : 0;
   const cellHeight = layout.card + textReserve;
   const rowSpacingY = layout.spacingY + textReserve;
   const clipRadius = Math.hypot(size.width, size.height) / 2 + Math.max(layout.card, cellHeight);
@@ -467,7 +467,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                       cardRefs.current[index] = el;
                     }}
                     data-waterfall-index={index}
-                    className={`group absolute top-1/2 left-1/2 overflow-hidden rounded-2xl border-0 outline-none ring-0 ${isPlaque ? 'flex flex-col p-2.5' : ''}`}
+                    className={`group absolute top-1/2 left-1/2 overflow-hidden rounded-2xl border-0 outline-none ring-0 ${isPlaque ? 'flex flex-col p-2.5 transition hover:brightness-110' : ''}`}
                     style={{
                       width: layout.card,
                       height: cellHeight,
@@ -491,20 +491,29 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                   >
                     <div
                       className={`relative z-0 w-full overflow-hidden ${isPlaque ? 'rounded-xl' : ''}`}
-                      style={{ height: isPlaque ? layout.card - 20 : layout.card }}
+                      style={{
+                        height: isPlaque ? layout.card - 20 : layout.card,
+                        backgroundColor: isPlaque
+                          ? (isDaylight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)')
+                          : undefined,
+                      }}
                     >
                       <CoverArt src={item.coverUrl} />
                       {!isPlaque ? (
-                        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pt-8 pb-2.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-3 pt-10 pb-2.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
                           <div className="truncate text-left text-xs font-semibold text-white">{item.name}</div>
                         </div>
                       ) : null}
                     </div>
                     {isPlaque ? (
-                      <div className="min-w-0 px-0.5 pt-2 pb-0.5 text-left" style={{ height: textReserve - 10 }}>
-                        <div className="truncate text-[12px] font-semibold leading-snug tracking-tight">{item.name}</div>
+                      <div className="min-w-0 px-0.5 pt-2.5 pb-0.5 text-left" style={{ height: textReserve - 10 }}>
+                        <div className="truncate text-[13px] font-semibold leading-snug tracking-tight">
+                          {item.name}
+                        </div>
                         {item.description ? (
-                          <div className="mt-0.5 truncate text-[10px] leading-snug opacity-45">{item.description}</div>
+                          <div className="mt-1 truncate text-[11px] leading-snug opacity-45">
+                            {item.description}
+                          </div>
                         ) : null}
                       </div>
                     ) : null}
