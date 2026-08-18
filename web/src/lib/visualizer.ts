@@ -32,7 +32,11 @@ export function toFoliaTheme(theme: ThemeTokens, accent?: string | null): Theme 
 
 export function readVisualizerMode(): VisualizerMode {
   try {
-    return (localStorage.getItem(VISUALIZER_MODE_KEY) as VisualizerMode) || 'classic';
+    const raw = localStorage.getItem(VISUALIZER_MODE_KEY) || 'classic';
+    // 旧模式迁移：墨染/回响 → 散字；IOS → 聚光
+    if (raw === 'moran' || raw === 'echo') return 'classic';
+    if (raw === 'ios') return 'spotlight';
+    return raw as VisualizerMode;
   } catch {
     return 'classic';
   }

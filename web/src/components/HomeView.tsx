@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
-import { ArrowLeft, CircleHelp, Cloud, Hexagon, LayoutGrid, List, Music2, Palette, RefreshCw, Search, SunMoon, UserRound } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ArrowLeft, CircleHelp, Cloud, Hexagon, LayoutGrid, List, Music2, Palette, RefreshCw, Search, Settings, SunMoon, UserRound } from 'lucide-react';
 import { AlbumWaterfall, type AlbumWaterfallItem } from './AlbumWaterfall';
 import ThemeAccentPicker from './ThemeAccentPicker';
-import type { HomeTab, LibraryLayoutMode, ThemeTokens } from '../types';
-import { coverRefreshUrl } from '../api';
+import AppSettingsPanel from './AppSettingsPanel';
+import type { HomeTab, LibraryCardStyle, LibraryLayoutMode, ThemeTokens } from '../types';
+import { coverImageUrl, coverRefreshUrl } from '../api';
 import type { CloudPlaylist } from '../api';
 import type { LibraryEntry } from '../store/libraryStore';
 import type { AccountStatus } from '../api';
@@ -15,6 +16,7 @@ interface HomeViewProps {
   isDaylight: boolean;
   homeTab: HomeTab;
   layoutMode: LibraryLayoutMode;
+  cardStyle: LibraryCardStyle;
   neteasePlaylists: CloudPlaylist[];
   qqPlaylists: CloudPlaylist[];
   neteaseOpen: CloudPlaylist | null;
@@ -53,16 +55,12 @@ const LAYOUT_MODES: { id: LibraryLayoutMode; label: string; icon: React.ReactNod
   { id: 'list', label: '列表', icon: <List size={13} /> },
 ];
 
-function httpsUrl(url?: string) {
-  if (!url) return undefined;
-  return url.replace(/^http:\/\//i, 'https://');
-}
-
 const HomeView: React.FC<HomeViewProps> = ({
   theme,
   isDaylight,
   homeTab,
   layoutMode,
+  cardStyle,
   neteasePlaylists,
   qqPlaylists,
   neteaseOpen,
@@ -90,20 +88,28 @@ const HomeView: React.FC<HomeViewProps> = ({
   qq,
 }) => {
   const [accentOpen, setAccentOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [libraryDir, setLibraryDir] = useState(1);
   const openPlaylist = homeTab === 'netease' ? neteaseOpen : qqOpen;
   const cloudPlaylists = homeTab === 'netease' ? neteasePlaylists : qqPlaylists;
   const cloudTracks = homeTab === 'netease' ? neteaseTracks : qqTracks;
   const loggedIn = homeTab === 'netease' ? Boolean(netease?.loggedIn) : Boolean(qq?.loggedIn);
+  const bothLoggedIn = Boolean(netease?.loggedIn && qq?.loggedIn);
   const showingPlaylists = !openPlaylist;
   const showingCloudTracks = Boolean(openPlaylist);
+
+  const account = homeTab === 'netease' ? netease : qq;
+  const ownerLabel = account?.nickname?.trim() || (homeTab === 'netease' ? '网易云' : 'QQ');
 
   const items: AlbumWaterfallItem[] = useMemo(() => {
     if (showingPlaylists) {
       return cloudPlaylists.map((item) => ({
         id: `pl-${item.id}`,
         name: item.name,
-        description: `${item.trackCount || 0} 首${item.subscribed ? ' · 收藏' : ''}`,
-        coverUrl: httpsUrl(item.cover),
+        description: item.subscribed
+          ? `${ownerLabel} · 收藏`
+          : `${ownerLabel}${item.trackCount ? ` · ${item.trackCount} 首` : ''}`,
+        coverUrl: coverImageUrl(item.cover, 400),
       }));
     }
     return cloudTracks.map((item) => ({
@@ -112,7 +118,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       description: `${item.author} · ${item.type === 'qq' ? 'QQ' : '网易云'}`,
       coverUrl: coverRefreshUrl(item.type, item.songid),
     }));
-  }, [cloudPlaylists, cloudTracks, showingPlaylists]);
+  }, [cloudPlaylists, cloudTracks, ownerLabel, showingPlaylists]);
 
   const navPillBg = isDaylight ? 'bg-black/5' : 'bg-white/8';
   const inputBg = isDaylight ? 'bg-black/[0.04]' : 'bg-white/[0.06]';
@@ -181,6 +187,15 @@ const HomeView: React.FC<HomeViewProps> = ({
       </button>
       <button
         type="button"
+        onClick={() => setSettingsOpen(true)}
+        className={`rounded-full p-2 ${isDaylight ? 'bg-black/5' : 'bg-white/10'}`}
+        title="设置"
+        aria-label="设置"
+      >
+        <Settings size={16} />
+      </button>
+      <button
+        type="button"
         onClick={() => setAccentOpen(true)}
         className={`rounded-full p-2 ${isDaylight ? 'bg-black/5' : 'bg-white/10'}`}
         title="主题色"
@@ -228,7 +243,9 @@ const HomeView: React.FC<HomeViewProps> = ({
             <div className="ml-auto flex items-center gap-2 md:hidden">{themeButtons}</div>
           </div>
 
-          <div className="order-3 flex justify-center overflow-x-auto md:order-none">{tabPills}</div>
+          <div className="order-3 flex justify-center overflow-x-auto md:order-none">
+            {bothLoggedIn ? tabPills : null}
+          </div>
 
           <div className="order-2 flex items-center gap-2 md:order-none md:justify-end">
             <form
@@ -254,7 +271,10 @@ const HomeView: React.FC<HomeViewProps> = ({
           {openPlaylist ? (
             <button
               type="button"
-              onClick={onBackPlaylist}
+              onClick={() => {
+                setLibraryDir(-1);
+                onBackPlaylist();
+              }}
               className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] ${isDaylight ? 'bg-black/5' : 'bg-white/8'}`}
             >
               <ArrowLeft size={12} />
@@ -294,30 +314,67 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </div>
 
-      <AlbumWaterfall
-        key={layoutMode}
-        items={items}
-        onSelect={(item, index) => {
-          if (showingPlaylists) {
-            const playlistItem = cloudPlaylists.find((entry) => `pl-${entry.id}` === item.id)
-              || cloudPlaylists[index];
-            if (playlistItem) onOpenPlaylist(playlistItem);
-            return;
-          }
-          const entry = cloudTracks.find((row) => `${row.type}-${row.songid}` === item.id) || cloudTracks[index];
-          if (entry) onSelectEntry(entry, cloudTracks);
-        }}
-        isDaylight={isDaylight}
-        isLoading={cloudSyncing || cloudLoading}
-        emptyMessage={emptyCopy}
-        hasFloatingPlayer={hasCurrentTrack}
-        layoutMode={layoutMode}
-      />
+      <div className="relative min-h-0 w-full flex-1 overflow-hidden">
+        <AnimatePresence mode="sync" initial={false} custom={libraryDir}>
+          <motion.div
+            key={openPlaylist ? `tracks-${homeTab}-${openPlaylist.id}` : `playlists-${homeTab}`}
+            className="absolute inset-0 flex flex-col"
+            custom={libraryDir}
+            variants={{
+              enter: (direction: number) => ({
+                opacity: 0,
+                x: direction * 72,
+              }),
+              center: {
+                opacity: 1,
+                x: 0,
+              },
+              exit: (direction: number) => ({
+                opacity: 0,
+                x: direction * -56,
+              }),
+            }}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <AlbumWaterfall
+              key={layoutMode}
+              items={items}
+              onSelect={(item, index) => {
+                if (showingPlaylists) {
+                  const playlistItem = cloudPlaylists.find((entry) => `pl-${entry.id}` === item.id)
+                    || cloudPlaylists[index];
+                  if (playlistItem) {
+                    setLibraryDir(1);
+                    onOpenPlaylist(playlistItem);
+                  }
+                  return;
+                }
+                const entry = cloudTracks.find((row) => `${row.type}-${row.songid}` === item.id) || cloudTracks[index];
+                if (entry) onSelectEntry(entry, cloudTracks);
+              }}
+              isDaylight={isDaylight}
+              isLoading={cloudSyncing || cloudLoading}
+              emptyMessage={emptyCopy}
+              hasFloatingPlayer={hasCurrentTrack}
+              layoutMode={layoutMode}
+              cardStyle={cardStyle}
+            />
+          </motion.div>
+        </AnimatePresence>
+      </div>
 
       <ThemeAccentPicker
         open={accentOpen}
         isDaylight={isDaylight}
         onClose={() => setAccentOpen(false)}
+      />
+      <AppSettingsPanel
+        open={settingsOpen}
+        isDaylight={isDaylight}
+        onClose={() => setSettingsOpen(false)}
       />
     </div>
   );

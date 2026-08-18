@@ -46,8 +46,9 @@ html.platform-macos-app {
   --safe-bottom: 0px;
 }
 
-/* WKWebView 在缩放后的窗口边缘偶尔会留下一个设备像素的底色缝隙。 */
-html.platform-macos-app .app-shell {
+/* WKWebView / WebView2 在缩放后的窗口边缘偶尔会留下一个设备像素的底色缝隙。 */
+html.platform-macos-app .app-shell,
+html.platform-windows-app .app-shell {
   inset: -1px;
   width: calc(100% + 2px);
   height: calc(100% + 2px);
@@ -58,10 +59,34 @@ html.platform-macos-app .app-shell {
   --text-primary: #f4f4f5;
   --text-secondary: #71717a;
   --text-accent: #f4f4f5;
+  /* 默认 accent 接近白色，实心底上必须用深色字 */
+  --text-on-accent: #18181b;
+  --accent-ui-mix: 45%;
+  --accent-ui-soft: 17%;
+  --accent-ui-border: 25%;
+  color-scheme: dark;
   --scrollbar-track: #18181b;
   --scrollbar-thumb: #3f3f46;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --player-dock-safe: 1.5rem;
+}
+
+html.player-dock-visible {
+  --player-dock-safe: calc(5.75rem + var(--safe-bottom));
+}
+
+html.player-dock-visible.player-dock-expanded {
+  --player-dock-safe: calc(8.5rem + var(--safe-bottom));
+}
+
+html.theme-daylight {
+  color-scheme: light;
+}
+
+.btn-accent {
+  background: var(--text-accent);
+  color: var(--text-on-accent);
 }
 
 @media (max-width: 767px) {
@@ -84,6 +109,18 @@ a {
 
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+.app-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+}
+
+.app-scroll-x {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
 }
 
 .theme-polaroid-card {
@@ -255,6 +292,84 @@ html.platform-windows-app .theme-glass-panel {
   }
 }
 
+.ryan-cover-flip-scene {
+  perspective: 980px;
+  transform-style: preserve-3d;
+}
+
+.ryan-cover-flip-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.62s cubic-bezier(0.22, 0.82, 0.2, 1);
+  will-change: transform;
+}
+
+.ryan-cover-flip-card.is-flipped {
+  transform: rotateY(180deg);
+}
+
+.ryan-cover-flip-card.is-instant {
+  transition: none;
+}
+
+.ryan-waiting-flip-scene {
+  perspective: 900px;
+}
+
+.ryan-waiting-flip-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  animation: ryan-waiting-flip 1.65s cubic-bezier(0.4, 0.1, 0.2, 1) infinite;
+  will-change: transform;
+  border-radius: 1rem;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.ryan-waiting-flip-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.ryan-waiting-flip-front {
+  transform: rotateY(0deg);
+}
+
+.ryan-waiting-flip-back {
+  transform: rotateY(180deg);
+}
+
+@keyframes ryan-waiting-flip {
+  0% { transform: rotateY(0deg) scale(0.96); }
+  42% { transform: rotateY(180deg) scale(1); }
+  58% { transform: rotateY(180deg) scale(1); }
+  100% { transform: rotateY(360deg) scale(0.96); }
+}
+
+
+.ryan-cover-flip-face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.ryan-cover-flip-front {
+  transform: rotateY(0deg);
+}
+
+.ryan-cover-flip-back {
+  transform: rotateY(180deg);
+}
+
 .ryan-accent-wash {
   pointer-events: none;
   position: absolute;
@@ -265,3 +380,4 @@ html.platform-windows-app .theme-glass-panel {
     radial-gradient(ellipse 80% 60% at 92% 88%, color-mix(in srgb, var(--text-accent) 12%, transparent), transparent 52%),
     radial-gradient(ellipse 55% 45% at 70% 20%, color-mix(in srgb, var(--text-accent) 7%, transparent), transparent 60%);
 }
+

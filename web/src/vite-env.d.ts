@@ -1,7 +1,13 @@
 /// <reference types="vite/client" />
 
 interface Window {
+  chrome?: {
+    webview?: {
+      postMessage: (payload: unknown) => void;
+    };
+  };
   __ryanUpdateResolve?: (payload: import('./lib/update').AppUpdateInfo) => void;
+  __ryanUpdateProgress?: (payload: import('./lib/update').AppUpdateProgress) => void;
   webkit?: {
     messageHandlers?: {
       ryanSave?: {

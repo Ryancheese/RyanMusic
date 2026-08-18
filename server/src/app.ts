@@ -11,7 +11,8 @@ import { NeteaseService } from './netease.ts';
 import { spaHtml } from './pages.ts';
 import { QqService } from './qq.ts';
 import { verifySign } from './sign.ts';
-import { mediaReferer, parseSongUrl } from './util.ts';
+import { httpsNeteaseUrl, mediaReferer, parseSongUrl } from './util.ts';
+import { pickBestCrossPlayTrack } from './crossPlay.ts';
 
 export interface AppOptions {
   webRoot: string;
@@ -24,6 +25,24 @@ function jsonResponse(data: unknown, code: number, error: string, extra: Record<
     status: 200,
     headers: { 'Content-Type': 'application/json; charset=utf-8' },
   });
+}
+
+function isAllowedCoverUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    const host = parsed.hostname.toLowerCase();
+    return (
+      host.endsWith('126.net')
+      || host.endsWith('163.com')
+      || host.endsWith('gtimg.cn')
+      || host.endsWith('qq.com')
+      || host.endsWith('myqcloud.com')
+      || host.endsWith('music.126.net')
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function proxyMedia(
@@ -153,6 +172,24 @@ export function createApp(options: AppOptions) {
           ? await qq.resolvePlayUrl(id)
           : await netease.resolvePlayUrl(id, '', level);
       }
+      // 原渠道下架/无私链：按歌名艺人到另一渠道搜同名，再用对方私链取流（跨渠道保底）
+      if (!play && c.req.query('cross') === '1') {
+        const title = String(c.req.query('title') || '').trim();
+        const artist = String(c.req.query('artist') || '').trim();
+        if (title) {
+          const altType: MusicSource = type === 'qq' ? 'netease' : 'qq';
+          const query = [title, artist].filter(Boolean).join(' ');
+          const found = altType === 'qq'
+            ? await qq.searchByName(query, 1).catch(() => null)
+            : await netease.searchByName(query, 1).catch(() => null);
+          const best = pickBestCrossPlayTrack({ title, artist }, found?.tracks || []);
+          if (best?.songid) {
+            play = altType === 'qq'
+              ? await qq.resolvePlayUrl(String(best.songid))
+              : await netease.resolvePlayUrl(String(best.songid));
+          }
+        }
+      }
       if (!play) return c.text('无法获取播放地址', 502);
       if (c.req.query('probe')) return new Response(null, { status: 204 });
       let name = c.req.query('name') || 'RyanMusic';
@@ -197,6 +234,13 @@ export function createApp(options: AppOptions) {
       c.header('Cache-Control', 'public, max-age=3600');
       return c.redirect(proxyUrl(secret, 'pic', type, id), 302);
     }
+    if (c.req.query('img') && c.req.query('url')) {
+      const raw = String(c.req.query('url') || '');
+      const url = httpsNeteaseUrl(raw);
+      if (!isAllowedCoverUrl(url)) return c.text('Invalid cover url', 400);
+      c.header('Cache-Control', 'public, max-age=86400');
+      return proxyMedia(url, c.req.raw, { contentType: 'image/jpeg' });
+    }
     if (c.req.query('download') && c.req.query('url')) {
       const url = c.req.query('url') || '';
       if (!/^https?:\/\//i.test(url)) return c.text('Invalid url', 400);
@@ -234,12 +278,33 @@ export function createApp(options: AppOptions) {
       if (action === 'lyrics') {
         const lyricType = (post.type || '').trim();
         const lyricId = (post.id || '').trim();
-        if (lyricType !== 'netease' && lyricType !== 'qq') {
+        const preferred = (post.preferred || '').trim();
+        const title = (post.title || '').trim();
+        const artist = (post.artist || '').trim();
+        const durationMs = Number(post.durationMs || 0) || 0;
+        const autoUseBest = post.autoUseBest === '1' || post.autoUseBest === 'true' || post.autoUseBest === true;
+        const forceSource = post.forceSource === '1' || post.forceSource === 'true' || post.forceSource === true;
+        const nativeOk = lyricType === 'netease' || lyricType === 'qq';
+        const preferredOk = preferred === 'netease' || preferred === 'qq' || preferred === 'kugou' || preferred === 'amll';
+        if (!nativeOk && !preferredOk) {
           return jsonResponse('', 403, '歌词类型无效');
         }
-        if (!lyricId) return jsonResponse('', 403, '缺少歌曲 ID');
         try {
-          const data = await lyrics.fetch(lyricType, lyricId);
+          const data = preferredOk
+            ? await lyrics.match({
+                preferred: preferred as 'netease' | 'qq' | 'kugou' | 'amll',
+                title,
+                artist,
+                durationMs,
+                autoUseBest,
+                forceSource,
+                nativeType: nativeOk ? lyricType : undefined,
+                nativeId: lyricId || undefined,
+              })
+            : {
+                ...(await lyrics.fetch(lyricType as 'netease' | 'qq', lyricId)),
+                source: lyricType as 'netease' | 'qq',
+              };
           return jsonResponse(data, 200, '');
         } catch (err) {
           return jsonResponse('', 502, `(°ー°〃) ${err instanceof Error ? err.message : '歌词获取失败'}`);

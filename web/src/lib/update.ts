@@ -1,4 +1,4 @@
-import { isMacosApp } from './media';
+import { isMacosApp, isWindowsApp } from './media';
 import { APP_VERSION, compareSemver } from '../whatsNew';
 
 const RELEASES_URL = 'https://github.com/Ryancheese/RyanMusic/releases/latest';
@@ -12,7 +12,16 @@ export interface AppUpdateInfo {
   notes?: string;
   url?: string;
   installing?: boolean;
+  progress?: number;
+  stage?: string;
   error?: string;
+}
+
+export interface AppUpdateProgress {
+  percent?: number;
+  received?: number;
+  total?: number;
+  stage?: string;
 }
 
 type UpdateBridge = {
@@ -69,17 +78,28 @@ export async function checkAppUpdate(): Promise<AppUpdateInfo> {
   }
 }
 
-export async function installAppUpdate(): Promise<AppUpdateInfo> {
+export async function installAppUpdate(
+  onProgress?: (progress: AppUpdateProgress) => void,
+): Promise<AppUpdateInfo> {
   const bridge = nativeBridge();
   if (!bridge) {
     window.open(RELEASES_URL, '_blank', 'noopener');
     return { ok: true, hasUpdate: true, url: RELEASES_URL };
   }
-  const pending = waitNative(180_000);
-  bridge.postMessage({ action: 'install' });
-  return pending;
+
+  window.__ryanUpdateProgress = (payload) => {
+    onProgress?.(payload);
+  };
+
+  try {
+    const pending = waitNative(10 * 60_000);
+    bridge.postMessage({ action: 'install' });
+    return await pending;
+  } finally {
+    delete window.__ryanUpdateProgress;
+  }
 }
 
 export function canInstallAppUpdate() {
-  return isMacosApp() && Boolean(nativeBridge());
+  return Boolean(nativeBridge()) && (isMacosApp() || isWindowsApp() || Boolean(window.chrome?.webview));
 }

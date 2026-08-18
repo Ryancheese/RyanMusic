@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Check, Pipette, X } from 'lucide-react';
+import { contrastText } from '../lib/color';
 import { ACCENT_PRESETS, useThemeAccentStore } from '../store/themeStore';
 
 interface ThemeAccentPickerProps {
@@ -13,6 +14,8 @@ const ThemeAccentPicker: React.FC<ThemeAccentPickerProps> = ({ open, isDaylight,
   const customColor = useThemeAccentStore((state) => state.customColor);
   const setPreset = useThemeAccentStore((state) => state.setPreset);
   const setCustomColor = useThemeAccentStore((state) => state.setCustomColor);
+  const uiTint = useThemeAccentStore((state) => state.uiTint);
+  const setUiTint = useThemeAccentStore((state) => state.setUiTint);
   const resolveAccent = useThemeAccentStore((state) => state.resolveAccent);
   const panelRef = useRef<HTMLDivElement>(null);
   const active = resolveAccent(isDaylight);
@@ -71,12 +74,13 @@ const ThemeAccentPicker: React.FC<ThemeAccentPickerProps> = ({ open, isDaylight,
                   }`}
                   style={{
                     background: swatch,
+                    color: contrastText(swatch),
                     boxShadow: selected
                       ? `0 0 0 2px ${isDaylight ? '#fff' : '#18181b'}, 0 0 0 4px ${active}`
                       : undefined,
                   }}
                 >
-                  {selected ? <Check size={14} className="text-white drop-shadow" /> : null}
+                  {selected ? <Check size={14} className="drop-shadow" /> : null}
                 </span>
                 <span className="text-[10px] opacity-55">{preset.label}</span>
               </button>
@@ -84,12 +88,33 @@ const ThemeAccentPicker: React.FC<ThemeAccentPickerProps> = ({ open, isDaylight,
           })}
         </div>
 
-        <label className={`mt-4 flex cursor-pointer items-center gap-3 rounded-2xl px-3 py-2.5 ${isDaylight ? 'bg-black/5' : 'bg-white/8'}`}>
+        <div className={`mt-4 rounded-2xl px-3 py-2.5 ${isDaylight ? 'bg-black/5' : 'bg-white/8'}`}>
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <div className="text-xs font-medium">控件着色</div>
+            <div className="text-[11px] opacity-50">{uiTint}%</div>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={uiTint}
+            onChange={(event) => setUiTint(Number(event.target.value))}
+            className="w-full accent-[var(--text-accent)]"
+          />
+          <div className="mt-1 flex justify-between text-[10px] opacity-40">
+            <span>弱</span>
+            <span>主题色影响按钮、进度条的幅度</span>
+            <span>强</span>
+          </div>
+        </div>
+
+        <label className={`mt-3 flex cursor-pointer items-center gap-3 rounded-2xl px-3 py-2.5 ${isDaylight ? 'bg-black/5' : 'bg-white/8'}`}>
           <span
             className="flex h-10 w-10 items-center justify-center rounded-full"
             style={{ background: customColor }}
           >
-            <Pipette size={14} className="text-white drop-shadow" />
+            <Pipette size={14} className="drop-shadow" style={{ color: contrastText(customColor) }} />
           </span>
           <span className="min-w-0 flex-1">
             <div className="text-xs font-medium">自定义</div>

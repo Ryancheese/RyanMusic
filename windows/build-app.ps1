@@ -39,7 +39,7 @@ $InnoSetupUrl = "https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/
 # 刷新 PATH，避免刚装完 SDK 找不到
 $machine = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
 $user = [System.Environment]::GetEnvironmentVariable("Path", "User")
-$env:Path = "$machine;$user;${env:ProgramFiles}\dotnet;${env:ProgramFiles(x86)}\dotnet"
+$env:Path = "$machine;$user;${env:ProgramFiles}\dotnet;${env:ProgramFiles(x86)}\dotnet;$env:Path"
 
 $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
 if (-not $dotnet) {
@@ -85,28 +85,41 @@ display_errors=0
 }
 
 function Install-BundledNode([string]$TargetNodeDir) {
-  Write-Host "==> 下载便携 Node $NodeBundleVersion"
+  Write-Host "==> 准备便携 Node $NodeBundleVersion"
   $name = "node-v$NodeBundleVersion-win-x64"
   $url = "https://nodejs.org/dist/v$NodeBundleVersion/$name.zip"
   $cacheDir = Join-Path $Root "dist\.cache"
   New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
   $zipFile = Join-Path $cacheDir "$name.zip"
-  try {
-    if (-not (Test-Path $zipFile) -or ((Get-Item $zipFile).Length -lt 1MB)) {
-      Write-Host "    $url"
-      & curl.exe -fL --retry 3 --retry-all-errors --max-time 600 -o $zipFile $url
-      if ($LASTEXITCODE -ne 0 -or -not (Test-Path $zipFile) -or ((Get-Item $zipFile).Length -lt 1MB)) {
-        throw "便携 Node 下载失败：$url"
-      }
-    } else {
-      Write-Host "    复用缓存：$zipFile"
-    }
+  $fullZip = Join-Path $cacheDir "$name-full.zip"
+  $extractDir = Join-Path $cacheDir $name
 
-    $extractDir = Join-Path $cacheDir $name
-    if (Test-Path $extractDir) {
-      Remove-Item -Recurse -Force $extractDir
+  try {
+    $cachedExe = Join-Path $extractDir "node.exe"
+    if (-not (Test-Path $cachedExe)) {
+      $sourceZip = $null
+      if ((Test-Path $fullZip) -and ((Get-Item $fullZip).Length -gt 20MB)) {
+        $sourceZip = $fullZip
+        Write-Host "    复用完整缓存：$fullZip"
+      } elseif ((Test-Path $zipFile) -and ((Get-Item $zipFile).Length -gt 20MB)) {
+        $sourceZip = $zipFile
+        Write-Host "    复用缓存：$zipFile"
+      } else {
+        Write-Host "    $url"
+        & curl.exe -fL --retry 3 --retry-all-errors --max-time 600 -o $zipFile $url
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $zipFile) -or ((Get-Item $zipFile).Length -lt 20MB)) {
+          throw "便携 Node 下载失败：$url"
+        }
+        $sourceZip = $zipFile
+      }
+
+      if (Test-Path $extractDir) {
+        Remove-Item -Recurse -Force $extractDir
+      }
+      Expand-Archive -Path $sourceZip -DestinationPath $cacheDir -Force
+    } else {
+      Write-Host "    复用已解压缓存：$cachedExe"
     }
-    Expand-Archive -Path $zipFile -DestinationPath $cacheDir -Force
 
     $nodeExe = Get-ChildItem -Path $extractDir -Filter "node.exe" -Recurse -ErrorAction SilentlyContinue |
       Select-Object -First 1
@@ -324,13 +337,30 @@ function Build-Installer([string]$Version) {
   Write-Host "==> 编译安装向导 ($Version)"
   $distForIss = $DistDir
   $outForIss = Split-Path $SetupPath -Parent
-  & $iscc `
-    "/DAppVersion=$Version" `
-    "/DDistDir=$distForIss" `
-    "/DOutputDir=$outForIss" `
-    $IssPath
-  if ($LASTEXITCODE -ne 0) {
-    throw "ISCC 编译失败 (exit=$LASTEXITCODE)"
+  # 部分便携 ISCC 不支持 /D，改为在 windows/ 下生成临时脚本写入 #define
+  $tempIss = Join-Path $WinDir ("_build_" + [Guid]::NewGuid().ToString("N") + ".iss")
+  $raw = Get-Content -Path $IssPath -Raw -Encoding UTF8
+  # 去掉 #ifndef 包装并强制写入版本与路径
+  $raw = [regex]::Replace($raw, '(?ms)^#ifndef\s+AppVersion\s*\r?\n\s*#define\s+AppVersion\s+".*?"\s*\r?\n#endif\s*\r?\n?', "")
+  $raw = [regex]::Replace($raw, '(?ms)^#ifndef\s+DistDir\s*\r?\n\s*#define\s+DistDir\s+".*?"\s*\r?\n#endif\s*\r?\n?', "")
+  $raw = [regex]::Replace($raw, '(?ms)^#ifndef\s+OutputDir\s*\r?\n\s*#define\s+OutputDir\s+".*?"\s*\r?\n#endif\s*\r?\n?', "")
+  $header = @"
+#define AppVersion "$Version"
+#define DistDir "$distForIss"
+#define OutputDir "$outForIss"
+
+"@
+  Set-Content -Path $tempIss -Value ($header + $raw) -Encoding UTF8
+  try {
+    Push-Location $WinDir
+    & $iscc (Split-Path $tempIss -Leaf)
+    $code = $LASTEXITCODE
+    Pop-Location
+    if ($code -ne 0) {
+      throw "ISCC 编译失败 (exit=$code)"
+    }
+  } finally {
+    Remove-Item -Force $tempIss -ErrorAction SilentlyContinue
   }
   if (-not (Test-Path $SetupPath)) {
     throw "安装包未生成：$SetupPath"

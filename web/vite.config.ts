@@ -49,7 +49,7 @@ function proxyApiPlugin() {
         const shouldProxy =
           pathname === '/api.php' ||
           (req.method === 'POST' && (pathname === '/' || pathname === '/index.php')) ||
-          (req.method === 'GET' && (url.includes('cover=') || url.includes('download=')));
+          (req.method === 'GET' && (url.includes('cover=') || url.includes('download=') || url.includes('img=')));
 
         if (!shouldProxy) {
           next();

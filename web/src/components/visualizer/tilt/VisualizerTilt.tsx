@@ -13,6 +13,7 @@ import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import InterludeDots from '../../InterludeDots';
 import { isInterludeLine } from '../../../utils/lyrics/parserCore';
+import VisualizerWaiting from '../VisualizerWaiting';
 
 const CHAR_REF_LENGTH = 20;
 const LOG_OFFSET = 4;
@@ -682,7 +683,7 @@ const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> 
                             className="text-2xl opacity-50 absolute"
                             style={{ color: theme.secondaryColor }}
                         >
-                            {t('ui.waitingForMusic')}
+                            <VisualizerWaiting coverUrl={props.coverUrl} />
                         </motion.div>
                     ) : null}
                 </AnimatePresence>

@@ -49,8 +49,7 @@ const WhatsNewModal: React.FC<WhatsNewModalProps> = ({
         <button
           type="button"
           onClick={onClose}
-          className="mt-4 w-full rounded-full px-4 py-2.5 text-sm font-medium text-white"
-          style={{ background: 'var(--text-accent)' }}
+          className="btn-accent mt-4 w-full rounded-full px-4 py-2.5 text-sm font-medium"
         >
           知道了
         </button>

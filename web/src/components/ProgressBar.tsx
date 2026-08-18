@@ -86,10 +86,10 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
   });
 
   return (
-    <div className="flex w-full select-none items-center gap-3">
+    <div className="flex w-full select-none items-center gap-2">
       <span
         ref={timeRef}
-        className="w-8 text-right font-mono text-[10px] font-medium opacity-60"
+        className="w-9 shrink-0 text-right font-mono text-[10px] font-medium tabular-nums opacity-60"
         style={{ color: secondaryColor }}
       >
         00:00
@@ -138,7 +138,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
           className={`absolute inset-0 h-full w-full opacity-0 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         />
       </div>
-      <span className="w-8 font-mono text-[10px] font-medium opacity-60" style={{ color: secondaryColor }}>
+      <span className="w-9 shrink-0 font-mono text-[10px] font-medium tabular-nums opacity-60" style={{ color: secondaryColor }}>
         {formatTime(duration)}
       </span>
     </div>

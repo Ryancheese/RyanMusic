@@ -14,6 +14,7 @@ const zh = {
     visualizerCappella: '对白',
     visualizerDiorama: '景深',
     visualizerSonnet: '海报',
+    visualizerSpotlight: '聚光',
     backToHome: '返回主页',
     livePreview: '实时预览',
   },

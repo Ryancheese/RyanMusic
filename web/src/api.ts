@@ -1,4 +1,5 @@
 import type { MusicSource, SearchResponse, Track } from './types';
+import { getSizedCoverUrl } from './utils/coverUrl';
 
 function origin(): string {
   return `${window.location.origin}${window.location.pathname.replace(/index\.php$/, '')}`;
@@ -64,6 +65,22 @@ export async function fetchTrackById(type: MusicSource, songid: string): Promise
 
 export function coverRefreshUrl(type: MusicSource, songid: string): string {
   return `${origin()}?cover=1&type=${encodeURIComponent(type)}&id=${encodeURIComponent(songid)}`;
+}
+
+/** 126.net 用 param 缩略图；桌面 WebView2 再经本地代理带 Referer，避免 CDN 防盗链。 */
+export function coverImageUrl(url?: string, size = 400): string {
+  const raw = (url || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('data:') || raw.startsWith('blob:')) return raw;
+  if (raw.includes('cover=1') || raw.includes('img=1') || raw.includes('get=pic')) return raw;
+
+  let absolute = raw;
+  if (raw.startsWith('//')) absolute = `https:${raw}`;
+  else if (raw.startsWith('http://')) absolute = `https://${raw.slice(7)}`;
+  else if (!/^https?:\/\//i.test(raw)) return raw;
+
+  const sized = getSizedCoverUrl(absolute, size) || absolute;
+  return `${origin()}?img=1&url=${encodeURIComponent(sized)}`;
 }
 
 export function buildDownloadUrl(url: string, name: string): string {
@@ -192,16 +209,36 @@ export function checkQqLike(songid: string) {
   });
 }
 
-export async function fetchTrackLyrics(type: MusicSource, songid: string): Promise<Pick<Track, 'lrc' | 'yrc' | 'tlyric'> | null> {
-  const result = await postAction<Pick<Track, 'lrc' | 'yrc' | 'tlyric'>>('lyrics', {
-    type,
-    id: String(songid),
+export async function fetchTrackLyrics(options: {
+  type: MusicSource;
+  songid: string;
+  title?: string;
+  artist?: string;
+  durationMs?: number;
+  preferred?: 'netease' | 'qq' | 'kugou' | 'amll';
+  autoUseBest?: boolean;
+  forceSource?: boolean;
+}): Promise<(Pick<Track, 'lrc' | 'yrc' | 'tlyric' | 'lyricSource'>) | null> {
+  const result = await postAction<Pick<Track, 'lrc' | 'yrc' | 'tlyric'> & { source?: string }>('lyrics', {
+    type: options.type,
+    id: String(options.songid),
+    title: options.title || '',
+    artist: options.artist || '',
+    durationMs: options.durationMs ? String(Math.round(options.durationMs)) : '',
+    preferred: options.preferred || '',
+    autoUseBest: options.autoUseBest ? '1' : '0',
+    forceSource: options.forceSource ? '1' : '0',
   });
   if (result.code !== 200 || !result.data) return null;
+  const source = result.data.source;
+  const lyricSource = (
+    source === 'netease' || source === 'qq' || source === 'kugou' || source === 'amll' || source === 'native'
+  ) ? source : undefined;
   return {
     lrc: result.data.lrc || '',
     yrc: result.data.yrc || '',
     tlyric: result.data.tlyric || '',
+    lyricSource,
   };
 }
 

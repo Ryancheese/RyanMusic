@@ -12,6 +12,7 @@ import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import { resolveWordColor } from '../wordColoring';
+import VisualizerWaiting from '../VisualizerWaiting';
 
 // This is the heavy layout mode.
 // The line does not just show up and animate; we first prebuild the active/upcoming lines,
@@ -1737,7 +1738,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
                                 fontSize: emptyFontSize,
                             }}
                         >
-                            {t('ui.waitingForMusic')}
+                            <VisualizerWaiting coverUrl={props.coverUrl} />
                         </motion.div>
                     )}
                 </AnimatePresence>

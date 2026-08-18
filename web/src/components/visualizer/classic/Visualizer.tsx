@@ -13,6 +13,7 @@ import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fo
 import { resolveWordColor } from '../wordColoring';
 import InterludeDots from '../../InterludeDots';
 import { isInterludeLine } from '../../../utils/lyrics/parserCore';
+import VisualizerWaiting from '../VisualizerWaiting';
 
 // This mode is the most straightforward lyric pipeline in the folder.
 // First we ask runtime which line is active right now, then read renderHints from that line,
@@ -751,7 +752,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                                 fontSize: emptyFontSize,
                             }}
                         >
-                            {t('ui.waitingForMusic')}
+                            <VisualizerWaiting coverUrl={props.coverUrl} />
                         </motion.div>
                     )}
                 </AnimatePresence>

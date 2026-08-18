@@ -1,5 +1,6 @@
 import type { Line, Track } from '../types';
 import { detectTimedLyricFormat } from '../utils/lyrics/formatDetection';
+import { applyLyricLineFilter } from '../utils/lyrics/filtering';
 import { parseLyricsByFormat, type LyricParseFormat } from '../utils/lyrics/parserCore';
 
 const WORD_LINE = /(?:^|\n)\s*\[\d+,\d+\].+/m;
@@ -70,17 +71,94 @@ export function detectLyricParseFormat(content?: string): LyricParseFormat {
   return detectTimedLyricFormat(raw);
 }
 
-export function trackToVisualizerLines(track?: Pick<Track, 'lrc' | 'yrc' | 'tlyric'> | null): Line[] {
-  if (!track) return [];
-  const translation = normalizeLyricText(track.tlyric);
-  const yrc = normalizeLyricText(track.yrc);
-  if (yrc.trim()) {
-    const wordLines = parseLyricsByFormat(detectLyricParseFormat(yrc), yrc, translation).lines;
-    if (wordLines.length) return wordLines;
-  }
-  const raw = normalizeLyricText(track.lrc);
+function parseTrackLines(content: string, translation: string): Line[] {
+  const raw = normalizeLyricText(content);
   if (!raw.trim()) return [];
   return parseLyricsByFormat(detectLyricParseFormat(raw), raw, translation).lines;
+}
+
+function lineCoverageScore(lines: Line[]): number {
+  if (!lines.length) return 0;
+  const spoken = lines.filter((line) => (line.fullText || '').trim()).length;
+  const words = lines.reduce((sum, line) => sum + (line.words?.length || 0), 0);
+  return spoken * 10 + words;
+}
+
+/** 文本是否看起来是逐字时间轴（YRC / QRC / KRC 等） */
+export function isWordByWordLyricText(content?: string | null): boolean {
+  const raw = normalizeLyricText(content);
+  if (!raw.trim()) return false;
+  const format = detectLyricParseFormat(raw);
+  return format === 'yrc' || format === 'qrc' || format === 'krc' || format === 'enhanced-lrc';
+}
+
+/** 解析后的行是否具备可用的逐字 timing */
+export function linesLookWordByWord(lines: Line[]): boolean {
+  let multiWord = 0;
+  for (const line of lines) {
+    const words = line.words || [];
+    if (words.length >= 2) multiWord += 1;
+    if (multiWord >= 2) return true;
+  }
+  return multiWord > 0 && lines.length <= 3;
+}
+
+export interface ResolvedVisualizerLyrics {
+  lines: Line[];
+  isWordByWord: boolean;
+}
+
+/**
+ * 优先逐字歌词；仅当逐字明显缺段（覆盖度远低于逐行）时才回退逐行。
+ */
+export function resolveVisualizerLyrics(
+  track?: Pick<Track, 'lrc' | 'yrc' | 'tlyric'> | null,
+  filterPattern?: string | null,
+): ResolvedVisualizerLyrics {
+  if (!track) return { lines: [], isWordByWord: false };
+  const translation = normalizeLyricText(track.tlyric);
+  const wordRaw = track.yrc || '';
+  const lineRaw = track.lrc || '';
+  const wordLines = filterVisualizerLines(parseTrackLines(wordRaw, translation), filterPattern);
+  const lineLines = filterVisualizerLines(parseTrackLines(lineRaw, translation), filterPattern);
+  const wordScore = lineCoverageScore(wordLines);
+  const lineScore = lineCoverageScore(lineLines);
+  const wordTimed = linesLookWordByWord(wordLines) || isWordByWordLyricText(wordRaw);
+
+  // 有可用逐字：优先用；只有明显缺一大段才回退逐行
+  if (wordTimed && wordScore > 0 && wordScore >= lineScore * 0.55) {
+    return { lines: wordLines, isWordByWord: true };
+  }
+  if (lineScore > 0) {
+    const lineTimed = linesLookWordByWord(lineLines) || isWordByWordLyricText(lineRaw);
+    return { lines: lineLines, isWordByWord: lineTimed };
+  }
+  if (wordScore > 0) {
+    return { lines: wordLines, isWordByWord: wordTimed };
+  }
+  return { lines: [], isWordByWord: false };
+}
+
+/** Folia 风格：按可选正则过滤，不做硬编码大段删减 */
+export function filterVisualizerLines(lines: Line[], pattern?: string | null): Line[] {
+  return applyLyricLineFilter(lines, pattern || '');
+}
+
+/**
+ * 优先逐字歌词；若逐字明显比逐行更短（缺段），回退到更完整的逐行。
+ */
+export function trackToVisualizerLines(
+  track?: Pick<Track, 'lrc' | 'yrc' | 'tlyric'> | null,
+  filterPattern?: string | null,
+): Line[] {
+  return resolveVisualizerLyrics(track, filterPattern).lines;
+}
+
+export function trackUsesWordByWordLyrics(
+  track?: Pick<Track, 'lrc' | 'yrc' | 'tlyric'> | null,
+  filterPattern?: string | null,
+): boolean {
+  return resolveVisualizerLyrics(track, filterPattern).isWordByWord;
 }
 
 export function findLatestActiveLineIndex(lines: Line[], time: number): number {
@@ -93,3 +171,5 @@ export function findLatestActiveLineIndex(lines: Line[], time: number): number {
   }
   return -1;
 }
+
+export { DEFAULT_LYRIC_FILTER_PATTERN, LYRIC_FILTER_REGEX_EXAMPLE } from '../utils/lyrics/filtering';

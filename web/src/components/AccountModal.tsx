@@ -173,7 +173,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
               {current?.vip ? ' · 会员' : ' · 非会员将走 RyanMusic 音源'}
             </p>
             <p className="text-xs opacity-60">
-              会员曲目优先走官方播放（与 Folia 相同）。非会员或官方无地址时，自动回退 RyanMusic。
+              会员曲目优先走官方播放。非会员或官方无地址时，自动回退 RyanMusic。
             </p>
             <div className="flex flex-wrap gap-2">
               <button

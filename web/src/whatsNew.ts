@@ -1,16 +1,14 @@
 /** 当前应用版本（与 Info.plist / Windows Version / server package 保持一致） */
-export const APP_VERSION = '1.8.60';
+export const APP_VERSION = '1.8.62';
 
 const SEEN_KEY = 'ryanmusic-whats-new-seen';
 
 /** 本版启动后弹窗展示的更新说明 */
-export const WHATS_NEW_NOTES = `• 修复暂停后仍显示缓冲动画
-• 搜索改用 Folia 快速逻辑，歌词延后到出声后加载
-• 会员优先完整官链；非会员、未登录及官链异常时走 Folia 私链
-• 修复网易云部分歌曲只能播放 30 秒试听的问题
-• 播放地址并行解析、缓存及下一首预热，显著缩短起播时间
-• 修复快进后进度条持续跟随鼠标的问题
-• 修复 macOS 页面底部白边`;
+export const WHATS_NEW_NOTES = `• 设置页固定高度，切换分类不再忽高忽矮，小窗口也能自适应滚动
+• Windows 支持应用内下载更新：可见进度条，下载完成后静默覆盖安装并重启
+• 方形歌单改为自适应网格，仅上下滚动；铭牌卡片样式优化
+• 深色模式开关对比度提升
+• 帮助 / 隐私政策等文案更新，去掉无关第三方项目名`;
 
 export function shouldShowWhatsNew(currentVersion = APP_VERSION): boolean {
   try {

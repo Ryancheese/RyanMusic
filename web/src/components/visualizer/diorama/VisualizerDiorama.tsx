@@ -7,6 +7,7 @@ import { useVisualizerRuntime } from '../runtime';
 import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
+import VisualizerWaiting from '../VisualizerWaiting';
 import CameraRig from './CameraRig';
 import DioramaScene from './DioramaScene';
 import { type DioramaVec, getFrame, resolveDioramaMotionParams } from './cameraPath';
@@ -440,7 +441,7 @@ const VisualizerDiorama: React.FC<VisualizerDioramaProps> = (props) => {
                             className="text-2xl opacity-50 absolute"
                             style={{ color: theme.secondaryColor, fontSize: emptyFontSize }}
                         >
-                            {t('ui.waitingForMusic')}
+                            <VisualizerWaiting coverUrl={props.coverUrl} />
                         </motion.div>
                     ) : null}
                 </AnimatePresence>

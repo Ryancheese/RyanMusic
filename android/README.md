@@ -1,6 +1,6 @@
 # RyanMusic Android
 
-独立 APK：内嵌 PHP（arm64）+ Folia 风格前端。多数机型安装即可搜索、播放（仍需联网取流）。
+独立 APK：内嵌 PHP（arm64）+ Web 前端。多数机型安装即可搜索、播放（仍需联网取流）。
 
 搜索与取流必须经过后端签名代理（网易云 / QQ），所以各端本质是「同一套服务 + WebView」。电脑 / Docker / 线上站点用 **Node（`server/`）**；手机优先用 APK 内嵌 PHP，部分华为 / HarmonyOS 拦截时会**自动改连线上 Node 站点**，不再依赖电脑。
 

@@ -21,8 +21,10 @@ public sealed class MainForm : Form
     private const int DwmwaUseImmersiveDarkMode = 20;
     private const int DwmwaBorderColor = 34;
     private const int DwmwaCaptionColor = 35;
+    private const int DwmwaTextColor = 36;
 
     private readonly WebView2 _webView = new();
+    private bool _daylight;
     private Process? _phpProcess;
     private int _port = 18765;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(2) };
@@ -47,7 +49,7 @@ public sealed class MainForm : Form
 
         Load += async (_, _) =>
         {
-            ApplyDarkTitleBar();
+            ApplyTitleBarTheme(_daylight);
             await BootstrapAsync();
         };
         FormClosing += OnFormClosingGuard;
@@ -56,14 +58,18 @@ public sealed class MainForm : Form
             StopPhp();
             DisposeTray();
         };
-        HandleCreated += (_, _) => ApplyDarkTitleBar();
+        HandleCreated += (_, _) => ApplyTitleBarTheme(_daylight);
     }
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
-    private void ApplyDarkTitleBar()
+    private void ApplyTitleBarTheme(bool daylight)
     {
+        _daylight = daylight;
+        var color = daylight ? Color.FromArgb(245, 245, 244) : Color.FromArgb(9, 9, 11);
+        BackColor = color;
+        _webView.DefaultBackgroundColor = Color.FromArgb(255, color.R, color.G, color.B);
         if (!IsHandleCreated)
         {
             return;
@@ -72,14 +78,15 @@ public sealed class MainForm : Form
         try
         {
             var hwnd = Handle;
-            var dark = 1;
+            var dark = daylight ? 0 : 1;
             _ = DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkMode, ref dark, sizeof(int));
 
-            // COLORREF: 0x00BBGGRR，贴近应用背景 #08080e
-            var caption = 0x0E0808;
+            // COLORREF: 0x00BBGGRR
+            var caption = daylight ? 0x00F4F5F5 : 0x000B0909;
             _ = DwmSetWindowAttribute(hwnd, DwmwaCaptionColor, ref caption, sizeof(int));
-            var border = 0x0E0808;
-            _ = DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref border, sizeof(int));
+            _ = DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref caption, sizeof(int));
+            var text = daylight ? 0x001C1917 : 0x00F5F4F4;
+            _ = DwmSetWindowAttribute(hwnd, DwmwaTextColor, ref text, sizeof(int));
         }
         catch
         {
@@ -214,7 +221,7 @@ public sealed class MainForm : Form
         }
 
         Activate();
-        ApplyDarkTitleBar();
+        ApplyTitleBarTheme(_daylight);
     }
 
     private void ExitApplication()
@@ -325,7 +332,13 @@ public sealed class MainForm : Form
 
             await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 "document.documentElement.classList.add('platform-windows-app');");
-            await InjectNativeSaveBridgeAsync();
+            await InjectNativeBridgesAsync();
+            _webView.CoreWebView2.NavigationCompleted += async (_, args) =>
+            {
+                if (!args.IsSuccess) return;
+                await Task.Delay(150);
+                await SyncTitleBarFromPageAsync();
+            };
             await WaitAndNavigateAsync();
         }
         catch (Exception ex)
@@ -335,24 +348,43 @@ public sealed class MainForm : Form
         }
     }
 
-    private async Task InjectNativeSaveBridgeAsync()
+    private async Task InjectNativeBridgesAsync()
     {
-        // 兼容前端 canNativeSave()：提供 webkit.messageHandlers.ryanSave
+        // 兼容前端：webkit.messageHandlers.ryanSave / ryanChrome / ryanUpdate
         const string script = """
             (() => {
-              if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.ryanSave) return;
               window.webkit = window.webkit || {};
               window.webkit.messageHandlers = window.webkit.messageHandlers || {};
-              window.webkit.messageHandlers.ryanSave = {
-                postMessage: (payload) => {
-                  try {
-                    window.chrome.webview.postMessage(payload);
-                  } catch (e) {}
-                }
+              const post = (payload) => {
+                try { window.chrome.webview.postMessage(payload); } catch (e) {}
               };
+              if (!window.webkit.messageHandlers.ryanSave) {
+                window.webkit.messageHandlers.ryanSave = { postMessage: post };
+              }
+              window.webkit.messageHandlers.ryanChrome = { postMessage: post };
+              window.webkit.messageHandlers.ryanUpdate = { postMessage: post };
             })();
             """;
         await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
+    }
+
+    private async Task SyncTitleBarFromPageAsync()
+    {
+        if (_webView.CoreWebView2 == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var stored = await _webView.CoreWebView2.ExecuteScriptAsync(
+                "localStorage.getItem('ryanmusic-theme')");
+            ApplyTitleBarTheme(stored.Contains("daylight", StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            // 页面尚未写入主题
+        }
     }
 
     private async Task WaitAndNavigateAsync()
@@ -385,12 +417,64 @@ public sealed class MainForm : Form
         try
         {
             using var doc = JsonDocument.Parse(e.WebMessageAsJson);
-            var root = doc.RootElement;
-            if (!root.TryGetProperty("filename", out var filenameEl))
+            await HandleHostPayloadAsync(doc.RootElement);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"WebMessage error: {ex.Message}");
+        }
+    }
+
+    private async Task HandleHostPayloadAsync(JsonElement root)
+    {
+        if (root.ValueKind == JsonValueKind.String)
+        {
+            var raw = root.GetString();
+            if (string.IsNullOrWhiteSpace(raw) || raw[0] != '{')
             {
                 return;
             }
 
+            using var inner = JsonDocument.Parse(raw);
+            await HandleHostPayloadAsync(inner.RootElement);
+            return;
+        }
+
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        if (root.TryGetProperty("daylight", out var daylightEl)
+            && daylightEl.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            ApplyTitleBarTheme(daylightEl.GetBoolean());
+            return;
+        }
+
+        if (root.TryGetProperty("action", out var actionEl) && actionEl.ValueKind == JsonValueKind.String)
+        {
+            var action = actionEl.GetString();
+            if (string.Equals(action, "check", StringComparison.OrdinalIgnoreCase))
+            {
+                await CheckAppUpdateAsync(replyToWeb: true);
+                return;
+            }
+
+            if (string.Equals(action, "install", StringComparison.OrdinalIgnoreCase))
+            {
+                await InstallAppUpdateAsync(replyToWeb: true);
+                return;
+            }
+        }
+
+        if (!root.TryGetProperty("filename", out var filenameEl))
+        {
+            return;
+        }
+
+        try
+        {
             var filename = SanitizeFilename(filenameEl.GetString() ?? "RyanMusic");
             using var dialog = new SaveFileDialog
             {
@@ -990,6 +1074,328 @@ public sealed class MainForm : Form
         catch
         {
             return null;
+        }
+    }
+
+    private sealed class ReleaseUpdateInfo
+    {
+        public bool Ok { get; init; }
+        public bool HasUpdate { get; init; }
+        public string Current { get; init; } = "";
+        public string Latest { get; init; } = "";
+        public string Notes { get; init; } = "";
+        public string Url { get; init; } = "";
+        public string? DownloadUrl { get; init; }
+        public string Error { get; init; } = "";
+    }
+
+    private static string CurrentAppVersion()
+    {
+        var version = typeof(MainForm).Assembly.GetName().Version;
+        if (version == null)
+        {
+            return "0";
+        }
+
+        return $"{version.Major}.{version.Minor}.{version.Build}";
+    }
+
+    private static int CompareSemver(string left, string right)
+    {
+        static int[] Parts(string value) =>
+            value.TrimStart('v', 'V')
+                .Split('.', StringSplitOptions.RemoveEmptyEntries)
+                .Select(part => int.TryParse(part, out var n) ? n : 0)
+                .ToArray();
+
+        var a = Parts(left);
+        var b = Parts(right);
+        var len = Math.Max(a.Length, b.Length);
+        for (var i = 0; i < len; i++)
+        {
+            var da = i < a.Length ? a[i] : 0;
+            var db = i < b.Length ? b[i] : 0;
+            if (da != db)
+            {
+                return da.CompareTo(db);
+            }
+        }
+
+        return 0;
+    }
+
+    private void ReplyUpdate(object payload)
+    {
+        if (_webView.CoreWebView2 == null)
+        {
+            return;
+        }
+
+        var json = JsonSerializer.Serialize(payload);
+        var script = $"window.__ryanUpdateResolve && window.__ryanUpdateResolve({json});";
+        void Run()
+        {
+            _ = _webView.CoreWebView2.ExecuteScriptAsync(script);
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(Run);
+        }
+        else
+        {
+            Run();
+        }
+    }
+
+    private void ReplyUpdateProgress(double percent, string stage, long received = 0, long total = 0)
+    {
+        if (_webView.CoreWebView2 == null)
+        {
+            return;
+        }
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["percent"] = Math.Round(Math.Clamp(percent, 0, 100), 1),
+            ["stage"] = stage,
+            ["received"] = received,
+            ["total"] = total,
+        };
+        var json = JsonSerializer.Serialize(payload);
+        var script = $"window.__ryanUpdateProgress && window.__ryanUpdateProgress({json});";
+        void Run()
+        {
+            _ = _webView.CoreWebView2.ExecuteScriptAsync(script);
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(Run);
+        }
+        else
+        {
+            Run();
+        }
+    }
+
+    private async Task<ReleaseUpdateInfo> FetchLatestReleaseAsync()
+    {
+        var current = CurrentAppVersion();
+        const string page = "https://github.com/Ryancheese/RyanMusic/releases/latest";
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/vnd.github+json");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", $"RyanMusic/{current}");
+            using var resp = await client.GetAsync("https://api.github.com/repos/Ryancheese/RyanMusic/releases/latest");
+            resp.EnsureSuccessStatusCode();
+            await using var stream = await resp.Content.ReadAsStreamAsync();
+            using var doc = await JsonDocument.ParseAsync(stream);
+            var root = doc.RootElement;
+            var latest = (root.TryGetProperty("tag_name", out var tagEl) ? tagEl.GetString() : "")?.TrimStart('v', 'V') ?? "";
+            var notes = root.TryGetProperty("body", out var bodyEl) ? bodyEl.GetString() ?? "" : "";
+            var htmlUrl = root.TryGetProperty("html_url", out var urlEl) ? urlEl.GetString() ?? page : page;
+            string? download = null;
+            if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var asset in assets.EnumerateArray())
+                {
+                    var name = (asset.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : "")?.ToLowerInvariant() ?? "";
+                    if (name.Contains("setup") && name.EndsWith(".exe", StringComparison.Ordinal))
+                    {
+                        download = asset.TryGetProperty("browser_download_url", out var dlEl) ? dlEl.GetString() : null;
+                        break;
+                    }
+                }
+
+                if (download == null)
+                {
+                    foreach (var asset in assets.EnumerateArray())
+                    {
+                        var name = (asset.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : "")?.ToLowerInvariant() ?? "";
+                        if (name.Contains("ryanmusic") && name.EndsWith(".exe", StringComparison.Ordinal))
+                        {
+                            download = asset.TryGetProperty("browser_download_url", out var dlEl) ? dlEl.GetString() : null;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            var newer = !string.IsNullOrWhiteSpace(latest) && CompareSemver(current, latest) < 0;
+            return new ReleaseUpdateInfo
+            {
+                Ok = true,
+                HasUpdate = newer,
+                Current = current,
+                Latest = latest,
+                Notes = notes,
+                Url = htmlUrl,
+                DownloadUrl = download,
+                Error = newer && string.IsNullOrWhiteSpace(download) ? "发布页里没有 Windows 安装包" : "",
+            };
+        }
+        catch (Exception ex)
+        {
+            return new ReleaseUpdateInfo
+            {
+                Ok = false,
+                HasUpdate = false,
+                Current = current,
+                Url = page,
+                Error = ex.Message,
+            };
+        }
+    }
+
+    private async Task CheckAppUpdateAsync(bool replyToWeb)
+    {
+        var info = await FetchLatestReleaseAsync();
+        if (!replyToWeb)
+        {
+            return;
+        }
+
+        ReplyUpdate(new
+        {
+            ok = info.Ok,
+            hasUpdate = info.HasUpdate,
+            current = info.Current,
+            latest = info.Latest,
+            notes = info.Notes,
+            url = info.Url,
+            error = info.Error,
+        });
+    }
+
+    private async Task InstallAppUpdateAsync(bool replyToWeb)
+    {
+        var info = await FetchLatestReleaseAsync();
+        if (!info.HasUpdate || string.IsNullOrWhiteSpace(info.DownloadUrl))
+        {
+            var error = string.IsNullOrWhiteSpace(info.Error) ? "没有可安装的更新" : info.Error;
+            if (replyToWeb)
+            {
+                ReplyUpdate(new
+                {
+                    ok = false,
+                    hasUpdate = info.HasUpdate,
+                    current = info.Current,
+                    latest = info.Latest,
+                    url = info.Url,
+                    error,
+                });
+            }
+
+            return;
+        }
+
+        try
+        {
+            ReplyUpdateProgress(0, "开始下载…");
+            var setupPath = Path.Combine(Path.GetTempPath(), "RyanMusic-Setup-update.exe");
+            if (File.Exists(setupPath))
+            {
+                File.Delete(setupPath);
+            }
+
+            using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", $"RyanMusic/{info.Current}");
+            using var resp = await client.GetAsync(info.DownloadUrl, HttpCompletionOption.ResponseHeadersRead);
+            resp.EnsureSuccessStatusCode();
+            var total = resp.Content.Headers.ContentLength ?? -1L;
+            await using (var input = await resp.Content.ReadAsStreamAsync())
+            await using (var output = File.Create(setupPath))
+            {
+                var buffer = new byte[81920];
+                long received = 0;
+                var lastReport = DateTime.UtcNow;
+                int read;
+                while ((read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length))) > 0)
+                {
+                    await output.WriteAsync(buffer.AsMemory(0, read));
+                    received += read;
+                    var now = DateTime.UtcNow;
+                    if ((now - lastReport).TotalMilliseconds < 120 && received != total)
+                    {
+                        continue;
+                    }
+
+                    lastReport = now;
+                    var percent = total > 0 ? received * 100.0 / total : Math.Min(95, received / (1024.0 * 1024.0));
+                    ReplyUpdateProgress(percent, "正在下载安装包…", received, total);
+                }
+            }
+
+            ReplyUpdateProgress(100, "准备覆盖安装…");
+            var installDir = Path.GetDirectoryName(Application.ExecutablePath)?.TrimEnd('\\', '/')
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "RyanMusic");
+            var exePath = Path.Combine(installDir, "RyanMusic.exe");
+            var batPath = Path.Combine(Path.GetTempPath(), $"ryanmusic-update-{Environment.ProcessId}.cmd");
+            var bat = $"""
+                @echo off
+                setlocal
+                :wait
+                tasklist /FI "PID eq {Environment.ProcessId}" 2>NUL | find "{Environment.ProcessId}" >NUL
+                if not errorlevel 1 (
+                  timeout /t 1 /nobreak >NUL
+                  goto wait
+                )
+                "{setupPath}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS /DIR="{installDir}"
+                if exist "{exePath}" start "" "{exePath}"
+                del /f /q "{setupPath}" >NUL 2>&1
+                del /f /q "%~f0" >NUL 2>&1
+                """;
+            await File.WriteAllTextAsync(batPath, bat, Encoding.ASCII);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = batPath,
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                CreateNoWindow = true,
+            });
+
+            if (replyToWeb)
+            {
+                ReplyUpdate(new
+                {
+                    ok = true,
+                    hasUpdate = true,
+                    installing = true,
+                    current = info.Current,
+                    latest = info.Latest,
+                    url = info.Url,
+                    progress = 100,
+                    stage = "即将重启…",
+                });
+            }
+
+            await Task.Delay(400);
+            _forceExit = true;
+            if (InvokeRequired)
+            {
+                BeginInvoke(Close);
+            }
+            else
+            {
+                Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            if (replyToWeb)
+            {
+                ReplyUpdate(new
+                {
+                    ok = false,
+                    hasUpdate = true,
+                    current = info.Current,
+                    latest = info.Latest,
+                    url = info.Url,
+                    error = ex.Message,
+                });
+            }
         }
     }
 

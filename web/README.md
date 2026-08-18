@@ -1,6 +1,6 @@
 # RyanMusic Web UI
 
-Folia 风格的 React 前端，构建后输出到 `../maicong-music/static/app/`，由 Node 后端（或历史 PHP 模板）加载。
+React 前端，构建后输出到 `../maicong-music/static/app/`，由 Node 后端（或历史 PHP 模板）加载。
 
 ## 开发
 

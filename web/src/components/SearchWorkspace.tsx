@@ -128,7 +128,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                   }`}
                   style={
                     item.id === source
-                      ? { backgroundColor: theme.accentColor, color: theme.backgroundColor }
+                      ? { backgroundColor: 'var(--text-accent)', color: 'var(--text-on-accent)' }
                       : undefined
                   }
                 >

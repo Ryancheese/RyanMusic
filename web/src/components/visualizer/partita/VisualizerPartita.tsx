@@ -13,6 +13,7 @@ import { resolveWordColor } from '../wordColoring';
 import { resolveThemeFontWeight } from '../../../utils/fontStacks';
 import InterludeDots from '../../InterludeDots';
 import { isInterludeLine } from '../../../utils/lyrics/parserCore';
+import VisualizerWaiting from '../VisualizerWaiting';
 
 // This one is still word-driven, but unlike Classic it needs to pre-build a column/chunk structure first.
 // The flow is basically: ask runtime for the active line, optionally preheat the upcoming line,
@@ -1037,7 +1038,7 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
                                 fontSize: emptyFontSize,
                             }}
                         >
-                            {t('ui.waitingForMusic')}
+                            <VisualizerWaiting coverUrl={props.coverUrl} />
                         </motion.div>
                     )}
                 </AnimatePresence>

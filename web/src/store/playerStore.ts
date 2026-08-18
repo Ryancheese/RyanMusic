@@ -23,7 +23,10 @@ interface PlayerState {
     entry: { type: MusicSource; songid: string },
     queue?: { type: MusicSource; songid: string }[],
   ) => Promise<void>;
-  patchCurrentLyrics: (lyrics: Pick<Track, 'lrc' | 'yrc' | 'tlyric'>) => void;
+  patchCurrentLyrics: (
+    lyrics: Pick<Track, 'lrc' | 'yrc' | 'tlyric' | 'lyricSource'>,
+    options?: { replace?: boolean },
+  ) => void;
 }
 
 const LOOP_ORDER: LoopMode[] = ['off', 'all', 'one'];
@@ -86,23 +89,26 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ queue: tracks, index: index < 0 ? 0 : index });
     }
   },
-  patchCurrentLyrics: (lyrics) => {
+  patchCurrentLyrics: (lyrics, options) => {
     const { queue, index } = get();
     const current = queue[index];
     if (!current) return;
-    const nextLrc = timedLyricScore(lyrics.lrc) >= timedLyricScore(current.lrc)
-      ? (lyrics.lrc || current.lrc)
+    const replace = Boolean(options?.replace);
+    const nextLrc = replace || timedLyricScore(lyrics.lrc) >= timedLyricScore(current.lrc)
+      ? (lyrics.lrc || (replace ? '' : current.lrc))
       : current.lrc;
-    const nextYrc = timedLyricScore(lyrics.yrc) >= timedLyricScore(current.yrc)
-      ? (lyrics.yrc || current.yrc || '')
+    const nextYrc = replace || timedLyricScore(lyrics.yrc) >= timedLyricScore(current.yrc)
+      ? (lyrics.yrc || (replace ? '' : current.yrc || ''))
       : (current.yrc || '');
-    const nextTlyric = timedLyricScore(lyrics.tlyric) >= timedLyricScore(current.tlyric)
-      ? (lyrics.tlyric || current.tlyric || '')
+    const nextTlyric = replace || timedLyricScore(lyrics.tlyric) >= timedLyricScore(current.tlyric)
+      ? (lyrics.tlyric || (replace ? '' : current.tlyric || ''))
       : (current.tlyric || '');
+    const nextSource = lyrics.lyricSource || current.lyricSource;
     if (
       current.lrc === nextLrc
       && (current.yrc || '') === nextYrc
       && (current.tlyric || '') === nextTlyric
+      && current.lyricSource === nextSource
     ) {
       return;
     }
@@ -112,6 +118,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       lrc: nextLrc,
       yrc: nextYrc,
       tlyric: nextTlyric,
+      lyricSource: nextSource,
     };
     set({ queue: next });
   },

@@ -5,6 +5,7 @@ export type MusicSource = 'netease' | 'qq';
 export type HomeTab = 'netease' | 'qq';
 
 export type LibraryLayoutMode = 'honeycomb' | 'square' | 'list';
+export type LibraryCardStyle = 'cover' | 'plaque';
 
 export type LoopMode = 'off' | 'all' | 'one';
 
@@ -20,6 +21,8 @@ export interface Track {
   lrc: string;
   yrc?: string;
   tlyric?: string;
+  /** 当前展示歌词实际来自哪个源 */
+  lyricSource?: 'netease' | 'qq' | 'kugou' | 'amll' | 'native';
   url: string;
   pic: string;
   link?: string;

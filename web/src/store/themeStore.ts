@@ -24,6 +24,13 @@ const KEY = 'ryanmusic-accent-v1';
 interface PersistedAccent {
   presetId: string;
   customColor: string;
+  uiTint: number;
+}
+
+function clampTint(value: unknown): number {
+  const next = Number(value);
+  if (!Number.isFinite(next)) return 45;
+  return Math.min(100, Math.max(0, Math.round(next)));
 }
 
 function readAccent(): PersistedAccent {
@@ -35,17 +42,19 @@ function readAccent(): PersistedAccent {
     const customColor = /^#[0-9a-fA-F]{6}$/.test(String(parsed.customColor || ''))
       ? String(parsed.customColor)
       : '#7c3aed';
-    return { presetId, customColor };
+    return { presetId, customColor, uiTint: clampTint(parsed.uiTint) };
   } catch {
-    return { presetId: 'default', customColor: '#7c3aed' };
+    return { presetId: 'default', customColor: '#7c3aed', uiTint: 45 };
   }
 }
 
 interface ThemeAccentState {
   presetId: string;
   customColor: string;
+  uiTint: number;
   setPreset: (id: string) => void;
   setCustomColor: (color: string) => void;
+  setUiTint: (value: number) => void;
   resolveAccent: (isDaylight: boolean) => string;
 }
 
@@ -54,8 +63,10 @@ const initial = readAccent();
 export const useThemeAccentStore = create<ThemeAccentState>((set, get) => ({
   presetId: initial.presetId,
   customColor: initial.customColor,
+  uiTint: initial.uiTint,
   setPreset: (presetId) => set({ presetId }),
   setCustomColor: (customColor) => set({ presetId: 'custom', customColor }),
+  setUiTint: (uiTint) => set({ uiTint: clampTint(uiTint) }),
   resolveAccent: (isDaylight) => {
     const { presetId, customColor } = get();
     if (presetId === 'custom') return customColor;
@@ -71,5 +82,6 @@ useThemeAccentStore.subscribe((state) => {
   localStorage.setItem(KEY, JSON.stringify({
     presetId: state.presetId,
     customColor: state.customColor,
+    uiTint: state.uiTint,
   }));
 });

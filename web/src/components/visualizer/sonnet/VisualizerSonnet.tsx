@@ -9,6 +9,7 @@ import type { VisualizerSharedProps } from '../definition';
 import { useVisualizerRuntime } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
+import VisualizerWaiting from '../VisualizerWaiting';
 import type { SonnetPixiRuntime, SonnetSongMetadata } from './createSonnetPixiRuntime';
 import { compileSonnetProgram } from './sonnetProgram';
 
@@ -220,7 +221,7 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
                             fontSize: `clamp(2rem, ${5.4 * lyricsFontScale}vw, 5.6rem)`,
                         }}
                     >
-                        {showText && !isInstrumental ? (activeLine?.fullText || t('ui.waitingForMusic')) : null}
+                        {showText && !isInstrumental ? (activeLine?.fullText || <VisualizerWaiting coverUrl={props.coverUrl} />) : null}
                     </div>
                 )}
             </div>

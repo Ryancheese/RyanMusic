@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Image, Palette, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { VISUALIZER_REGISTRY, getVisualizerModeLabel } from './visualizer/registry';
@@ -95,8 +96,8 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
   const controlCardBg = isDaylight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.06)';
   const rangeInputClass = 'w-full accent-[var(--text-accent)]';
   const activeStyle = {
-    boxShadow: '0 0 0 2px var(--text-accent)',
-    background: 'color-mix(in srgb, var(--text-accent) 16%, transparent)',
+    boxShadow: '0 0 0 2px color-mix(in srgb, var(--text-accent) var(--accent-ui-mix, 45%), transparent)',
+    background: 'color-mix(in srgb, var(--text-accent) var(--accent-ui-soft, 18%), transparent)',
   } as React.CSSProperties;
 
   const labelForBg = (itemMode: VisualizerBackgroundMode) => {
@@ -209,16 +210,16 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
     },
   };
 
-  return (
+  const overlay = (
     <div
-      className={`absolute inset-0 z-50 flex ${isMobile ? 'items-end' : 'items-start justify-start'}`}
+      className={`fixed inset-0 z-[70] flex ${isMobile ? 'items-end' : 'items-center justify-center'}`}
       onClick={onClose}
     >
       <aside
-        className={`flex flex-col overflow-hidden border shadow-2xl backdrop-blur-xl ${panel} ${
+        className={`hide-scrollbar flex max-h-[min(78vh,40rem)] flex-col overflow-y-auto border shadow-2xl backdrop-blur-xl ${panel} ${
           isMobile
             ? 'max-h-[min(78dvh,100%)] w-full rounded-t-3xl'
-            : 'ml-4 mt-[max(4.5rem,calc(var(--safe-top)+3.75rem))] h-auto max-h-[min(78vh,40rem)] w-[min(380px,calc(100vw-2rem))] rounded-3xl'
+            : 'h-auto w-[min(380px,calc(100vw-2rem))] rounded-3xl'
         }`}
         style={isMobile ? { paddingBottom: 'var(--safe-bottom)' } : undefined}
         onClick={(event) => event.stopPropagation()}
@@ -241,19 +242,20 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
 
         <div className={`mx-5 mb-3 flex rounded-full p-1 ${pill}`}>
           {([
-            { id: 'lyrics' as const, label: '歌词样式' },
-            { id: 'background' as const, label: '舞台背景' },
+            { id: 'lyrics' as const, label: '歌词样式', Icon: Palette },
+            { id: 'background' as const, label: '舞台背景', Icon: Image },
           ]).map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => setTab(item.id)}
-              className={`flex-1 rounded-full py-1.5 text-xs font-medium transition ${
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-[13px] font-medium transition ${
                 tab === item.id
-                  ? (isDaylight ? 'bg-white text-black shadow' : 'bg-white/18 text-white')
-                  : 'opacity-55'
+                  ? (isDaylight ? 'bg-white text-black shadow-sm' : 'bg-white/18 text-white shadow-sm')
+                  : 'opacity-50 hover:opacity-80'
               }`}
             >
+              <item.Icon size={14} strokeWidth={tab === item.id ? 2.25 : 2} />
               {item.label}
             </button>
           ))}
@@ -262,7 +264,7 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
         {tab === 'lyrics' ? (
           <>
             <div className="px-5 pb-2 text-xs opacity-50">选择歌词动画风格</div>
-            <div className="grid grid-cols-2 gap-2 overflow-y-auto px-5 pb-5">
+            <div className="grid grid-cols-2 gap-2 px-5 pb-5">
               {VISUALIZER_REGISTRY.map((entry) => {
                 const active = entry.mode === mode;
                 return (
@@ -280,8 +282,8 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
             </div>
           </>
         ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
-            <div className="pb-2 text-xs opacity-50">参考 Folia 的舞台背景模式</div>
+          <div className="px-5 pb-5">
+            <div className="pb-2 text-xs opacity-50">舞台背景模式</div>
             <div className="mb-4 grid grid-cols-2 gap-2">
               {VISUALIZER_BACKGROUND_REGISTRY.map((entry) => {
                 const active = entry.mode === bgMode;
@@ -319,6 +321,9 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
       </aside>
     </div>
   );
+
+  if (typeof document === 'undefined') return overlay;
+  return createPortal(overlay, document.body);
 };
 
 export default LyricsStylePicker;

@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { MotionValue } from 'framer-motion';
-import { ListMusic } from 'lucide-react';
+import { AnimatePresence, motion, type MotionValue } from 'framer-motion';
 import type { AudioBands, ThemeTokens, Track, VisualizerMode } from '../types';
 import type { VisualizerBackgroundConfig } from './visualizer/backgrounds/definition';
-import { findLatestActiveLineIndex, trackToVisualizerLines } from '../lib/lyrics';
+import { findLatestActiveLineIndex, resolveVisualizerLyrics } from '../lib/lyrics';
+import { useLyricSettingsStore } from '../store/lyricSettingsStore';
 import { coverRefreshUrl } from '../api';
 import { toFoliaTheme } from '../lib/visualizer';
 import VisualizerRenderer from './visualizer/VisualizerRenderer';
+import RyanLoader from './RyanLoader';
 
 interface PlayerViewProps {
   track: Track | null;
@@ -22,6 +23,8 @@ interface PlayerViewProps {
   audioBands: AudioBands;
   paused?: boolean;
   buffering?: boolean;
+  /** 歌词首次拉取 / 切源中 */
+  lyricsLoading?: boolean;
   isPanelOpen?: boolean;
   onToggleChrome: () => void;
   onOpenPanel?: () => void;
@@ -41,17 +44,26 @@ const PlayerView: React.FC<PlayerViewProps> = ({
   audioPower,
   audioBands,
   paused = false,
-  buffering: _buffering = false,
+  buffering = false,
+  lyricsLoading = false,
   isPanelOpen = false,
   onToggleChrome,
-  onOpenPanel,
-  onBack: _onBack,
   onLyricLineSeek,
 }) => {
-  const lines = useMemo(() => trackToVisualizerLines(track), [track]);
+  const lyricFilterPattern = useLyricSettingsStore((state) => (
+    state.filterEnabled ? state.filterPattern : ''
+  ));
+  const resolvedLyrics = useMemo(
+    () => resolveVisualizerLyrics(track, lyricFilterPattern),
+    [lyricFilterPattern, track],
+  );
+  const lines = resolvedLyrics.lines;
   const foliaTheme = useMemo(() => toFoliaTheme(theme, accent), [accent, theme]);
   const [lineIndex, setLineIndex] = useState(-1);
   const coverUrl = track ? (track.pic || coverRefreshUrl(track.type, track.songid)) : undefined;
+  const showSongLoading = Boolean(track && buffering);
+  const showLyricsLoading = Boolean(track && lyricsLoading && !buffering);
+  const loadingHint = showSongLoading ? '歌曲加载中' : showLyricsLoading ? '歌词加载中' : null;
 
   useEffect(() => {
     let frame = 0;
@@ -95,22 +107,38 @@ const PlayerView: React.FC<PlayerViewProps> = ({
         </div>
       )}
 
-      {!chromeHidden && onOpenPanel && (
-        <button
-          type="button"
-          className={`absolute right-4 z-40 rounded-full p-2.5 backdrop-blur-md md:hidden ${
-            isDaylight ? 'bg-white/70' : 'bg-black/40'
-          }`}
-          style={{ top: 'max(1rem, calc(var(--safe-top) + 0.75rem))' }}
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenPanel();
-          }}
-          aria-label="打开正在播放"
-        >
-          <ListMusic size={16} />
-        </button>
-      )}
+      <AnimatePresence>
+        {loadingHint ? (
+          <motion.div
+            key={loadingHint}
+            className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <motion.div
+              role="status"
+              aria-live="polite"
+              initial={{ opacity: 0, y: 10, scale: 0.94 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.96 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              className="inline-flex items-center gap-2.5 rounded-full px-4 py-2.5 backdrop-blur-md"
+              style={{
+                backgroundColor: isDaylight ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.48)',
+                boxShadow: isDaylight
+                  ? '0 10px 28px rgba(0,0,0,0.12)'
+                  : '0 12px 32px rgba(0,0,0,0.35)',
+                color: isDaylight ? 'rgba(0,0,0,0.82)' : 'rgba(255,255,255,0.92)',
+              }}
+            >
+              <RyanLoader size={18} />
+              <span className="text-[12px] font-medium tracking-wide">{loadingHint}</span>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 };

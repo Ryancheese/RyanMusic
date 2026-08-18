@@ -1,13 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CoverArt from './CoverArt';
 import RyanLoader from './RyanLoader';
-import type { LibraryLayoutMode } from '../types';
+import type { LibraryCardStyle, LibraryLayoutMode } from '../types';
 import {
   areIndexListsEqual,
   pixelToCubeCenter,
   resizeHexGridCoords,
-  resizeSquareGridCoords,
-  resolveVisibleDistanceIndexes,
   resolveVisibleHexIndexes,
   toCubeKey,
   type HexGridCoord,
@@ -28,6 +26,8 @@ interface AlbumWaterfallProps {
   emptyMessage?: string;
   hasFloatingPlayer?: boolean;
   layoutMode?: LibraryLayoutMode;
+  /** 叠在蜂窝/方形上：纯封面或铭牌（下方常驻名称） */
+  cardStyle?: LibraryCardStyle;
 }
 
 const CARD_GAP = 18;
@@ -61,7 +61,8 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   isLoading = false,
   emptyMessage = '还没有内容',
   hasFloatingPlayer = false,
-  layoutMode = 'honeycomb',
+  layoutMode = 'square',
+  cardStyle = 'plaque',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -84,17 +85,20 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   const [visible, setVisible] = useState<number[]>([0]);
 
   const isList = layoutMode === 'list';
-  const layout = layoutForWidth(size.width, layoutMode, zoom);
-  const clipRadius = Math.hypot(size.width, size.height) / 2 + layout.card;
+  const isSquare = layoutMode === 'square';
+  const isPlaque = layoutMode === 'honeycomb' && cardStyle === 'plaque';
+  const layout = layoutForWidth(size.width, isSquare ? 'square' : layoutMode, zoom);
+  const textReserve = isPlaque ? Math.round(layout.card * 0.42) : 0;
+  const cellHeight = layout.card + textReserve;
+  const rowSpacingY = layout.spacingY + textReserve;
+  const clipRadius = Math.hypot(size.width, size.height) / 2 + Math.max(layout.card, cellHeight);
   const showSkeleton = isLoading && items.length === 0;
   const showRefreshOverlay = isLoading && items.length > 0;
 
   const coords = useMemo(() => {
-    coordsRef.current = layoutMode === 'square'
-      ? resizeSquareGridCoords(coordsRef.current, items.length, layout.spacingX, layout.spacingY)
-      : resizeHexGridCoords(coordsRef.current, items.length, layout.spacingX, layout.spacingY);
+    coordsRef.current = resizeHexGridCoords(coordsRef.current, items.length, layout.spacingX, rowSpacingY);
     return coordsRef.current;
-  }, [items.length, layout.spacingX, layout.spacingY, layoutMode]);
+  }, [items.length, layout.spacingX, rowSpacingY]);
 
   const coordByKey = useMemo(() => {
     const map = new Map<string, number>();
@@ -102,7 +106,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
     return map;
   }, [coords]);
 
-  const ringRadius = Math.ceil(clipRadius / Math.min(layout.spacingX, layout.spacingY)) + 1;
+  const ringRadius = Math.ceil(clipRadius / Math.min(layout.spacingX, rowSpacingY)) + 1;
 
   const applyCardFrame = useCallback((el: HTMLElement, coord: HexGridCoord, dx: number, dy: number) => {
     const centerX = coord.baseX + dx;
@@ -117,17 +121,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   }, [clipRadius, layout.maxDistance]);
 
   const refreshVisible = useCallback((dx: number, dy: number) => {
-    if (layoutMode === 'square') {
-      const next = resolveVisibleDistanceIndexes(
-        coords,
-        -dx,
-        -dy,
-        clipRadius + layout.card + CARD_GAP,
-      );
-      setVisible((prev) => (areIndexListsEqual(prev, next) ? prev : next));
-      return;
-    }
-    const center = pixelToCubeCenter(-dx, -dy, layout.spacingX, layout.spacingY);
+    const center = pixelToCubeCenter(-dx, -dy, layout.spacingX, rowSpacingY);
     const next = resolveVisibleHexIndexes(
       center,
       ringRadius,
@@ -138,7 +132,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       clipRadius + layout.card + CARD_GAP,
     );
     setVisible((prev) => (areIndexListsEqual(prev, next) ? prev : next));
-  }, [clipRadius, coordByKey, coords, layout.card, layout.spacingX, layout.spacingY, layoutMode, ringRadius]);
+  }, [clipRadius, coordByKey, coords, layout.card, layout.spacingX, rowSpacingY, ringRadius]);
 
   const paint = useCallback((dx: number, dy: number) => {
     coords.forEach((coord) => {
@@ -158,19 +152,19 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   }, []);
 
   useEffect(() => {
-    if (isList) return;
+    if (isList || isSquare) return;
     offsetRef.current = { x: 0, y: 0 };
     refreshVisible(0, 0);
     requestAnimationFrame(() => paint(0, 0));
-  }, [items.length, layout.spacingX, layout.spacingY, layoutMode, paint, refreshVisible, isList, zoom]);
+  }, [items.length, layout.spacingX, rowSpacingY, layoutMode, paint, refreshVisible, isList, isSquare, isPlaque, zoom]);
 
   useEffect(() => {
-    if (isList) return;
+    if (isList || isSquare) return;
     paint(offsetRef.current.x, offsetRef.current.y);
-  }, [paint, visible, isList]);
+  }, [paint, visible, isList, isSquare]);
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (isList || event.button !== 0) return;
+    if (isList || isSquare || event.button !== 0) return;
     dragRef.current = {
       active: true,
       captured: false,
@@ -199,7 +193,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (isList) return;
+    if (isList || isSquare) return;
     const dragged = dragRef.current.distance >= 8;
     const captured = dragRef.current.captured;
     dragRef.current.active = false;
@@ -226,7 +220,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   };
 
   useEffect(() => {
-    if (isList) return;
+    if (isList || isSquare) return;
     const element = containerRef.current;
     if (!element) return;
     const onWheel = (event: WheelEvent) => {
@@ -249,7 +243,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
     };
     element.addEventListener('wheel', onWheel, { passive: false });
     return () => element.removeEventListener('wheel', onWheel);
-  }, [paint, refreshVisible, isList]);
+  }, [paint, refreshVisible, isList, isSquare]);
 
   // 切换蜂窝/方形时重置缩放，避免间距错乱残留
   useEffect(() => {
@@ -257,11 +251,99 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   }, [layoutMode]);
 
   const skeletons = useMemo(
-    () => (layoutMode === 'square'
-      ? resizeSquareGridCoords([], 12, layout.spacingX, layout.spacingY)
-      : resizeHexGridCoords([], 12, layout.spacingX, layout.spacingY)),
-    [layout.spacingX, layout.spacingY, layoutMode],
+    () => resizeHexGridCoords([], 12, layout.spacingX, rowSpacingY),
+    [layout.spacingX, rowSpacingY],
   );
+
+
+  if (isSquare) {
+    const showPlaque = cardStyle === 'plaque';
+    return (
+      <div
+        key="library-square"
+        ref={containerRef}
+        className="app-scroll hide-scrollbar relative min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto"
+        style={{ paddingBottom: hasFloatingPlayer ? 'var(--player-dock-safe)' : '1.5rem' }}
+      >
+        <div
+          className="mx-auto grid w-full gap-4 px-4 pb-4 sm:gap-5 sm:px-6 md:gap-6 md:px-8"
+          style={{
+            maxWidth: 1280,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 156px), 1fr))',
+          }}
+        >
+          {showSkeleton
+            ? Array.from({ length: 12 }, (_, index) => (
+                <div
+                  key={`sk-square-${index}`}
+                  className="flex flex-col rounded-2xl p-2.5"
+                  style={{ backgroundColor: isDaylight ? 'rgba(0,0,0,0.04)' : 'rgba(12,12,12,0.92)' }}
+                >
+                  <div className="ryan-cover-shimmer aspect-square w-full rounded-xl" />
+                  {showPlaque ? (
+                    <>
+                      <div className="ryan-cover-shimmer mt-3 h-3.5 w-4/5 rounded-full" />
+                      <div className="ryan-cover-shimmer mt-2 h-2.5 w-1/2 rounded-full" />
+                    </>
+                  ) : null}
+                </div>
+              ))
+            : items.length === 0
+              ? (
+                  <div className="col-span-full flex flex-col items-center justify-center gap-4 py-16 text-center">
+                    {isLoading ? <RyanLoader size={56} label={emptyMessage} /> : (
+                      <p className="text-sm opacity-40">{emptyMessage}</p>
+                    )}
+                  </div>
+                )
+              : items.map((item, index) => (
+                  <button
+                    key={`square-${item.id}`}
+                    type="button"
+                    onClick={() => onSelect(item, index)}
+                    title={item.name}
+                    className="app-scroll-item group flex w-full flex-col rounded-2xl p-2.5 text-left transition hover:brightness-110"
+                    style={{
+                      backgroundColor: isDaylight ? 'rgba(0,0,0,0.045)' : 'rgba(18,18,18,0.96)',
+                      boxShadow: isDaylight
+                        ? '0 8px 22px rgba(0,0,0,0.08)'
+                        : '0 10px 28px rgba(0,0,0,0.45)',
+                    }}
+                  >
+                    <div
+                      className="relative aspect-square w-full overflow-hidden rounded-xl"
+                      style={{ backgroundColor: isDaylight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}
+                    >
+                      <CoverArt src={item.coverUrl} lazy={false} />
+                      {!showPlaque ? (
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-3 pt-10 pb-2.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                          <div className="truncate text-xs font-semibold text-white">{item.name}</div>
+                        </div>
+                      ) : null}
+                    </div>
+                    {showPlaque ? (
+                      <div className="min-w-0 px-0.5 pt-2.5 pb-0.5">
+                        <div className="truncate text-[13px] font-semibold leading-snug tracking-tight">
+                          {item.name}
+                        </div>
+                        {item.description ? (
+                          <div className="mt-1 truncate text-[11px] leading-snug opacity-45">
+                            {item.description}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </button>
+                ))}
+        </div>
+        {showRefreshOverlay ? (
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/10 backdrop-blur-[1px]">
+            <RyanLoader size={52} label="同步中…" />
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   if (isList) {
     return (
@@ -354,14 +436,15 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                 className="absolute top-1/2 left-1/2 overflow-hidden rounded-2xl"
                 style={{
                   width: layout.card,
-                  height: layout.card,
+                  height: cellHeight,
                   marginLeft: -layout.card / 2,
-                  marginTop: -layout.card / 2,
+                  marginTop: -cellHeight / 2,
                   transform: `translate3d(${coord.baseX}px, ${coord.baseY}px, 0)`,
                   boxShadow: '0 14px 28px rgba(0,0,0,0.22)',
                 }}
               >
-                <div className="ryan-cover-shimmer h-full w-full" />
+                <div className="ryan-cover-shimmer w-full" style={{ height: layout.card }} />
+                {isPlaque ? <div className="ryan-cover-shimmer mx-2 mt-2 h-2.5 w-3/4 rounded-full" /> : null}
               </div>
             ))
           : items.length === 0
@@ -384,16 +467,20 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                       cardRefs.current[index] = el;
                     }}
                     data-waterfall-index={index}
-                    className="group absolute top-1/2 left-1/2 overflow-hidden rounded-2xl border-0 outline-none ring-0"
+                    className={`group absolute top-1/2 left-1/2 overflow-hidden rounded-2xl border-0 outline-none ring-0 ${isPlaque ? 'flex flex-col p-2.5' : ''}`}
                     style={{
                       width: layout.card,
-                      height: layout.card,
+                      height: cellHeight,
                       marginLeft: -layout.card / 2,
-                      marginTop: -layout.card / 2,
+                      marginTop: -cellHeight / 2,
                       willChange: 'transform, opacity',
                       isolation: 'isolate',
-                      boxShadow: '0 14px 28px rgba(0,0,0,0.22)',
-                      backgroundColor: isDaylight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)',
+                      boxShadow: isPlaque
+                        ? (isDaylight ? '0 8px 22px rgba(0,0,0,0.08)' : '0 10px 28px rgba(0,0,0,0.45)')
+                        : '0 14px 28px rgba(0,0,0,0.22)',
+                      backgroundColor: isPlaque
+                        ? (isDaylight ? 'rgba(0,0,0,0.045)' : 'rgba(18,18,18,0.96)')
+                        : (isDaylight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)'),
                     }}
                     onClick={(event) => event.preventDefault()}
                     onKeyDown={(event) => {
@@ -402,13 +489,25 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                       onSelect(item, index);
                     }}
                   >
-                    <CoverArt src={item.coverUrl} />
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pt-8 pb-2.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-                      <div className="truncate text-left text-xs font-semibold text-white">{item.name}</div>
-                      {item.description ? (
-                        <div className="mt-0.5 truncate text-left text-[10px] text-white/70">{item.description}</div>
+                    <div
+                      className={`relative z-0 w-full overflow-hidden ${isPlaque ? 'rounded-xl' : ''}`}
+                      style={{ height: isPlaque ? layout.card - 20 : layout.card }}
+                    >
+                      <CoverArt src={item.coverUrl} />
+                      {!isPlaque ? (
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pt-8 pb-2.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
+                          <div className="truncate text-left text-xs font-semibold text-white">{item.name}</div>
+                        </div>
                       ) : null}
                     </div>
+                    {isPlaque ? (
+                      <div className="min-w-0 px-0.5 pt-2 pb-0.5 text-left" style={{ height: textReserve - 10 }}>
+                        <div className="truncate text-[12px] font-semibold leading-snug tracking-tight">{item.name}</div>
+                        {item.description ? (
+                          <div className="mt-0.5 truncate text-[10px] leading-snug opacity-45">{item.description}</div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </button>
                 );
               })}

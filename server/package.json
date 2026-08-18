@@ -1,7 +1,7 @@
 {
   "name": "ryanmusic-server",
   "private": true,
-  "version": "1.8.60",
+  "version": "1.8.62",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts --",

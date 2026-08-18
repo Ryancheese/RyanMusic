@@ -2,13 +2,17 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMotionValue } from 'framer-motion';
 import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type Track, type VisualizerMode } from './types';
 import { buildDownloadUrl, canNativeSave, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type PlayQuality } from './api';
-import { extractAccentFromImage } from './lib/color';
+import { contrastText, extractAccentFromImage } from './lib/color';
 import { isMobileViewport, isWindowsApp, prefersLightweightVisualizer } from './lib/media';
 import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig, writeVisualizerMode } from './lib/visualizer';
 import { useLibraryStore } from './store/libraryStore';
 import { useCloudStore } from './store/cloudStore';
 import { usePlayerStore } from './store/playerStore';
 import { useThemeAccentStore } from './store/themeStore';
+import { useLyricSettingsStore } from './store/lyricSettingsStore';
+import { usePlaybackSettingsStore } from './store/playbackSettingsStore';
+import type { LyricProviderSource } from './types';
+import { trackUsesWordByWordLyrics } from './lib/lyrics';
 import FloatingPlayerControls from './components/FloatingPlayerControls';
 import HomeView from './components/HomeView';
 import PlayerView from './components/PlayerView';
@@ -53,9 +57,12 @@ const App: React.FC = () => {
   const [searching, setSearching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchError, setSearchError] = useState('');
-  const [panelOpen, setPanelOpen] = useState(() => !isMobileViewport());
+  const [panelOpen, setPanelOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
   const [chromeHidden, setChromeHidden] = useState(false);
+  const [lyricsSwitching, setLyricsSwitching] = useState(false);
+  const [lyricsLoading, setLyricsLoading] = useState(false);
+  const lyricRequestGen = useRef(0);
   const [accent, setAccent] = useState<string | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
   const [legalOpen, setLegalOpen] = useState(false);
@@ -64,12 +71,13 @@ const App: React.FC = () => {
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [updateBusy, setUpdateBusy] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [updateProgress, setUpdateProgress] = useState<number | null>(null);
+  const [updateProgressStage, setUpdateProgressStage] = useState('');
   const [netease, setNetease] = useState<AccountStatus | null>(null);
   const [qq, setQq] = useState<AccountStatus | null>(null);
   const lastQueryRef = useRef('');
 
-  const source = usePlayerStore((state) => state.source);
-  const setSource = usePlayerStore((state) => state.setSource);
+  const [searchSource, setSearchSource] = useState<MusicSource>('netease');
   const queue = usePlayerStore((state) => state.queue);
   const index = usePlayerStore((state) => state.index);
   const status = usePlayerStore((state) => state.status);
@@ -86,7 +94,13 @@ const App: React.FC = () => {
   const homeTab = useLibraryStore((state) => state.homeTab);
   const setHomeTab = useLibraryStore((state) => state.setHomeTab);
   const layoutMode = useLibraryStore((state) => state.layoutMode);
+  const cardStyle = useLibraryStore((state) => state.cardStyle);
   const setLayoutMode = useLibraryStore((state) => state.setLayoutMode);
+  const preferredLyricSource = useLyricSettingsStore((state) => state.preferredSource);
+  const autoUseBestLyrics = useLyricSettingsStore((state) => state.autoUseBest);
+  const lyricFilterPattern = useLyricSettingsStore((state) => (
+    state.filterEnabled ? state.filterPattern : ''
+  ));
 
   const neteasePlaylists = useCloudStore((state) => state.neteasePlaylists);
   const qqPlaylists = useCloudStore((state) => state.qqPlaylists);
@@ -108,7 +122,12 @@ const App: React.FC = () => {
   const closeQqPlaylist = useCloudStore((state) => state.closeQqPlaylist);
 
   const [authFallback, setAuthFallback] = useState(false);
+  const crossPlayFallback = usePlaybackSettingsStore((state) => state.crossPlayFallback);
   const track = queue[index] || null;
+  const wordByWordLyrics = useMemo(
+    () => trackUsesWordByWordLyrics(track, lyricFilterPattern),
+    [lyricFilterPattern, track],
+  );
   const vipPlay = Boolean(
     (track?.type === 'netease' && netease?.loggedIn && Number(netease.vip) > 0)
     || (track?.type === 'qq' && qq?.loggedIn && Number(qq.vip) > 0),
@@ -116,32 +135,53 @@ const App: React.FC = () => {
   const authedPlay = !authFallback && vipPlay;
   const mediaUrl = useMemo(() => {
     if (!track?.url) return '';
-    if (!authedPlay) return track.url;
     const params = new URLSearchParams();
-    params.set('auth', '1');
-    if (track.type === 'netease' && audioQuality) params.set('level', audioQuality);
+    if (authedPlay) {
+      params.set('auth', '1');
+      if (track.type === 'netease' && audioQuality) params.set('level', audioQuality);
+    }
+    if (crossPlayFallback) {
+      params.set('cross', '1');
+      if (track.title) params.set('title', track.title);
+      if (track.author) params.set('artist', track.author);
+    }
+    const query = params.toString();
+    if (!query) return track.url;
     const join = track.url.includes('?') ? '&' : '?';
-    return `${track.url}${join}${params.toString()}`;
-  }, [audioQuality, authedPlay, track?.type, track?.url]);
+    return `${track.url}${join}${query}`;
+  }, [audioQuality, authedPlay, crossPlayFallback, track?.author, track?.title, track?.type, track?.url]);
   const theme = isDaylight ? DAYLIGHT_THEME : MIDNIGHT_THEME;
   const resolveAccent = useThemeAccentStore((state) => state.resolveAccent);
   const presetId = useThemeAccentStore((state) => state.presetId);
   const customColor = useThemeAccentStore((state) => state.customColor);
+  const uiTint = useThemeAccentStore((state) => state.uiTint);
   const userAccent = useMemo(
     () => resolveAccent(isDaylight),
     [customColor, isDaylight, presetId, resolveAccent],
   );
 
+  const onAccent = useMemo(() => contrastText(userAccent), [userAccent]);
+
   useEffect(() => {
-    document.documentElement.style.setProperty('--bg-color', theme.backgroundColor);
-    document.documentElement.style.backgroundColor = theme.backgroundColor;
+    const root = document.documentElement;
+    root.style.setProperty('--bg-color', theme.backgroundColor);
+    root.style.setProperty('--text-primary', theme.primaryColor);
+    root.style.setProperty('--text-secondary', theme.secondaryColor);
+    root.style.setProperty('--text-accent', userAccent);
+    root.style.setProperty('--text-on-accent', onAccent);
+    root.style.setProperty('--accent-ui-mix', `${uiTint}%`);
+    root.style.setProperty('--accent-ui-soft', `${Math.round(uiTint * 0.38)}%`);
+    root.style.setProperty('--accent-ui-border', `${Math.round(uiTint * 0.55)}%`);
+    root.style.colorScheme = isDaylight ? 'light' : 'dark';
+    root.classList.toggle('theme-daylight', isDaylight);
+    root.style.backgroundColor = theme.backgroundColor;
     document.body.style.backgroundColor = theme.backgroundColor;
     try {
       window.webkit?.messageHandlers?.ryanChrome?.postMessage({ daylight: isDaylight });
     } catch {
       // non-mac / no bridge
     }
-  }, [isDaylight, theme.backgroundColor]);
+  }, [isDaylight, onAccent, theme.backgroundColor, theme.primaryColor, theme.secondaryColor, uiTint, userAccent]);
 
   const appStyle = useMemo(
     () =>
@@ -150,12 +190,15 @@ const App: React.FC = () => {
         '--text-primary': theme.primaryColor,
         '--text-secondary': theme.secondaryColor,
         '--text-accent': userAccent,
+        '--text-on-accent': onAccent,
+        '--accent-ui-mix': `${uiTint}%`,
+        '--accent-ui-soft': `${Math.round(uiTint * 0.38)}%`,
+        '--accent-ui-border': `${Math.round(uiTint * 0.55)}%`,
         backgroundColor: theme.backgroundColor,
         color: theme.primaryColor,
       }) as React.CSSProperties,
-    [theme, userAccent],
+    [onAccent, theme, uiTint, userAccent],
   );
-
 
   useEffect(() => {
     let cancelled = false;
@@ -278,9 +321,22 @@ const App: React.FC = () => {
 
   const runInstallUpdate = useCallback(async () => {
     setUpdateBusy(true);
+    setUpdateProgress(0);
+    setUpdateProgressStage('准备下载…');
     try {
-      const info = await installAppUpdate();
+      const info = await installAppUpdate((progress) => {
+        if (typeof progress.percent === 'number') {
+          setUpdateProgress(progress.percent);
+        }
+        if (progress.stage) {
+          setUpdateProgressStage(progress.stage);
+        }
+      });
       setUpdateInfo(info);
+      if (info.installing) {
+        setUpdateProgress(100);
+        setUpdateProgressStage('即将重启…');
+      }
     } catch (error) {
       setUpdateInfo({
         ok: false,
@@ -291,6 +347,8 @@ const App: React.FC = () => {
       });
     } finally {
       setUpdateBusy(false);
+      setUpdateProgress(null);
+      setUpdateProgressStage('');
     }
   }, [updateInfo]);
 
@@ -316,7 +374,7 @@ const App: React.FC = () => {
       const input = text.trim();
       if (!input) return;
       lastQueryRef.current = input;
-      const activeSource = sourceOverride || source;
+      const activeSource = sourceOverride || searchSource;
       if (append) setLoadingMore(true);
       else {
         setSearching(true);
@@ -350,7 +408,7 @@ const App: React.FC = () => {
         setLoadingMore(false);
       }
     },
-    [source],
+    [searchSource],
   );
 
   useEffect(() => {
@@ -476,19 +534,80 @@ const App: React.FC = () => {
   }, [qq?.loggedIn, syncQq]);
 
   useEffect(() => {
-    if (!track || status !== 'playing') return;
-    if (track.lrc || track.yrc) return;
+    const neIn = Boolean(netease?.loggedIn);
+    const qqIn = Boolean(qq?.loggedIn);
+    if (neIn && !qqIn && homeTab !== 'netease') setHomeTab('netease');
+    else if (qqIn && !neIn && homeTab !== 'qq') setHomeTab('qq');
+  }, [homeTab, netease?.loggedIn, qq?.loggedIn, setHomeTab]);
+
+  useEffect(() => {
+    if (!track) {
+      setLyricsLoading(false);
+      return;
+    }
     const type = track.type;
     const id = track.songid;
+    const title = track.title;
+    const artist = track.author;
+    const preferred = preferredLyricSource;
+    const autoUseBest = autoUseBestLyrics;
+    const durationMs = duration > 0 ? duration * 1000 : 0;
     let alive = true;
-    void fetchTrackLyrics(type, id).then((lyrics) => {
-      if (!alive || !lyrics) return;
-      patchCurrentLyrics(lyrics);
-    });
+    const gen = ++lyricRequestGen.current;
+    setLyricsLoading(true);
+    void fetchTrackLyrics({ type, songid: id, title, artist, preferred, autoUseBest, durationMs })
+      .then((lyrics) => {
+        if (!alive || gen !== lyricRequestGen.current || !lyrics) return;
+        if (!lyrics.lrc && !lyrics.yrc) return;
+        patchCurrentLyrics(lyrics, { replace: true });
+      })
+      .finally(() => {
+        if (alive && gen === lyricRequestGen.current) setLyricsLoading(false);
+      });
     return () => {
       alive = false;
     };
-  }, [patchCurrentLyrics, status, track?.lrc, track?.songid, track?.type, track?.yrc]);
+  }, [
+    autoUseBestLyrics,
+    duration,
+    patchCurrentLyrics,
+    preferredLyricSource,
+    track?.author,
+    track?.songid,
+    track?.title,
+    track?.type,
+  ]);
+
+  const switchLyricSource = useCallback(async (source: LyricProviderSource) => {
+    if (!track) return;
+    const type = track.type;
+    const id = track.songid;
+    const title = track.title;
+    const artist = track.author;
+    const durationMs = duration > 0 ? duration * 1000 : 0;
+    const gen = ++lyricRequestGen.current;
+    setLyricsSwitching(true);
+    try {
+      const lyrics = await fetchTrackLyrics({
+        type,
+        songid: id,
+        title,
+        artist,
+        preferred: source,
+        autoUseBest: false,
+        forceSource: true,
+        durationMs,
+      });
+      if (gen !== lyricRequestGen.current) return;
+      if (!lyrics || (!lyrics.lrc && !lyrics.yrc)) return;
+      patchCurrentLyrics(
+        { ...lyrics, lyricSource: lyrics.lyricSource || source },
+        { replace: true },
+      );
+    } finally {
+      if (gen === lyricRequestGen.current) setLyricsSwitching(false);
+    }
+  }, [duration, patchCurrentLyrics, track]);
 
   useEffect(() => {
     const next = queue[index + 1];
@@ -501,13 +620,18 @@ const App: React.FC = () => {
       const url = new URL(next.url, window.location.origin);
       url.searchParams.set('probe', '1');
       if (nextVip) url.searchParams.set('auth', '1');
+      if (crossPlayFallback) {
+        url.searchParams.set('cross', '1');
+        if (next.title) url.searchParams.set('title', next.title);
+        if (next.author) url.searchParams.set('artist', next.author);
+      }
       const controller = new AbortController();
       void fetch(url, { signal: controller.signal }).catch(() => undefined);
       return () => controller.abort();
     } catch {
       return undefined;
     }
-  }, [index, netease?.loggedIn, netease?.vip, qq?.loggedIn, qq?.vip, queue]);
+  }, [crossPlayFallback, index, netease?.loggedIn, netease?.vip, qq?.loggedIn, qq?.vip, queue]);
 
   useEffect(() => {
     if (!track?.pic) {
@@ -601,7 +725,7 @@ const App: React.FC = () => {
     const url = params.get('url');
     const type = params.get('type');
     const doc = parseLegalTab(params.get('doc'));
-    if (type === 'qq' || type === 'netease') setSource(type);
+    if (type === 'qq' || type === 'netease') setSearchSource(type);
     if (url || name) {
       const text = url || name || '';
       setQuery(text);
@@ -687,6 +811,7 @@ const App: React.FC = () => {
           isDaylight={isDaylight}
           homeTab={homeTab}
           layoutMode={layoutMode}
+          cardStyle={cardStyle}
           neteasePlaylists={neteasePlaylists}
           qqPlaylists={qqPlaylists}
           neteaseOpen={neteaseOpen}
@@ -709,7 +834,6 @@ const App: React.FC = () => {
           onSelectEntry={(entry, queueEntries) => {
             void playLibraryEntry(entry, queueEntries);
             setView('player');
-            setPanelOpen(!isMobileViewport());
             setChromeHidden(false);
           }}
           onOpenPlaylist={(item) => {
@@ -751,8 +875,15 @@ const App: React.FC = () => {
           audioBands={audioBands}
           paused={status !== 'playing'}
           buffering={(buffering || status === 'loading') && status !== 'paused'}
-          onBack={goHome}
-          isPanelOpen={panelOpen}
+          lyricsLoading={lyricsLoading || lyricsSwitching}
+          onBack={() => {
+            if (styleOpen) {
+              setStyleOpen(false);
+              return;
+            }
+            goHome();
+          }}
+          isPanelOpen={panelOpen && !chromeHidden}
           onOpenPanel={() => {
             setPanelOpen(true);
           }}
@@ -760,8 +891,7 @@ const App: React.FC = () => {
           onToggleChrome={() => {
             setChromeHidden((hidden) => {
               const nextHidden = !hidden;
-              if (!isMobileViewport()) setPanelOpen(!nextHidden);
-              else if (nextHidden) setPanelOpen(false);
+              if (isMobileViewport() && nextHidden) setPanelOpen(false);
               return nextHidden;
             });
           }}
@@ -771,7 +901,7 @@ const App: React.FC = () => {
       <SearchWorkspace
         open={searchOpen}
         query={query}
-        source={source}
+        source={searchSource}
         isDaylight={isDaylight}
         theme={theme}
         isSearching={searching}
@@ -781,8 +911,8 @@ const App: React.FC = () => {
         hasMore={hasMore}
         onQueryChange={setQuery}
         onSourceChange={(next: MusicSource) => {
-          setSource(next);
-          if (query.trim()) void runSearch(query);
+          setSearchSource(next);
+          if (query.trim()) void runSearch(query, 1, false, next);
         }}
         onSubmit={() => void runSearch(query)}
         onClose={() => setSearchOpen(false)}
@@ -790,7 +920,6 @@ const App: React.FC = () => {
           playTracks(results, playAt);
           setSearchOpen(false);
           setView('player');
-          setPanelOpen(!isMobileViewport());
           setChromeHidden(false);
         }}
         onAddQueue={(item) => {
@@ -800,40 +929,6 @@ const App: React.FC = () => {
           if (hasMore && !loadingMore) void runSearch(lastQueryRef.current, searchPage + 1, true);
         }}
       />
-
-      {view === 'player' && (
-        <SidePanel
-          open={panelOpen && !chromeHidden}
-          isDaylight={isDaylight}
-          theme={theme}
-          track={track}
-          queue={queue}
-          index={index}
-          currentTime={currentTime}
-          visualizerMode={visualizerMode}
-          background={backgroundConfig}
-          styleOpen={styleOpen}
-          buffering={(buffering || status === 'loading') && status !== 'paused'}
-          onStyleOpenChange={setStyleOpen}
-          onVisualizerModeChange={(mode) => {
-            setVisualizerMode(mode);
-            writeVisualizerMode(mode);
-          }}
-          onBackgroundChange={(config) => {
-            setBackgroundConfig(config);
-            writeBackgroundConfig(config);
-          }}
-          onClose={() => setPanelOpen(false)}
-          onHome={goHome}
-          onDownloadSong={downloadSong}
-          onDownloadLrc={downloadLrc}
-          onPlayIndex={playIndex}
-          onLyricLineSeek={seek}
-          qualityOptions={authedPlay && track?.type === 'netease' ? qualityOptions : []}
-          audioQuality={audioQuality}
-          onAudioQualityChange={setAudioQuality}
-        />
-      )}
 
       <AccountModal
         open={accountOpen}
@@ -885,6 +980,8 @@ const App: React.FC = () => {
         theme={theme}
         info={updateInfo}
         busy={updateBusy}
+        progress={updateProgress}
+        progressStage={updateProgressStage}
         onClose={() => setUpdateOpen(false)}
         onInstall={() => void runInstallUpdate()}
       />
@@ -901,6 +998,7 @@ const App: React.FC = () => {
         isDaylight={isDaylight}
         buffering={(buffering || status === 'loading') && status !== 'paused'}
         isHidden={view === 'player' && chromeHidden}
+        panelOpen={panelOpen}
         onSeek={seek}
         onTogglePlay={togglePlay}
         onToggleLoop={toggleLoop}
@@ -909,7 +1007,55 @@ const App: React.FC = () => {
         onNavigateToPlayer={() => {
           if (track) setView('player');
         }}
-      />
+        onBack={() => {
+          if (styleOpen) {
+            setStyleOpen(false);
+            return;
+          }
+          goHome();
+        }}
+        onTogglePanel={() => setPanelOpen((open) => !open)}
+        trackTitle={track?.title || ''}
+        wordByWord={wordByWordLyrics}
+      >
+        {view === 'player' ? (
+          <SidePanel
+            open={panelOpen}
+            visible={!chromeHidden}
+            isDaylight={isDaylight}
+            theme={theme}
+            track={track}
+            queue={queue}
+            index={index}
+            currentTime={currentTime}
+            visualizerMode={visualizerMode}
+            background={backgroundConfig}
+            styleOpen={styleOpen}
+            buffering={(buffering || status === 'loading') && status !== 'paused'}
+            lyricsSwitching={lyricsSwitching}
+            onStyleOpenChange={setStyleOpen}
+            onVisualizerModeChange={(mode) => {
+              setVisualizerMode(mode);
+              writeVisualizerMode(mode);
+            }}
+            onBackgroundChange={(config) => {
+              setBackgroundConfig(config);
+              writeBackgroundConfig(config);
+            }}
+            onClose={() => setPanelOpen(false)}
+            onOpen={() => setPanelOpen(true)}
+            onHome={goHome}
+            onDownloadSong={downloadSong}
+            onDownloadLrc={downloadLrc}
+            onPlayIndex={playIndex}
+            onLyricLineSeek={seek}
+            onSwitchLyricSource={switchLyricSource}
+            qualityOptions={authedPlay && track?.type === 'netease' ? qualityOptions : []}
+            audioQuality={audioQuality}
+            onAudioQualityChange={setAudioQuality}
+          />
+        ) : null}
+      </FloatingPlayerControls>
     </div>
   );
 };

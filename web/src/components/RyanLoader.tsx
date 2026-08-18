@@ -8,7 +8,7 @@ interface RyanLoaderProps {
   variant?: 'circular' | 'hex';
 }
 
-/** Folia 风格加载指示 */
+/** 加载指示 */
 const RyanLoader: React.FC<RyanLoaderProps> = ({
   size = 48,
   label,

@@ -1,4 +1,4 @@
-/** Folia 背景设置面板中文兜底 */
+/** 背景设置面板中文兜底 */
 const BG_I18N: Record<string, string> = {
   'options.disableVisualizerVignette': '关闭暗角',
   'options.disableVisualizerVignetteDesc': '去掉舞台边缘压暗',
