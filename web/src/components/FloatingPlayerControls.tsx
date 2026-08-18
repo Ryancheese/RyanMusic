@@ -65,16 +65,20 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const primaryColor = 'var(--text-primary)';
   const secondaryColor = 'var(--text-secondary)';
   const glassStyle: React.CSSProperties = {
-    backgroundColor: showExpanded
+    backgroundColor: currentView === 'home'
       ? (isDaylight
-        ? 'color-mix(in srgb, var(--bg-color) 78%, transparent)'
-        : 'color-mix(in srgb, var(--bg-color) 52%, transparent)')
-      : (isDaylight
-        ? 'color-mix(in srgb, var(--bg-color) 62%, transparent)'
-        : 'color-mix(in srgb, var(--bg-color) 38%, transparent)'),
+        ? 'color-mix(in srgb, var(--bg-color) 94%, transparent)'
+        : 'color-mix(in srgb, var(--bg-color) 88%, transparent)')
+      : (showExpanded
+        ? (isDaylight
+          ? 'color-mix(in srgb, var(--bg-color) 78%, transparent)'
+          : 'color-mix(in srgb, var(--bg-color) 52%, transparent)')
+        : (isDaylight
+          ? 'color-mix(in srgb, var(--bg-color) 62%, transparent)'
+          : 'color-mix(in srgb, var(--bg-color) 38%, transparent)')),
     boxShadow: '0 16px 36px rgba(0, 0, 0, 0.28)',
-    backdropFilter: 'blur(18px)',
-    WebkitBackdropFilter: 'blur(18px)',
+    backdropFilter: currentView === 'home' ? 'none' : 'blur(12px)',
+    WebkitBackdropFilter: currentView === 'home' ? 'none' : 'blur(12px)',
     isolation: 'isolate',
   };
   const skipClass = `flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-opacity ${
@@ -134,8 +138,8 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                   ? 'color-mix(in srgb, var(--bg-color) 88%, transparent)'
                   : 'color-mix(in srgb, var(--bg-color) 70%, transparent)',
                 color: primaryColor,
-                backdropFilter: 'blur(12px)',
-                WebkitBackdropFilter: 'blur(12px)',
+                backdropFilter: 'none',
+                WebkitBackdropFilter: 'none',
               }}
             >
               点击可以返回歌词舞台

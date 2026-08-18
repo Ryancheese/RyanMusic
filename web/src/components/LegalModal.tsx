@@ -28,7 +28,7 @@ const LegalModal: React.FC<LegalModalProps> = ({
   return (
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 p-0 md:items-center md:p-6" onClick={onClose}>
       <aside
-        className={`flex max-h-[min(88dvh,760px)] w-full max-w-2xl flex-col overflow-hidden border border-white/10 shadow-2xl backdrop-blur-xl ${panel} md:rounded-3xl`}
+        className={`flex max-h-[min(88dvh,760px)] w-full max-w-2xl flex-col overflow-hidden border border-white/10 shadow-2xl ${panel} md:rounded-3xl`}
         style={{ paddingBottom: 'var(--safe-bottom)' }}
         onClick={(event) => event.stopPropagation()}
       >
@@ -55,7 +55,7 @@ const LegalModal: React.FC<LegalModalProps> = ({
             </button>
           ))}
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 text-sm leading-relaxed">
+        <div className="app-scroll min-h-0 flex-1 overflow-y-auto px-5 pb-6 text-sm leading-relaxed">
           {doc.sections.map((section, index) => (
             <section key={`${tab}-${index}`} className="mb-5">
               {section.title ? (

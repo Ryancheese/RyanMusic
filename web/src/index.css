@@ -91,12 +91,19 @@ a {
   overscroll-behavior-y: contain;
   touch-action: pan-y;
   scrollbar-gutter: stable;
+  overflow-anchor: none;
+  contain: layout paint;
 }
 
 .app-scroll-x {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
   touch-action: pan-x;
+}
+
+.app-scroll-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 4.25rem;
 }
 
 .theme-polaroid-card {
@@ -106,7 +113,7 @@ a {
 }
 
 .theme-glass-panel {
-  background-color: color-mix(in srgb, var(--bg-color) 85%, transparent) !important;
+  background-color: color-mix(in srgb, var(--bg-color) 92%, transparent) !important;
   border-color: color-mix(in srgb, var(--text-primary) 12%, transparent) !important;
   color: var(--text-primary) !important;
 }
@@ -116,7 +123,7 @@ a {
 }
 
 html.platform-windows-app .theme-glass-panel {
-  backdrop-filter: blur(12px);
+  backdrop-filter: none;
 }
 
 .platform-macos-app .titlebar-drag {
@@ -273,6 +280,8 @@ html.platform-windows-app .theme-glass-panel {
   position: absolute;
   inset: 0;
   z-index: 1;
+  contain: strict;
+  transform: translateZ(0);
   background:
     radial-gradient(ellipse 90% 70% at 12% 8%, color-mix(in srgb, var(--text-accent) 16%, transparent), transparent 58%),
     radial-gradient(ellipse 80% 60% at 92% 88%, color-mix(in srgb, var(--text-accent) 12%, transparent), transparent 52%),

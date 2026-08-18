@@ -123,7 +123,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       : cloudError || (showingPlaylists ? '还没有歌单，打开登录面板可重新同步' : '这个歌单是空的');
 
   const tabPills = (
-    <div className={`relative rounded-full p-1 backdrop-blur-md ${navPillBg}`}>
+    <div className={`relative rounded-full p-1 ${navPillBg}`}>
       <div className="inline-flex items-center">
         {TABS.map((tab) => {
           const active = homeTab === tab.id;

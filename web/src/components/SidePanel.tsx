@@ -70,6 +70,8 @@ const SidePanel: React.FC<SidePanelProps> = ({
   const [settingsTab, setSettingsTab] = useState<StageSettingsTab>('lyrics');
   const [lineIndex, setLineIndex] = useState(-1);
   const lyricScrollRef = useRef<HTMLDivElement>(null);
+  const lastUserScrollRef = useRef(0);
+  const suppressAutoScrollRef = useRef(false);
   const lines = useMemo(() => trackToVisualizerLines(track), [track]);
   const coverUrl = track?.pic || (track ? coverRefreshUrl(track.type, track.songid) : '');
   const capsule = isDaylight
@@ -90,9 +92,16 @@ const SidePanel: React.FC<SidePanelProps> = ({
 
   useEffect(() => {
     if (tab !== 'lyrics' || lineIndex < 0) return;
+    if (Date.now() - lastUserScrollRef.current < 3500) return;
     const container = lyricScrollRef.current;
     const active = container?.querySelector('[data-active="true"]') as HTMLElement | null;
-    active?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (!container || !active) return;
+    const top = active.offsetTop - container.clientHeight / 2 + active.clientHeight / 2;
+    suppressAutoScrollRef.current = true;
+    container.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+    requestAnimationFrame(() => {
+      suppressAutoScrollRef.current = false;
+    });
   }, [lineIndex, tab]);
 
   const openSettings = (next: StageSettingsTab) => {
@@ -120,7 +129,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
           : { opacity: open ? 1 : 0, x: open ? 0 : 28 }}
         transition={{ type: 'spring', stiffness: 380, damping: 36 }}
         aria-hidden={!open}
-        className={`absolute z-40 flex flex-col overflow-hidden shadow-2xl backdrop-blur-xl theme-glass-panel titlebar-no-drag ${
+        className={`absolute z-40 flex flex-col overflow-hidden shadow-2xl theme-glass-panel titlebar-no-drag ${
           isMobile
             ? 'inset-x-0 bottom-0 h-[min(78dvh,calc(100%-4rem))] rounded-t-3xl border-0'
             : macApp
@@ -130,8 +139,8 @@ const SidePanel: React.FC<SidePanelProps> = ({
         style={{
           ...(isMobile ? { paddingBottom: 'var(--safe-bottom)' } : undefined),
           backgroundColor: isDaylight
-            ? 'color-mix(in srgb, var(--bg-color) 88%, transparent)'
-            : 'color-mix(in srgb, var(--bg-color) 78%, transparent)',
+            ? 'color-mix(in srgb, var(--bg-color) 94%, transparent)'
+            : 'color-mix(in srgb, var(--bg-color) 90%, transparent)',
           pointerEvents: open ? 'auto' : 'none',
           visibility: open ? 'visible' : 'hidden',
         }}
@@ -266,7 +275,14 @@ const SidePanel: React.FC<SidePanelProps> = ({
 
             <div className={`min-h-0 flex-1 overflow-hidden border-t ${isDaylight ? 'border-black/10' : 'border-white/10'}`}>
               {tab === 'lyrics' ? (
-                <div ref={lyricScrollRef} className="app-scroll hide-scrollbar h-full overflow-y-auto px-4 py-3">
+                <div
+                  ref={lyricScrollRef}
+                  className="app-scroll hide-scrollbar h-full overflow-y-auto px-4 py-3"
+                  onScroll={() => {
+                    if (suppressAutoScrollRef.current) return;
+                    lastUserScrollRef.current = Date.now();
+                  }}
+                >
                   {lines.length ? (
                     lines.map((line, i) => {
                       const active = i === lineIndex;

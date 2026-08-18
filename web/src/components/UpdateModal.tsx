@@ -51,7 +51,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
               {info.current ? `（当前 ${info.current}）` : ''}
             </p>
             {info.notes ? (
-              <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-2xl bg-white/5 p-3 text-xs opacity-70">
+              <pre className="app-scroll max-h-40 overflow-auto whitespace-pre-wrap rounded-2xl bg-white/5 p-3 text-xs opacity-70">
                 {info.notes.slice(0, 800)}
               </pre>
             ) : null}

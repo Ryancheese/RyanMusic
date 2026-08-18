@@ -215,7 +215,7 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
       onClick={onClose}
     >
       <aside
-        className={`flex flex-col overflow-hidden border shadow-2xl backdrop-blur-xl ${panel} ${
+        className={`flex flex-col overflow-hidden border shadow-2xl ${panel} ${
           isMobile
             ? 'max-h-[min(78dvh,100%)] w-full rounded-t-3xl'
             : 'ml-4 mt-[max(4.5rem,calc(var(--safe-top)+3.75rem))] h-auto max-h-[min(78vh,40rem)] w-[min(380px,calc(100vw-2rem))] rounded-3xl'
@@ -262,7 +262,7 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
         {tab === 'lyrics' ? (
           <>
             <div className="px-5 pb-2 text-xs opacity-50">选择歌词动画风格</div>
-            <div className="grid grid-cols-2 gap-2 overflow-y-auto px-5 pb-5">
+            <div className="app-scroll grid grid-cols-2 gap-2 overflow-y-auto px-5 pb-5">
               {VISUALIZER_REGISTRY.map((entry) => {
                 const active = entry.mode === mode;
                 return (
@@ -280,7 +280,7 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
             </div>
           </>
         ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+          <div className="app-scroll min-h-0 flex-1 overflow-y-auto px-5 pb-5">
             <div className="pb-2 text-xs opacity-50">参考 Folia 的舞台背景模式</div>
             <div className="mb-4 grid grid-cols-2 gap-2">
               {VISUALIZER_BACKGROUND_REGISTRY.map((entry) => {

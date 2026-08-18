@@ -108,6 +108,8 @@ const App: React.FC = () => {
   const closeQqPlaylist = useCloudStore((state) => state.closeQqPlaylist);
 
   const [authFallback, setAuthFallback] = useState(false);
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const track = queue[index] || null;
   const vipPlay = Boolean(
     (track?.type === 'netease' && netease?.loggedIn && Number(netease.vip) > 0)
@@ -379,16 +381,18 @@ const App: React.FC = () => {
     const syncClock = () => {
       const next = audio.currentTime;
       currentTime.set(next);
-      pulseAudioBands(audioBands, analyser, !audio.paused);
-      audioPower.set((
-        audioBands.bass.get()
-        + audioBands.lowMid.get()
-        + audioBands.mid.get()
-        + audioBands.vocal.get()
-        + audioBands.treble.get()
-      ) / 5);
       if (context && context.state === 'suspended' && !audio.paused) {
         void context.resume();
+      }
+      if (viewRef.current === 'player') {
+        pulseAudioBands(audioBands, analyser, !audio.paused);
+        audioPower.set((
+          audioBands.bass.get()
+          + audioBands.lowMid.get()
+          + audioBands.mid.get()
+          + audioBands.vocal.get()
+          + audioBands.treble.get()
+        ) / 5);
       }
       frame = requestAnimationFrame(syncClock);
     };
@@ -399,13 +403,11 @@ const App: React.FC = () => {
     };
     audio.addEventListener('seeking', snapClock);
     audio.addEventListener('seeked', snapClock);
-    audio.addEventListener('timeupdate', snapClock);
 
     return () => {
       cancelAnimationFrame(frame);
       audio.removeEventListener('seeking', snapClock);
       audio.removeEventListener('seeked', snapClock);
-      audio.removeEventListener('timeupdate', snapClock);
       void context?.close();
     };
   }, [audioBands, audioPower, currentTime]);

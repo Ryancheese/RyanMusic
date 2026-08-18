@@ -72,8 +72,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
           className="fixed inset-0 z-50 flex flex-col overflow-hidden px-3 sm:px-6"
           style={{
             color: theme.primaryColor,
-            backgroundColor: isDaylight ? 'rgba(250,250,250,0.96)' : 'rgba(8,8,10,0.94)',
-            backdropFilter: 'blur(24px)',
+            backgroundColor: isDaylight ? 'rgb(250, 250, 250)' : 'rgb(9, 9, 11)',
             paddingTop: 'max(1rem, var(--safe-top))',
             paddingBottom: 'max(1rem, var(--safe-bottom))',
           }}
@@ -161,7 +160,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
             ) : (
               <div className="pb-[max(6rem,calc(var(--safe-bottom)+4rem))]">
                 {tracks.map((track, index) => (
-                  <div key={`${track.type}-${track.songid}-${index}`} className="px-2 py-1.5">
+                  <div key={`${track.type}-${track.songid}-${index}`} className="app-scroll-item px-2 py-1.5">
                     <div
                       className={`group flex h-[68px] items-center gap-3 rounded-2xl border px-3 transition-colors ${
                         isDaylight

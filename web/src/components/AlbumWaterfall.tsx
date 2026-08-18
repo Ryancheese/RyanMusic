@@ -82,6 +82,12 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   }));
   const [zoom, setZoom] = useState(1);
   const [visible, setVisible] = useState<number[]>([0]);
+  const visibleRef = useRef(visible);
+  const paintRafRef = useRef(0);
+  const inertiaRafRef = useRef(0);
+  const lastVisibleAtRef = useRef({ x: 0, y: 0 });
+  const velocityRef = useRef({ vx: 0, vy: 0, lastT: 0, lastX: 0, lastY: 0 });
+  visibleRef.current = visible;
 
   const isList = layoutMode === 'list';
   const layout = layoutForWidth(size.width, layoutMode, zoom);
@@ -141,11 +147,70 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   }, [clipRadius, coordByKey, coords, layout.card, layout.spacingX, layout.spacingY, layoutMode, ringRadius]);
 
   const paint = useCallback((dx: number, dy: number) => {
-    coords.forEach((coord) => {
-      const el = cardRefs.current[coord.index];
-      if (el) applyCardFrame(el, coord, dx, dy);
-    });
-  }, [applyCardFrame, coords]);
+    const indexes = visibleRef.current;
+    const coordsNow = coordsRef.current;
+    for (let i = 0; i < indexes.length; i += 1) {
+      const index = indexes[i];
+      const el = cardRefs.current[index];
+      const coord = coordsNow[index];
+      if (el && coord) applyCardFrame(el, coord, dx, dy);
+    }
+  }, [applyCardFrame]);
+
+  const stopInertia = useCallback(() => {
+    if (inertiaRafRef.current) {
+      cancelAnimationFrame(inertiaRafRef.current);
+      inertiaRafRef.current = 0;
+    }
+  }, []);
+
+  const maybeRefreshVisible = useCallback((dx: number, dy: number, force = false) => {
+    const threshold = Math.min(layout.spacingX, layout.spacingY) * 0.32;
+    const last = lastVisibleAtRef.current;
+    if (!force && Math.abs(dx - last.x) < threshold && Math.abs(dy - last.y) < threshold) return;
+    lastVisibleAtRef.current = { x: dx, y: dy };
+    refreshVisible(dx, dy);
+  }, [layout.spacingX, layout.spacingY, refreshVisible]);
+
+  const flushFrame = useCallback(() => {
+    paintRafRef.current = 0;
+    const { x, y } = offsetRef.current;
+    paint(x, y);
+    maybeRefreshVisible(x, y);
+  }, [maybeRefreshVisible, paint]);
+
+  const scheduleFrame = useCallback(() => {
+    if (paintRafRef.current) return;
+    paintRafRef.current = requestAnimationFrame(flushFrame);
+  }, [flushFrame]);
+
+  const startInertia = useCallback(() => {
+    stopInertia();
+    const vel = velocityRef.current;
+    if (Math.hypot(vel.vx, vel.vy) < 0.08) {
+      maybeRefreshVisible(offsetRef.current.x, offsetRef.current.y, true);
+      return;
+    }
+    let last = performance.now();
+    const step = (now: number) => {
+      const dt = Math.min(32, now - last);
+      last = now;
+      offsetRef.current.x += vel.vx * dt;
+      offsetRef.current.y += vel.vy * dt;
+      const decay = Math.pow(0.95, dt / 16.67);
+      vel.vx *= decay;
+      vel.vy *= decay;
+      paint(offsetRef.current.x, offsetRef.current.y);
+      maybeRefreshVisible(offsetRef.current.x, offsetRef.current.y);
+      if (Math.hypot(vel.vx, vel.vy) > 0.04) {
+        inertiaRafRef.current = requestAnimationFrame(step);
+        return;
+      }
+      inertiaRafRef.current = 0;
+      maybeRefreshVisible(offsetRef.current.x, offsetRef.current.y, true);
+    };
+    inertiaRafRef.current = requestAnimationFrame(step);
+  }, [maybeRefreshVisible, paint, stopInertia]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -159,10 +224,12 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
 
   useEffect(() => {
     if (isList) return;
+    stopInertia();
     offsetRef.current = { x: 0, y: 0 };
+    lastVisibleAtRef.current = { x: 0, y: 0 };
     refreshVisible(0, 0);
     requestAnimationFrame(() => paint(0, 0));
-  }, [items.length, layout.spacingX, layout.spacingY, layoutMode, paint, refreshVisible, isList, zoom]);
+  }, [items.length, layout.spacingX, layout.spacingY, layoutMode, paint, refreshVisible, isList, zoom, stopInertia]);
 
   useEffect(() => {
     if (isList) return;
@@ -171,6 +238,14 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (isList || event.button !== 0) return;
+    stopInertia();
+    velocityRef.current = {
+      vx: 0,
+      vy: 0,
+      lastT: performance.now(),
+      lastX: event.clientX,
+      lastY: event.clientY,
+    };
     dragRef.current = {
       active: true,
       captured: false,
@@ -193,9 +268,18 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
     if (!dragRef.current.captured) return;
     const dx = dragRef.current.originX + (event.clientX - dragRef.current.startX);
     const dy = dragRef.current.originY + (event.clientY - dragRef.current.startY);
+    const now = performance.now();
+    const prev = velocityRef.current;
+    const dt = now - prev.lastT;
+    if (dt > 0 && dt < 64) {
+      prev.vx = (event.clientX - prev.lastX) / dt;
+      prev.vy = (event.clientY - prev.lastY) / dt;
+    }
+    prev.lastT = now;
+    prev.lastX = event.clientX;
+    prev.lastY = event.clientY;
     offsetRef.current = { x: dx, y: dy };
-    paint(dx, dy);
-    refreshVisible(dx, dy);
+    scheduleFrame();
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -211,7 +295,16 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         // ignore
       }
     }
-    if (dragged || showSkeleton || !items.length) return;
+    const now = performance.now();
+    if (now - velocityRef.current.lastT > 80) {
+      velocityRef.current.vx = 0;
+      velocityRef.current.vy = 0;
+    }
+    if (dragged) {
+      startInertia();
+      return;
+    }
+    if (showSkeleton || !items.length) return;
     const hit = (event.target as HTMLElement | null)?.closest?.('[data-waterfall-index]')
       || document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-waterfall-index]');
     if (!hit) return;
@@ -231,6 +324,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
     if (!element) return;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
+      stopInertia();
       // 触控板捏合在 macOS 上表现为 ctrl+wheel；Cmd+滚轮也可缩放
       if (event.ctrlKey || event.metaKey) {
         const factor = Math.exp(-event.deltaY * 0.008);
@@ -244,12 +338,16 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         x: offsetRef.current.x - event.deltaX,
         y: offsetRef.current.y - event.deltaY,
       };
-      paint(offsetRef.current.x, offsetRef.current.y);
-      refreshVisible(offsetRef.current.x, offsetRef.current.y);
+      scheduleFrame();
     };
     element.addEventListener('wheel', onWheel, { passive: false });
     return () => element.removeEventListener('wheel', onWheel);
-  }, [paint, refreshVisible, isList]);
+  }, [isList, scheduleFrame, stopInertia]);
+
+  useEffect(() => () => {
+    stopInertia();
+    if (paintRafRef.current) cancelAnimationFrame(paintRafRef.current);
+  }, [stopInertia]);
 
   // 切换蜂窝/方形时重置缩放，避免间距错乱残留
   useEffect(() => {
@@ -299,7 +397,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                     key={`list-${item.id}`}
                     type="button"
                     onClick={() => onSelect(item, index)}
-                    className={`relative flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition ${
+                    className={`app-scroll-item relative flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition ${
                       isDaylight ? 'hover:bg-black/6' : 'hover:bg-white/8'
                     }`}
                     style={{
@@ -340,7 +438,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       key={`library-grid-${layoutMode}`}
       ref={containerRef}
       className="relative min-h-0 w-full flex-1 cursor-grab overflow-hidden touch-none select-none active:cursor-grabbing"
-      style={{ paddingBottom: hasFloatingPlayer ? '5.5rem' : '1.5rem' }}
+      style={{ paddingBottom: hasFloatingPlayer ? '5.5rem' : '1.5rem', contain: 'layout paint' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -390,8 +488,8 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                       height: layout.card,
                       marginLeft: -layout.card / 2,
                       marginTop: -layout.card / 2,
-                      willChange: 'transform, opacity',
                       isolation: 'isolate',
+                      contain: 'layout style',
                       boxShadow: '0 14px 28px rgba(0,0,0,0.22)',
                       backgroundColor: isDaylight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)',
                     }}

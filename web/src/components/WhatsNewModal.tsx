@@ -43,7 +43,7 @@ const WhatsNewModal: React.FC<WhatsNewModalProps> = ({
             <X size={16} />
           </button>
         </div>
-        <pre className="max-h-[min(50vh,22rem)] overflow-auto whitespace-pre-wrap rounded-2xl bg-white/5 p-3 text-xs leading-relaxed opacity-80">
+        <pre className="app-scroll max-h-[min(50vh,22rem)] overflow-auto whitespace-pre-wrap rounded-2xl bg-white/5 p-3 text-xs leading-relaxed opacity-80">
           {notes}
         </pre>
         <button
