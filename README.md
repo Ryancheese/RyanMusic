@@ -14,7 +14,8 @@
 | `maicong-music/docker-compose.yml` | Docker 部署 |
 | `macos/` | macOS 原生窗口 App（WKWebView）与一键安装脚本 |
 | `windows/` | Windows 原生窗口 App（WebView2）与一键安装脚本 |
-| `android/` | Android 独立 APK（内嵌 PHP + WebView） |
+| `android/` | Android 独立 APK（内嵌 PHP + WebView；失败时自动连线上站点） |
+| `shared/cloud-origin.txt` | 各端共用的在线服务地址 |
 
 ## 下载安装包（推荐发给朋友）
 
@@ -29,6 +30,8 @@
 | Android | `RyanMusic-android.apk` | 允许「安装未知应用」后安装（arm64） |
 
 > Intel Mac 暂请使用下方「一键安装」脚本编译安装。
+
+搜索、歌词、取流都走同一套 PHP 后端（`maicong-music/`）。电脑 / 手机都可以自己跑一份；手机本机 PHP 被系统拦截时，会自动改连线上站点 [ryanmusic.vercel.app](https://ryanmusic.vercel.app)，不必再开电脑。若希望手机走家里电脑的代理（音源更稳），电脑版已监听局域网：托盘 / 菜单里「复制手机访问地址」，手机填入即可。
 
 也可在 **Actions** 里下载对应 Artifact。
 

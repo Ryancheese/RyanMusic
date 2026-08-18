@@ -2,7 +2,10 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Net;
 using System.Net.Http;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -88,6 +91,7 @@ public sealed class MainForm : Form
     {
         var menu = new ContextMenuStrip();
         menu.Items.Add("打开 RyanMusic", null, (_, _) => RestoreFromTray());
+        menu.Items.Add("复制手机访问地址", null, (_, _) => CopyLanUrl());
         menu.Items.Add("退出时询问", null, (_, _) => AppSettings.SetCloseAction(CloseAction.Ask));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("退出", null, (_, _) => ExitApplication());
@@ -643,7 +647,7 @@ public sealed class MainForm : Form
         {
             File.WriteAllText(
                 _logPath,
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] RyanMusic PHP log\r\nphp={phpPath}\r\nroot={webRoot}\r\nport={port}\r\n\r\n");
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] RyanMusic PHP log\r\nphp={phpPath}\r\nroot={webRoot}\r\nport={port}\r\nlan={FormatLanUrl(port)}\r\n\r\n");
             var hint = Path.Combine(ResolveDataDir(), "如何查看日志.txt");
             File.WriteAllText(
                 hint,
@@ -663,7 +667,7 @@ public sealed class MainForm : Form
         {
             args.Append("-c \"").Append(iniPath).Append("\" ");
         }
-        args.Append("-S 127.0.0.1:").Append(port);
+        args.Append("-S 0.0.0.0:").Append(port);
         args.Append(" -t \"").Append(webRoot).Append('"');
 
         var psi = new ProcessStartInfo
@@ -687,6 +691,87 @@ public sealed class MainForm : Form
         }
         _phpProcess.BeginOutputReadLine();
         _phpProcess.BeginErrorReadLine();
+    }
+
+    private void CopyLanUrl()
+    {
+        var url = FormatLanUrl(_port);
+        if (string.IsNullOrEmpty(url) || url.Contains("未检测到"))
+        {
+            MessageBox.Show(
+                "未检测到局域网地址。请确认电脑已连 Wi‑Fi。",
+                "RyanMusic",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(url);
+        }
+        catch
+        {
+            // ignore
+        }
+
+        if (_tray != null)
+        {
+            _tray.Visible = true;
+            _tray.ShowBalloonTip(4000, "RyanMusic", "已复制手机访问地址：\n" + url, ToolTipIcon.Info);
+        }
+        else
+        {
+            MessageBox.Show("手机访问地址：\n" + url, "RyanMusic", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+    }
+
+    private static string FormatLanUrl(int port)
+    {
+        var ip = GetLanIPv4();
+        return ip == null ? "未检测到局域网 IP" : $"http://{ip}:{port}/";
+    }
+
+    private static string? GetLanIPv4()
+    {
+        try
+        {
+            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (nic.OperationalStatus != OperationalStatus.Up)
+                {
+                    continue;
+                }
+                if (nic.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)
+                {
+                    continue;
+                }
+
+                foreach (var addr in nic.GetIPProperties().UnicastAddresses)
+                {
+                    if (addr.Address.AddressFamily != AddressFamily.InterNetwork)
+                    {
+                        continue;
+                    }
+                    var ip = addr.Address;
+                    if (IPAddress.IsLoopback(ip))
+                    {
+                        continue;
+                    }
+                    var text = ip.ToString();
+                    if (text.StartsWith("169.254.", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+                    return text;
+                }
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+        return null;
     }
 
     private static string ResolveDataDir(string? subdir = null)

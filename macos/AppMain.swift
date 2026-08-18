@@ -1,6 +1,7 @@
 import Cocoa
-import WebKit
+import Darwin
 import MediaPlayer
+import WebKit
 
 /// 顶部标题栏命中层：拖拽移动；双击缩放（与系统 App 一致）
 /// 左右留空给红绿灯 / LOGO，避免挡住交互
@@ -104,6 +105,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
+        let copyLanItem = NSMenuItem(
+            title: "复制手机访问地址",
+            action: #selector(copyLanUrl),
+            keyEquivalent: ""
+        )
+        copyLanItem.target = self
+        appMenu.addItem(copyLanItem)
+        appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(
             title: "退出 RyanMusic",
             action: #selector(NSApplication.terminate(_:)),
@@ -473,7 +482,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         } else if FileManager.default.fileExists(atPath: iniResource) {
             args.append(contentsOf: ["-c", iniResource])
         }
-        args.append(contentsOf: ["-S", "127.0.0.1:\(port)", "-t", webRoot])
+        args.append(contentsOf: ["-S", "0.0.0.0:\(port)", "-t", webRoot])
         process.arguments = args
 
         // 保证内嵌 PHP 能找到同目录 dylib（部分环境仍需要）
@@ -532,6 +541,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             process.interrupt()
         }
         phpProcess = nil
+    }
+
+    @objc private func copyLanUrl() {
+        guard let ip = Self.lanIPv4() else {
+            Self.alert("未检测到局域网地址。请确认电脑已连 Wi‑Fi。")
+            return
+        }
+        let url = "http://\(ip):\(port)/"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url, forType: .string)
+        Self.alert("已复制手机访问地址：\n\(url)")
+    }
+
+    static func lanIPv4() -> String? {
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return nil }
+        defer { freeifaddrs(first) }
+
+        var ptr: UnsafeMutablePointer<ifaddrs>? = first
+        while let current = ptr {
+            let flags = Int32(current.pointee.ifa_flags)
+            if (flags & IFF_UP) != 0,
+               (flags & IFF_LOOPBACK) == 0,
+               let addr = current.pointee.ifa_addr,
+               addr.pointee.sa_family == sa_family_t(AF_INET) {
+                var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                let nameLen = socklen_t(addr.pointee.sa_len)
+                if getnameinfo(addr, nameLen, &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
+                    let ip = String(cString: host)
+                    if !ip.hasPrefix("127.") && !ip.hasPrefix("169.254.") {
+                        return ip
+                    }
+                }
+            }
+            ptr = current.pointee.ifa_next
+        }
+        return nil
     }
 
     static func webRoot() -> String {

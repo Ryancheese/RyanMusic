@@ -39,11 +39,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fallbackPanel: LinearLayout
     private lateinit var remoteUrlInput: EditText
     private lateinit var btnConnect: Button
+    private lateinit var btnUseCloud: Button
     private lateinit var btnRetryLocal: Button
 
     private var phpServer: PhpServer? = null
     private var baseUrl: String = "http://127.0.0.1:18765/"
     private var keepAliveStarted = false
+    private var lastLocalError: String = ""
 
     private val notifyPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -70,10 +72,14 @@ class MainActivity : AppCompatActivity() {
         fallbackPanel = findViewById(R.id.fallbackPanel)
         remoteUrlInput = findViewById(R.id.remoteUrlInput)
         btnConnect = findViewById(R.id.btnConnect)
+        btnUseCloud = findViewById(R.id.btnUseCloud)
         btnRetryLocal = findViewById(R.id.btnRetryLocal)
 
         remoteUrlInput.setText(prefs().getString(KEY_REMOTE, "") ?: "")
-        btnConnect.setOnClickListener { connectRemote(remoteUrlInput.text?.toString().orEmpty()) }
+        btnConnect.setOnClickListener {
+            connectRemote(remoteUrlInput.text?.toString().orEmpty(), PersistMode.CUSTOM)
+        }
+        btnUseCloud.setOnClickListener { connectCloud(PersistMode.CLOUD) }
         btnRetryLocal.setOnClickListener {
             fallbackPanel.visibility = View.GONE
             overlay.visibility = View.VISIBLE
@@ -83,16 +89,42 @@ class MainActivity : AppCompatActivity() {
 
         setupWebView()
         setupBackPress()
-
-        val savedRemote = prefs().getString(KEY_REMOTE, "").orEmpty().trim()
-        if (savedRemote.isNotEmpty() && prefs().getBoolean(KEY_USE_REMOTE, false)) {
-            connectRemote(savedRemote)
-        } else {
-            bootstrapLocal()
-        }
+        migrateLegacyPrefs()
+        startPreferredServer()
     }
 
     private fun prefs() = getSharedPreferences("ryanmusic", Context.MODE_PRIVATE)
+
+    private fun migrateLegacyPrefs() {
+        if (prefs().contains(KEY_MODE)) return
+        val useRemote = prefs().getBoolean(KEY_USE_REMOTE_LEGACY, false)
+        val remote = prefs().getString(KEY_REMOTE, "").orEmpty().trim()
+        if (useRemote && remote.isNotEmpty()) {
+            prefs().edit().putString(KEY_MODE, MODE_CUSTOM).apply()
+        }
+    }
+
+    private fun startPreferredServer() {
+        when (prefs().getString(KEY_MODE, MODE_LOCAL)) {
+            MODE_CLOUD -> connectCloud(PersistMode.CLOUD)
+            MODE_CUSTOM -> {
+                val saved = prefs().getString(KEY_REMOTE, "").orEmpty().trim()
+                if (saved.isNotEmpty()) {
+                    connectRemote(saved, PersistMode.CUSTOM)
+                } else {
+                    bootstrapLocal()
+                }
+            }
+            else -> {
+                if (prefs().getBoolean(KEY_LOCAL_FAILED, false)) {
+                    statusText.setText(R.string.falling_back_cloud)
+                    connectCloud(PersistMode.NONE)
+                } else {
+                    bootstrapLocal()
+                }
+            }
+        }
+    }
 
     private fun setupBackPress() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -109,6 +141,8 @@ class MainActivity : AppCompatActivity() {
                         .setTitle(R.string.app_name)
                         .setItems(
                             arrayOf(
+                                getString(R.string.menu_use_local),
+                                getString(R.string.menu_use_cloud),
                                 getString(R.string.menu_change_server),
                                 getString(R.string.menu_exit),
                             ),
@@ -118,12 +152,16 @@ class MainActivity : AppCompatActivity() {
                                     phpServer?.stop()
                                     phpServer = null
                                     stopKeepAlive()
-                                    webView.visibility = View.GONE
-                                    overlay.visibility = View.VISIBLE
-                                    fallbackPanel.visibility = View.VISIBLE
-                                    statusText.setText(R.string.hint_remote_url)
+                                    bootstrapLocal()
                                 }
-                                1 -> finish()
+                                1 -> {
+                                    phpServer?.stop()
+                                    phpServer = null
+                                    stopKeepAlive()
+                                    connectCloud(PersistMode.CLOUD)
+                                }
+                                2 -> showServerPicker()
+                                3 -> finish()
                             }
                         }
                         .show()
@@ -133,6 +171,17 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+    }
+
+    private fun showServerPicker() {
+        phpServer?.stop()
+        phpServer = null
+        stopKeepAlive()
+        webView.visibility = View.GONE
+        overlay.visibility = View.VISIBLE
+        loading.visibility = View.GONE
+        fallbackPanel.visibility = View.VISIBLE
+        statusText.setText(R.string.fallback_title)
     }
 
     private fun setupWebView() {
@@ -209,15 +258,27 @@ class MainActivity : AppCompatActivity() {
                 phpServer = server
                 val port = server.start(www)
                 baseUrl = "http://127.0.0.1:$port/"
-                prefs().edit().putBoolean(KEY_USE_REMOTE, false).apply()
+                prefs().edit()
+                    .putString(KEY_MODE, MODE_LOCAL)
+                    .putBoolean(KEY_LOCAL_FAILED, false)
+                    .apply()
                 runOnUiThread { webView.loadUrl(baseUrl) }
             } catch (e: Exception) {
-                runOnUiThread { showLocalFailed(e.message ?: "unknown") }
+                lastLocalError = e.message ?: "unknown"
+                prefs().edit().putBoolean(KEY_LOCAL_FAILED, true).apply()
+                runOnUiThread {
+                    statusText.setText(R.string.falling_back_cloud)
+                    fallbackPanel.visibility = View.GONE
+                    overlay.visibility = View.VISIBLE
+                    loading.visibility = View.VISIBLE
+                    webView.visibility = View.GONE
+                    connectCloud(PersistMode.NONE)
+                }
             }
         }
     }
 
-    private fun showLocalFailed(detail: String) {
+    private fun showChooser(detail: String) {
         stopKeepAlive()
         overlay.visibility = View.VISIBLE
         loading.visibility = View.GONE
@@ -227,7 +288,15 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, R.string.toast_use_remote, Toast.LENGTH_LONG).show()
     }
 
-    private fun connectRemote(raw: String) {
+    private fun connectCloud(persist: PersistMode) {
+        connectRemote(BuildConfig.CLOUD_ORIGIN, persist, connectingLabel = R.string.connecting_cloud)
+    }
+
+    private fun connectRemote(
+        raw: String,
+        persist: PersistMode,
+        connectingLabel: Int = R.string.connecting_remote,
+    ) {
         var url = raw.trim()
         if (url.isEmpty()) {
             Toast.makeText(this, R.string.hint_remote_url, Toast.LENGTH_SHORT).show()
@@ -242,13 +311,14 @@ class MainActivity : AppCompatActivity() {
         loading.visibility = View.VISIBLE
         fallbackPanel.visibility = View.GONE
         webView.visibility = View.GONE
-        statusText.setText(R.string.connecting_remote)
+        statusText.setText(connectingLabel)
 
+        val timeoutMs = if (url.startsWith("https://", ignoreCase = true)) 15_000 else 5_000
         thread(name = "ryan-remote") {
             try {
                 val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 5000
-                    readTimeout = 5000
+                    connectTimeout = timeoutMs
+                    readTimeout = timeoutMs
                     requestMethod = "GET"
                     instanceFollowRedirects = true
                 }
@@ -258,20 +328,34 @@ class MainActivity : AppCompatActivity() {
                     throw IllegalStateException("HTTP $code")
                 }
                 baseUrl = url
-                prefs().edit()
-                    .putString(KEY_REMOTE, url)
-                    .putBoolean(KEY_USE_REMOTE, true)
-                    .apply()
+                val editor = prefs().edit()
+                when (persist) {
+                    PersistMode.CLOUD -> editor.putString(KEY_MODE, MODE_CLOUD)
+                    PersistMode.CUSTOM -> editor
+                        .putString(KEY_MODE, MODE_CUSTOM)
+                        .putString(KEY_REMOTE, url)
+                    PersistMode.NONE -> { /* 自动回退不改下次启动偏好 */ }
+                }
+                editor.apply()
                 phpServer?.stop()
                 phpServer = null
                 runOnUiThread { webView.loadUrl(baseUrl) }
             } catch (e: Exception) {
                 runOnUiThread {
-                    overlay.visibility = View.VISIBLE
-                    loading.visibility = View.GONE
-                    fallbackPanel.visibility = View.VISIBLE
-                    statusText.text = getString(R.string.remote_failed, e.message ?: "unknown")
-                    Toast.makeText(this, statusText.text, Toast.LENGTH_LONG).show()
+                    val detail = if (lastLocalError.isNotBlank()) {
+                        lastLocalError
+                    } else {
+                        e.message ?: "unknown"
+                    }
+                    if (persist == PersistMode.NONE) {
+                        showChooser(detail)
+                    } else {
+                        overlay.visibility = View.VISIBLE
+                        loading.visibility = View.GONE
+                        fallbackPanel.visibility = View.VISIBLE
+                        statusText.text = getString(R.string.remote_failed, e.message ?: "unknown")
+                        Toast.makeText(this, statusText.text, Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }
@@ -336,8 +420,19 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    private enum class PersistMode {
+        NONE,
+        CLOUD,
+        CUSTOM,
+    }
+
     companion object {
         private const val KEY_REMOTE = "remote_url"
-        private const val KEY_USE_REMOTE = "use_remote"
+        private const val KEY_USE_REMOTE_LEGACY = "use_remote"
+        private const val KEY_MODE = "server_mode"
+        private const val KEY_LOCAL_FAILED = "local_php_failed"
+        private const val MODE_LOCAL = "local"
+        private const val MODE_CLOUD = "cloud"
+        private const val MODE_CUSTOM = "custom"
     }
 }

@@ -3,6 +3,10 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val repoRoot = rootProject.projectDir.parentFile
+val siteSrc = File(repoRoot, "maicong-music")
+val siteAssets = File(projectDir, "src/main/assets/maicong-music")
+
 android {
     namespace = "cn.ryanmusic.app"
     compileSdk = 34
@@ -11,11 +15,20 @@ android {
         applicationId = "cn.ryanmusic.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1854
-        versionName = "1.8.54"
+        versionCode = 1855
+        versionName = "1.8.55"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
+        val cloudOriginFile = File(repoRoot, "shared/cloud-origin.txt")
+        val cloudOrigin = cloudOriginFile
+            .takeIf { it.exists() }
+            ?.readText()
+            ?.trim()
+            ?.trimEnd('/')
+            ?.plus("/")
+            ?: "https://ryanmusic.vercel.app/"
+        buildConfigField("String", "CLOUD_ORIGIN", "\"$cloudOrigin\"")
     }
 
     buildFeatures {
@@ -54,10 +67,6 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.webkit:webkit:1.11.0")
 }
-
-val repoRoot = rootProject.projectDir.parentFile
-val siteSrc = File(repoRoot, "maicong-music")
-val siteAssets = File(projectDir, "src/main/assets/maicong-music")
 
 tasks.register<Sync>("syncSiteAssets") {
     from(siteSrc) {
