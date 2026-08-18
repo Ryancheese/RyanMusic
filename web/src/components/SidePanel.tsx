@@ -266,7 +266,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
 
             <div className={`min-h-0 flex-1 overflow-hidden border-t ${isDaylight ? 'border-black/10' : 'border-white/10'}`}>
               {tab === 'lyrics' ? (
-                <div ref={lyricScrollRef} className="h-full overflow-y-auto px-4 py-3">
+                <div ref={lyricScrollRef} className="app-scroll hide-scrollbar h-full overflow-y-auto px-4 py-3">
                   {lines.length ? (
                     lines.map((line, i) => {
                       const active = i === lineIndex;
@@ -302,7 +302,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
                   )}
                 </div>
               ) : (
-                <div className="h-full overflow-y-auto">
+                <div className="app-scroll hide-scrollbar h-full overflow-y-auto">
                   {queue.map((item, i) => (
                     <button
                       key={`${item.type}-${item.songid}-${i}`}

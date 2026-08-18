@@ -228,7 +228,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             <div className="ml-auto flex items-center gap-2 md:hidden">{themeButtons}</div>
           </div>
 
-          <div className="order-3 flex justify-center overflow-x-auto md:order-none">{tabPills}</div>
+          <div className="app-scroll-x hide-scrollbar order-3 flex justify-center overflow-x-auto md:order-none">{tabPills}</div>
 
           <div className="order-2 flex items-center gap-2 md:order-none md:justify-end">
             <form

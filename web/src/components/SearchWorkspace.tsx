@@ -113,7 +113,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                 <X size={20} />
               </button>
             </div>
-            <nav className="flex gap-2 overflow-x-auto pb-1">
+            <nav className="app-scroll-x hide-scrollbar flex gap-2 overflow-x-auto pb-1">
               {sources.map((item) => (
                 <button
                   type="button"
@@ -140,7 +140,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
 
           <div
             ref={listRef}
-            className="mx-auto mt-3 min-h-0 w-full max-w-5xl flex-1 overflow-y-auto"
+            className="app-scroll hide-scrollbar mx-auto mt-3 min-h-0 w-full max-w-5xl flex-1 overflow-y-auto"
             onScroll={() => {
               const el = listRef.current;
               if (!el || !hasMore || isLoadingMore || isSearching) return;

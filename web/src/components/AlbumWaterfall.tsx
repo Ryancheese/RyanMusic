@@ -268,7 +268,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       <div
         key="library-list"
         ref={containerRef}
-        className="relative min-h-0 w-full flex-1 overflow-y-auto"
+        className="app-scroll hide-scrollbar relative min-h-0 w-full flex-1 overflow-y-auto"
         style={{ paddingBottom: hasFloatingPlayer ? '5.5rem' : '1.5rem' }}
       >
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-2 px-4 pb-4 md:px-8">

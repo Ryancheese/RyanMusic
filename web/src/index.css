@@ -86,6 +86,19 @@ a {
   display: none;
 }
 
+.app-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  scrollbar-gutter: stable;
+}
+
+.app-scroll-x {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+}
+
 .theme-polaroid-card {
   background-color: color-mix(in srgb, var(--bg-color) 95%, transparent) !important;
   border-color: color-mix(in srgb, var(--text-primary) 5%, transparent) !important;
