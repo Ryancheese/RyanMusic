@@ -2,7 +2,7 @@ export * from './visualizer-types';
 
 export type MusicSource = 'netease' | 'qq';
 
-export type HomeTab = 'liked' | 'recent' | 'playlist';
+export type HomeTab = 'netease' | 'qq';
 
 export type LoopMode = 'off' | 'all' | 'one';
 

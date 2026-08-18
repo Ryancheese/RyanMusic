@@ -46,6 +46,11 @@ final class TitlebarDragOverlay: NSView {
 
 final class RyanWebView: WKWebView {}
 
+/// 铺满窗口，避免系统把底部安全区留成白边
+final class FullBleedView: NSView {
+    override var safeAreaInsets: NSEdgeInsets { NSEdgeInsetsZero }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler, WKDownloadDelegate {
     var window: NSWindow!
     var webView: RyanWebView!
@@ -80,10 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             port = try Self.pickPort(startingAt: 18765)
             if let node = Self.findNode(), let serverJs = Self.serverJs() {
                 try startNode(nodePath: node, serverJs: serverJs, webRoot: webRoot, port: port)
-            } else if let php = Self.findPHP() {
-                try startPHP(phpPath: php, webRoot: webRoot, port: port)
             } else {
-                Self.alert("未找到 Node.js 或 PHP。\n请安装 Node 22+，或使用仍内嵌 PHP 的 DMG。")
+                Self.alert("未找到 Node.js。\n请安装 Node 22+ 后重试，或使用已内嵌 server.mjs 的安装包。")
                 NSApp.terminate(nil)
                 return
             }
@@ -114,6 +117,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         )
         copyLanItem.target = self
         appMenu.addItem(copyLanItem)
+        let updateItem = NSMenuItem(
+            title: "检查更新…",
+            action: #selector(menuCheckUpdate),
+            keyEquivalent: ""
+        )
+        updateItem.target = self
+        appMenu.addItem(updateItem)
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(
             title: "退出 RyanMusic",
@@ -170,6 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             config.preferences.isElementFullscreenEnabled = true
         }
         config.userContentController.add(self, name: "ryanSave")
+        config.userContentController.add(self, name: "ryanUpdate")
         config.userContentController.add(self, name: "ryanWindowDrag")
         config.userContentController.add(self, name: "ryanWindowZoom")
         // 标记桌面壳 + 空白处拖拽 / 双击缩放
@@ -204,17 +215,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         let desktopUA =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-        webView = RyanWebView(frame: rect, configuration: config)
+        webView = RyanWebView(frame: .zero, configuration: config)
         webView.customUserAgent = desktopUA
         webView.navigationDelegate = self
-        webView.autoresizingMask = [.width, .height]
+        webView.translatesAutoresizingMaskIntoConstraints = false
 
-        // 底层容器保证标题栏区域始终有深色底，避免全屏退出后露黑条
-        let container = NSView(frame: rect)
+        let container = FullBleedView(frame: rect)
         container.wantsLayer = true
         container.layer?.backgroundColor = NSColor(srgbRed: 0.02, green: 0.02, blue: 0.027, alpha: 1).cgColor
-        webView.frame = container.bounds
         container.addSubview(webView)
+        NSLayoutConstraint.activate([
+            webView.topAnchor.constraint(equalTo: container.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+        ])
 
         let overlay = TitlebarDragOverlay(frame: .zero)
         titlebarDragOverlay = overlay
@@ -240,18 +255,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.titleVisibility = .visible
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.isOpaque = false
+        window.isOpaque = true
         window.backgroundColor = NSColor(srgbRed: 0.02, green: 0.02, blue: 0.027, alpha: 1)
         if #available(macOS 11.0, *) {
             window.titlebarSeparatorStyle = .none
         }
         webView?.setValue(false, forKey: "drawsBackground")
         if #available(macOS 12.0, *) {
-            webView?.underPageBackgroundColor = .clear
+            webView?.underPageBackgroundColor = window.backgroundColor
         }
         if let container = window.contentView {
             container.wantsLayer = true
-            container.layer?.backgroundColor = NSColor(srgbRed: 0.02, green: 0.02, blue: 0.027, alpha: 1).cgColor
+            container.layer?.backgroundColor = window.backgroundColor?.cgColor
+            container.layer?.masksToBounds = true
         }
     }
 
@@ -321,6 +337,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             if let event = NSApp.currentEvent,
                event.type == .leftMouseDown || event.type == .leftMouseDragged {
                 window?.performDrag(with: event)
+            }
+            return
+        }
+
+        if message.name == "ryanUpdate" {
+            let action = (message.body as? [String: Any])?["action"] as? String ?? "check"
+            if action == "install" {
+                installLatest(replyToWeb: true)
+            } else {
+                checkLatest { info in
+                    self.replyUpdate(info.json)
+                }
             }
             return
         }
@@ -721,6 +749,242 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let invalid = CharacterSet(charactersIn: "/\\:?%*|\"<>")
         let cleaned = name.components(separatedBy: invalid).joined(separator: "_")
         return cleaned.isEmpty ? "RyanMusic" : cleaned
+    }
+
+    private struct UpdateInfo {
+        var ok: Bool
+        var hasUpdate: Bool
+        var current: String
+        var latest: String
+        var notes: String
+        var url: String
+        var downloadURL: URL?
+        var error: String
+
+        var json: [String: Any] {
+            [
+                "ok": ok,
+                "hasUpdate": hasUpdate,
+                "current": current,
+                "latest": latest,
+                "notes": notes,
+                "url": url,
+                "error": error,
+            ]
+        }
+    }
+
+    private func currentVersion() -> String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+    }
+
+    private func compareVersions(_ lhs: String, _ rhs: String) -> ComparisonResult {
+        let left = lhs.split(separator: ".").compactMap { Int($0) }
+        let right = rhs.split(separator: ".").compactMap { Int($0) }
+        let count = max(left.count, right.count)
+        for index in 0..<count {
+            let a = index < left.count ? left[index] : 0
+            let b = index < right.count ? right[index] : 0
+            if a < b { return .orderedAscending }
+            if a > b { return .orderedDescending }
+        }
+        return .orderedSame
+    }
+
+    private func archAssetNeedle() -> String {
+        #if arch(arm64)
+        return "mac-arm64"
+        #else
+        return "mac-x64"
+        #endif
+    }
+
+    private func replyUpdate(_ payload: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.webView.evaluateJavaScript(
+                "window.__ryanUpdateResolve && window.__ryanUpdateResolve(\(json));",
+                completionHandler: nil
+            )
+        }
+    }
+
+    @objc private func menuCheckUpdate() {
+        checkLatest { info in
+            DispatchQueue.main.async {
+                if info.hasUpdate {
+                    let alert = NSAlert()
+                    alert.messageText = "发现新版本 \(info.latest)"
+                    alert.informativeText = "当前版本 \(info.current)。下载 GitHub 安装包并替换本机应用？"
+                    alert.addButton(withTitle: "更新")
+                    alert.addButton(withTitle: "取消")
+                    if alert.runModal() == .alertFirstButtonReturn {
+                        self.installLatest(replyToWeb: false)
+                    }
+                } else if !info.error.isEmpty {
+                    Self.alert(info.error)
+                } else {
+                    Self.alert("已是最新版本 \(info.current)")
+                }
+            }
+        }
+    }
+
+    private func checkLatest(completion: @escaping (UpdateInfo) -> Void) {
+        let current = currentVersion()
+        guard let endpoint = URL(string: "https://api.github.com/repos/Ryancheese/RyanMusic/releases/latest") else {
+            completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: "", downloadURL: nil, error: "更新地址无效"))
+            return
+        }
+        var request = URLRequest(url: endpoint, timeoutInterval: 20)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("RyanMusic/\(current)", forHTTPHeaderField: "User-Agent")
+        directSession.dataTask(with: request) { data, _, error in
+            if let error {
+                completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: "https://github.com/Ryancheese/RyanMusic/releases/latest", downloadURL: nil, error: error.localizedDescription))
+                return
+            }
+            guard let data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: "https://github.com/Ryancheese/RyanMusic/releases/latest", downloadURL: nil, error: "无法解析 GitHub 版本信息"))
+                return
+            }
+            let latest = String(json["tag_name"] as? String ?? "").replacingOccurrences(of: #"^v"#, with: "", options: .regularExpression)
+            let notes = String(json["body"] as? String ?? "")
+            let page = String(json["html_url"] as? String ?? "https://github.com/Ryancheese/RyanMusic/releases/latest")
+            let assets = json["assets"] as? [[String: Any]] ?? []
+            let needle = self.archAssetNeedle()
+            let asset = assets.first { asset in
+                let name = (asset["name"] as? String ?? "").lowercased()
+                return name.contains(needle) && name.hasSuffix(".dmg")
+            }
+            let download = URL(string: asset?["browser_download_url"] as? String ?? "")
+            let newer = !latest.isEmpty && self.compareVersions(current, latest) == .orderedAscending
+            completion(UpdateInfo(
+                ok: true,
+                hasUpdate: newer,
+                current: current,
+                latest: latest,
+                notes: notes,
+                url: page,
+                downloadURL: download,
+                error: newer && download == nil ? "Release 里没有 \(needle) 安装包" : ""
+            ))
+        }.resume()
+    }
+
+    private func installLatest(replyToWeb: Bool) {
+        checkLatest { info in
+            guard info.hasUpdate, let download = info.downloadURL else {
+                let payload = info.json.merging(["error": info.error.isEmpty ? "没有可安装的更新" : info.error]) { _, new in new }
+                if replyToWeb { self.replyUpdate(payload) }
+                else { DispatchQueue.main.async { Self.alert(payload["error"] as? String ?? "没有可安装的更新") } }
+                return
+            }
+            self.directSession.downloadTask(with: download) { tempURL, _, error in
+                if let error {
+                    let payload: [String: Any] = ["ok": false, "hasUpdate": true, "current": info.current, "latest": info.latest, "error": error.localizedDescription]
+                    if replyToWeb { self.replyUpdate(payload) }
+                    else { DispatchQueue.main.async { Self.alert("下载失败：\(error.localizedDescription)") } }
+                    return
+                }
+                guard let tempURL else {
+                    let payload: [String: Any] = ["ok": false, "hasUpdate": true, "error": "下载失败"]
+                    if replyToWeb { self.replyUpdate(payload) }
+                    return
+                }
+                do {
+                    let local = FileManager.default.temporaryDirectory.appendingPathComponent("RyanMusic-update.dmg")
+                    if FileManager.default.fileExists(atPath: local.path) {
+                        try FileManager.default.removeItem(at: local)
+                    }
+                    try FileManager.default.moveItem(at: tempURL, to: local)
+                    try self.replaceRunningApp(withDmg: local)
+                    if replyToWeb {
+                        self.replyUpdate(["ok": true, "hasUpdate": true, "installing": true, "latest": info.latest, "current": info.current])
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        NSApp.terminate(nil)
+                    }
+                } catch {
+                    let payload: [String: Any] = ["ok": false, "hasUpdate": true, "error": error.localizedDescription]
+                    if replyToWeb { self.replyUpdate(payload) }
+                    else { DispatchQueue.main.async { Self.alert("安装失败：\(error.localizedDescription)") } }
+                }
+            }.resume()
+        }
+    }
+
+    private func replaceRunningApp(withDmg dmgURL: URL) throws {
+        let mount = try self.attachDmg(dmgURL)
+        defer { _ = try? self.runTool("/usr/bin/hdiutil", ["detach", mount.path, "-force"]) }
+        let kids = try FileManager.default.contentsOfDirectory(
+            at: mount,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        guard let bundled = kids.first(where: { $0.pathExtension == "app" }) else {
+            throw NSError(domain: "RyanMusic", code: 1, userInfo: [NSLocalizedDescriptionKey: "安装包里找不到 RyanMusic.app"])
+        }
+        let staged = FileManager.default.temporaryDirectory.appendingPathComponent("RyanMusic-update.app")
+        if FileManager.default.fileExists(atPath: staged.path) {
+            try FileManager.default.removeItem(at: staged)
+        }
+        try FileManager.default.copyItem(at: bundled, to: staged)
+        let dest = Bundle.main.bundleURL
+        let script = FileManager.default.temporaryDirectory.appendingPathComponent("ryanmusic-replace.sh")
+        let body = """
+        #!/bin/bash
+        DEST=\(shellQuote(dest.path))
+        NEW=\(shellQuote(staged.path))
+        while pgrep -x RyanMusic >/dev/null; do sleep 0.3; done
+        rm -rf "$DEST"
+        /usr/bin/ditto "$NEW" "$DEST"
+        xattr -dr com.apple.quarantine "$DEST" >/dev/null 2>&1 || true
+        open "$DEST"
+        rm -rf "$NEW"
+        """
+        try body.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [script.path]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+    }
+
+    private func attachDmg(_ url: URL) throws -> URL {
+        let output = try runTool("/usr/bin/hdiutil", ["attach", "-nobrowse", "-readonly", url.path])
+        guard let line = output.split(separator: "\n").reversed().first(where: { $0.contains("/Volumes/") }),
+              let range = line.range(of: "/Volumes/") else {
+            throw NSError(domain: "RyanMusic", code: 2, userInfo: [NSLocalizedDescriptionKey: "无法挂载安装包"])
+        }
+        let path = String(line[range.lowerBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return URL(fileURLWithPath: path)
+    }
+
+    @discardableResult
+    private func runTool(_ path: String, _ arguments: [String]) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        try process.run()
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let text = String(data: data, encoding: .utf8) ?? ""
+        if process.terminationStatus != 0 {
+            throw NSError(domain: "RyanMusic", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: text.isEmpty ? "命令失败" : text])
+        }
+        return text
+    }
+
+    private func shellQuote(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
     static func alert(_ message: String) {

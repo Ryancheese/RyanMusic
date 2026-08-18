@@ -58,7 +58,24 @@ export function normalizeCookie(raw: string): string {
 export function hash33(text: string): number {
   let e = 0;
   for (let n = 0; n < text.length; n++) {
-    e = (e + (((e << 5) & 0x7fffffff) + text.charCodeAt(n))) & 0x7fffffff;
+    e += (e << 5) + text.charCodeAt(n);
   }
   return e & 2147483647;
+}
+
+/** QQ oauth g_tk：从 p_skey 算，初值必须是 5381，和 ptqrtoken 的 hash33 不是同一个函数。 */
+export function getGtk(pSkey: string): number {
+  let hash = 5381;
+  for (let i = 0; i < pSkey.length; i++) {
+    hash += (hash << 5) + pSkey.charCodeAt(i);
+  }
+  return hash & 0x7fffffff;
+}
+
+export function qqGuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const rand = (Math.random() * 16) | 0;
+    const value = char === 'x' ? rand : (rand & 0x3) | 0x8;
+    return value.toString(16);
+  }).toUpperCase();
 }

@@ -18,6 +18,54 @@ export class QqService {
     };
   }
 
+  async songNumericId(songmid: string, hint = 0): Promise<number> {
+    if (hint > 0) return hint;
+    const qs = new URLSearchParams({ songmid, format: 'json' });
+    const res = await request('GET', `http://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg?${qs}`, {
+      headers: { Referer: 'http://m.y.qq.com' },
+    });
+    return Number(res.json?.data?.[0]?.id || 0);
+  }
+
+  async playLyricInfo(songmid: string, songId: number, cookie: string): Promise<any> {
+    const payload = {
+      comm: { ct: 11, cv: '1003006', v: '1003006', tmeAppID: 'qqmusiclight', nettype: 'NETWORK_WIFI', uid: '0', udid: '0' },
+      request: {
+        module: 'music.musichallSong.PlayLyricInfo',
+        method: 'GetPlayLyricInfo',
+        param: {
+          albumName: Buffer.from('').toString('base64'),
+          crypt: 1,
+          ct: 19,
+          cv: 2111,
+          interval: 0,
+          lrc_t: 0,
+          qrc: 1,
+          qrc_t: 0,
+          roma: 1,
+          roma_t: 0,
+          singerName: Buffer.from('').toString('base64'),
+          songID: songId,
+          songMid: songmid,
+          songName: Buffer.from('').toString('base64'),
+          trans: 1,
+          trans_t: 0,
+          type: 0,
+        },
+      },
+    };
+    const res = await request('POST', 'https://u.y.qq.com/cgi-bin/musicu.fcg', {
+      headers: {
+        Referer: 'https://y.qq.com/',
+        'User-Agent': 'okhttp/3.14.9',
+        'Content-Type': 'application/json',
+        Cookie: cookie,
+      },
+      body: JSON.stringify(payload),
+    });
+    return res.json?.request?.data ?? null;
+  }
+
   async searchByName(query: string, page: number): Promise<{ tracks: Track[]; hasMore: boolean } | null> {
     const sourcePage = nameSearchSourcePage(page);
     const qs = new URLSearchParams({ w: query, p: String(sourcePage), n: '10', format: 'json' });

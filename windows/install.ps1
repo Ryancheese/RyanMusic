@@ -234,7 +234,7 @@ function Resolve-RepoRoot {
   $here = $PSScriptRoot
   if ($here) {
     $candidate = Resolve-Path (Join-Path $here "..") -ErrorAction SilentlyContinue
-    if ($candidate -and (Test-Path (Join-Path $candidate "maicong-music\index.php")) -and (Test-Path (Join-Path $candidate "windows\build-app.ps1"))) {
+    if ($candidate -and (Test-Path (Join-Path $candidate "maicong-music\static")) -and (Test-Path (Join-Path $candidate "windows\build-app.ps1"))) {
       return $candidate.Path
     }
   }

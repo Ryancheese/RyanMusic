@@ -34,6 +34,10 @@ export function isWindowsApp() {
   return typeof document !== 'undefined' && document.documentElement.classList.contains('platform-windows-app');
 }
 
+export function isMacosApp() {
+  return typeof document !== 'undefined' && document.documentElement.classList.contains('platform-macos-app');
+}
+
 export function prefersLightweightVisualizer() {
   if (typeof window === 'undefined') return false;
   if (isWindowsApp()) return true;

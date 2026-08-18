@@ -1,8 +1,13 @@
-import React from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Download, Heart, Home, ListMusic, SkipBack, SkipForward, X } from 'lucide-react';
-import type { ThemeTokens, Track } from '../types';
+import type { MotionValue } from 'framer-motion';
+import { Download, Home, Palette, SkipBack, SkipForward, X } from 'lucide-react';
+import type { ThemeTokens, Track, VisualizerMode } from '../types';
+import { coverRefreshUrl } from '../api';
+import { findLatestActiveLineIndex, trackToVisualizerLines } from '../lib/lyrics';
 import { useIsMobile } from '../lib/media';
+import LyricsStylePicker from './LyricsStylePicker';
+import CoverArt from './CoverArt';
 
 interface SidePanelProps {
   open: boolean;
@@ -11,15 +16,19 @@ interface SidePanelProps {
   track: Track | null;
   queue: Track[];
   index: number;
-  liked: boolean;
+  currentTime: MotionValue<number>;
+  visualizerMode: VisualizerMode;
+  styleOpen: boolean;
+  onStyleOpenChange: (open: boolean) => void;
+  onVisualizerModeChange: (mode: VisualizerMode) => void;
   onClose: () => void;
   onHome: () => void;
-  onLike: () => void;
   onDownloadSong: () => void;
   onDownloadLrc: () => void;
   onPlayIndex: (index: number) => void;
   onPrev: () => void;
   onNext: () => void;
+  onLyricLineSeek?: (time: number) => void;
 }
 
 const SidePanel: React.FC<SidePanelProps> = ({
@@ -29,17 +38,45 @@ const SidePanel: React.FC<SidePanelProps> = ({
   track,
   queue,
   index,
-  liked,
+  currentTime,
+  visualizerMode,
+  styleOpen,
+  onStyleOpenChange,
+  onVisualizerModeChange,
   onClose,
   onHome,
-  onLike,
   onDownloadSong,
   onDownloadLrc,
   onPlayIndex,
   onPrev,
   onNext,
+  onLyricLineSeek,
 }) => {
   const isMobile = useIsMobile();
+  const [tab, setTab] = useState<'lyrics' | 'queue'>('lyrics');
+  const [lineIndex, setLineIndex] = useState(-1);
+  const lyricScrollRef = useRef<HTMLDivElement>(null);
+  const lines = useMemo(() => trackToVisualizerLines(track), [track]);
+  const coverUrl = track?.pic || (track ? coverRefreshUrl(track.type, track.songid) : '');
+
+  useEffect(() => {
+    if (!open) return;
+    let frame = 0;
+    const tick = () => {
+      const next = findLatestActiveLineIndex(lines, currentTime.get());
+      setLineIndex((prev) => (prev === next ? prev : next));
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [currentTime, lines, open]);
+
+  useEffect(() => {
+    if (tab !== 'lyrics' || lineIndex < 0) return;
+    const container = lyricScrollRef.current;
+    const active = container?.querySelector('[data-active="true"]') as HTMLElement | null;
+    active?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [lineIndex, tab]);
 
   return (
     <AnimatePresence>
@@ -63,8 +100,8 @@ const SidePanel: React.FC<SidePanelProps> = ({
             transition={{ type: 'spring', stiffness: 380, damping: 36 }}
             className={`absolute z-40 flex flex-col overflow-hidden border shadow-2xl backdrop-blur-xl theme-glass-panel ${
               isMobile
-                ? 'inset-x-0 bottom-0 h-[min(72dvh,calc(100%-4rem))] rounded-t-3xl'
-                : 'top-6 right-4 w-[min(360px,calc(100vw-2rem))] rounded-3xl'
+                ? 'inset-x-0 bottom-0 h-[min(78dvh,calc(100%-4rem))] rounded-t-3xl'
+                : 'top-4 right-4 bottom-4 w-[min(380px,calc(100%-2rem))] rounded-3xl'
             }`}
             style={isMobile ? { paddingBottom: 'var(--safe-bottom)' } : undefined}
             onClick={(event) => event.stopPropagation()}
@@ -79,35 +116,33 @@ const SidePanel: React.FC<SidePanelProps> = ({
                 <Home size={16} />
               </button>
               <span className="text-xs opacity-50">正在播放</span>
-              <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-white/10">
-                <X size={16} />
-              </button>
-            </div>
-            <div className={isMobile ? 'flex gap-3 px-4 pb-3' : 'px-5 pb-4'}>
-              <div className={`overflow-hidden bg-zinc-800/30 shadow-inner ${isMobile ? 'h-16 w-16 shrink-0 rounded-xl' : 'rounded-2xl'}`}>
-                {track?.pic ? (
-                  <img src={track.pic} alt="" className={isMobile ? 'h-full w-full object-cover' : 'aspect-square w-full object-cover'} />
-                ) : (
-                  <div className={`flex items-center justify-center opacity-30 ${isMobile ? 'h-full w-full' : 'aspect-square'}`}>
-                    <ListMusic size={isMobile ? 22 : 48} />
-                  </div>
-                )}
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => onStyleOpenChange(true)}
+                  className="rounded-full p-2 hover:bg-white/10"
+                  title="歌词样式"
+                >
+                  <Palette size={16} />
+                </button>
+                <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-white/10">
+                  <X size={16} />
+                </button>
               </div>
-              <div className={isMobile ? 'min-w-0 flex-1' : 'mt-4'}>
+            </div>
+
+            <div className={`flex gap-3 px-4 pb-3 ${isMobile ? '' : 'px-5'}`}>
+              <div className={`overflow-hidden bg-zinc-800/30 shadow-inner ${isMobile ? 'h-16 w-16 shrink-0 rounded-xl' : 'h-20 w-20 shrink-0 rounded-2xl'}`}>
+                <CoverArt src={coverUrl} />
+              </div>
+              <div className="min-w-0 flex-1">
                 <div className="truncate text-lg font-semibold" style={{ color: theme.primaryColor }}>
                   {track?.title || '未播放'}
                 </div>
                 <div className="mt-1 truncate text-sm opacity-55">{track?.author}</div>
-                <div className={`flex items-center ${isMobile ? 'mt-1 justify-between' : 'mt-4 justify-between'}`}>
+                <div className={`mt-2 flex items-center justify-between ${isMobile ? '' : 'max-w-xs'}`}>
                   <button type="button" onClick={onPrev} className="rounded-full p-2 hover:bg-white/10">
                     <SkipBack size={18} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onLike}
-                    className={`rounded-full p-2 ${liked ? 'text-rose-400' : 'hover:bg-white/10'}`}
-                  >
-                    <Heart size={18} fill={liked ? 'currentColor' : 'none'} />
                   </button>
                   <button type="button" onClick={onDownloadSong} className="rounded-full p-2 hover:bg-white/10" title="下载歌曲">
                     <Download size={18} />
@@ -121,22 +156,79 @@ const SidePanel: React.FC<SidePanelProps> = ({
                 </div>
               </div>
             </div>
-            <div className={`min-h-0 flex-1 overflow-y-auto border-t ${isDaylight ? 'border-black/10' : 'border-white/10'} ${isMobile ? '' : 'max-h-64'}`}>
-              {queue.map((item, i) => (
+
+            <div className={`mx-4 flex gap-1 rounded-full p-1 ${isDaylight ? 'bg-black/5' : 'bg-white/8'}`}>
+              {(['lyrics', 'queue'] as const).map((key) => (
                 <button
-                  key={`${item.type}-${item.songid}-${i}`}
+                  key={key}
                   type="button"
-                  onClick={() => onPlayIndex(i)}
-                  className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm md:py-2.5 ${
-                    i === index ? 'bg-white/10' : 'hover:bg-white/5'
+                  onClick={() => setTab(key)}
+                  className={`flex-1 rounded-full py-1.5 text-xs transition ${
+                    tab === key ? (isDaylight ? 'bg-white shadow' : 'bg-white/15') : 'opacity-55'
                   }`}
                 >
-                  <span className="w-5 text-right font-mono text-[10px] opacity-40">{i + 1}</span>
-                  <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                  <span className="max-w-[40%] truncate text-xs opacity-40">{item.author}</span>
+                  {key === 'lyrics' ? '歌词' : '队列'}
                 </button>
               ))}
             </div>
+
+            <div className={`min-h-0 flex-1 overflow-hidden border-t ${isDaylight ? 'border-black/10' : 'border-white/10'}`}>
+              {tab === 'lyrics' ? (
+                <div ref={lyricScrollRef} className="h-full overflow-y-auto px-4 py-3">
+                  {lines.length ? (
+                    lines.map((line, i) => {
+                      const active = i === lineIndex;
+                      return (
+                        <button
+                          key={`${line.startTime}-${i}`}
+                          type="button"
+                          data-active={active ? 'true' : undefined}
+                          onClick={() => onLyricLineSeek?.(line.startTime)}
+                          className={`mb-3 block w-full text-left text-sm leading-relaxed transition ${
+                            active ? 'scale-[1.02] font-semibold opacity-100' : 'opacity-45 hover:opacity-70'
+                          }`}
+                          style={active ? { color: theme.primaryColor } : undefined}
+                        >
+                          {line.fullText || line.words.map((w) => w.text).join('')}
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm opacity-40">
+                      {track ? '暂无歌词' : '选择一首歌开始播放'}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="h-full overflow-y-auto">
+                  {queue.map((item, i) => (
+                    <button
+                      key={`${item.type}-${item.songid}-${i}`}
+                      type="button"
+                      onClick={() => onPlayIndex(i)}
+                      className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm md:py-2.5 ${
+                        i === index ? 'bg-white/10' : 'hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="w-5 text-right font-mono text-[10px] opacity-40">{i + 1}</span>
+                      <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                      <span className="max-w-[40%] truncate text-xs opacity-40">{item.author}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <LyricsStylePicker
+              open={styleOpen}
+              mode={visualizerMode}
+              isDaylight={isDaylight}
+              onClose={() => onStyleOpenChange(false)}
+              onChange={(mode) => {
+                onVisualizerModeChange(mode);
+                onStyleOpenChange(false);
+              }}
+            />
           </motion.aside>
         </>
       )}

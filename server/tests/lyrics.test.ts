@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { neteaseLyricText, nameSearchSourcePage, sliceNameSearchSongids } from '../src/util.ts';
+import { decodeEntities, neteaseLyricText, nameSearchSourcePage, sliceNameSearchSongids, timedLyricScore } from '../src/util.ts';
 
 test('netease lyric payload prefers yrc and word-level translation', () => {
   const payload = {
@@ -13,6 +13,27 @@ test('netease lyric payload prefers yrc and word-level translation', () => {
   assert.equal(neteaseLyricText(payload, 'yrc'), '[1000,2000](1000,200,0)hello');
   assert.equal(neteaseLyricText(payload, 'tlyric'), '[00:01.00]逐字翻译');
   assert.equal(neteaseLyricText(null, 'yrc'), '');
+});
+
+test('decode numeric html entities used by QQ private-chain lyrics', () => {
+  const encoded = '[ti&#58;遗憾]\n[00&#58;27&#46;510]别再说是谁的错';
+  assert.equal(decodeEntities(encoded), '[ti:遗憾]\n[00:27.510]别再说是谁的错');
+  assert.ok(timedLyricScore(decodeEntities(encoded)) > 0);
+});
+
+test('netease v1 json lyric lines convert to timed lrc', () => {
+  const payload = {
+    lrc: {
+      lyric: '{"t":27510,"c":[{"tx":"别再说是谁的错"}]}\n[00:37.290]除非放下心中的负累',
+    },
+    yrc: { lyric: '{"t":0,"c":[{"tx":"作词: "}]}\n[27620,7010](27620,310,0)别' },
+  };
+  const lrc = neteaseLyricText(payload, 'lrc');
+  const yrc = neteaseLyricText(payload, 'yrc');
+  assert.match(lrc, /^\[00:27\.510\]别再说是谁的错/m);
+  assert.match(lrc, /\[00:37\.290\]除非放下心中的负累/);
+  assert.match(yrc, /\[27620,7010\]/);
+  assert.ok(timedLyricScore(yrc) >= 10);
 });
 
 test('name search paging uses source page and first 10 ids', () => {

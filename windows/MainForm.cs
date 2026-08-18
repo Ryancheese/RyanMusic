@@ -265,8 +265,7 @@ public sealed class MainForm : Form
         {
             var webRoot = ResolveWebRoot();
             if (!Directory.Exists(webRoot) ||
-                (!File.Exists(Path.Combine(webRoot, "index.php")) &&
-                 !Directory.Exists(Path.Combine(webRoot, "static"))))
+                !Directory.Exists(Path.Combine(webRoot, "static")))
             {
                 MessageBox.Show($"找不到站点目录：\n{webRoot}", "RyanMusic", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 Close();
@@ -282,31 +281,13 @@ public sealed class MainForm : Form
             }
             else
             {
-                var php = FindPhp();
-                if (php == null)
-                {
-                    MessageBox.Show(
-                        "未找到 Node.js 或 PHP。\n请安装 Node 22+，或使用仍内嵌 PHP 的安装包。",
-                        "RyanMusic",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error);
-                    Close();
-                    return;
-                }
-
-                if (!PhpHasCurl(php))
-                {
-                    MessageBox.Show(
-                        "当前 PHP 未启用 Curl 模块，无法启动。\n\n已检测到：\n" + php +
-                        "\n\n请使用安装包自带 PHP，或在 php.ini 中启用 extension=curl 后重试。",
-                        "RyanMusic",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error);
-                    Close();
-                    return;
-                }
-
-                StartPhp(php, webRoot, _port);
+                MessageBox.Show(
+                    "未找到 Node.js。\n请安装 Node 22+ 后重试，或使用已内嵌 server.mjs 的安装包。",
+                    "RyanMusic",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+                Close();
+                return;
             }
 
             // Program Files 下默认 UserData 无写权限 → E_ACCESSDENIED
@@ -487,7 +468,7 @@ public sealed class MainForm : Form
         };
         foreach (var c in candidates)
         {
-            if (Directory.Exists(c) && File.Exists(Path.Combine(c, "index.php")))
+            if (Directory.Exists(c) && Directory.Exists(Path.Combine(c, "static")))
             {
                 return c;
             }

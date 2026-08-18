@@ -7,7 +7,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
-const phpOrigin = process.env.VITE_API_ORIGIN || process.env.VITE_PHP_ORIGIN || 'http://127.0.0.1:8088';
+const apiOrigin = process.env.VITE_API_ORIGIN || process.env.VITE_PHP_ORIGIN || 'http://127.0.0.1:8088';
+
+const DOC_REDIRECTS: Record<string, string> = {
+  '/help.php': '/?doc=help',
+  '/help': '/?doc=help',
+  '/disclaimer.php': '/?doc=disclaimer',
+  '/disclaimer': '/?doc=disclaimer',
+  '/privacy.php': '/?doc=privacy',
+  '/privacy': '/?doc=privacy',
+};
 
 function copyManifestPlugin() {
   return {
@@ -23,18 +32,22 @@ function copyManifestPlugin() {
   };
 }
 
-function proxyPhpPlugin() {
+function proxyApiPlugin() {
   return {
-    name: 'ryanmusic-php-proxy',
+    name: 'ryanmusic-api-proxy',
     apply: 'serve' as const,
     configureServer(server: ViteDevServer) {
       server.middlewares.use((req, res, next) => {
         const url = req.url || '/';
         const pathname = url.split('?')[0];
+        const docTarget = DOC_REDIRECTS[pathname];
+        if (docTarget) {
+          res.writeHead(302, { Location: docTarget });
+          res.end();
+          return;
+        }
         const shouldProxy =
           pathname === '/api.php' ||
-          pathname === '/help.php' ||
-          pathname === '/disclaimer.php' ||
           (req.method === 'POST' && (pathname === '/' || pathname === '/index.php')) ||
           (req.method === 'GET' && (url.includes('cover=') || url.includes('download=')));
 
@@ -43,7 +56,7 @@ function proxyPhpPlugin() {
           return;
         }
 
-        const target = new URL(phpOrigin);
+        const target = new URL(apiOrigin);
         const proxyReq = http.request(
           {
             hostname: target.hostname,
@@ -62,7 +75,7 @@ function proxyPhpPlugin() {
         );
         proxyReq.on('error', () => {
           res.statusCode = 502;
-          res.end('API backend unavailable. Start Node on ' + phpOrigin);
+          res.end('API backend unavailable. Start Node on ' + apiOrigin);
         });
         req.pipe(proxyReq);
       });
@@ -71,7 +84,7 @@ function proxyPhpPlugin() {
 }
 
 export default defineConfig(({ command }) => ({
-  plugins: [react(), tailwindcss(), proxyPhpPlugin(), copyManifestPlugin()],
+  plugins: [react(), tailwindcss(), proxyApiPlugin(), copyManifestPlugin()],
   base: command === 'build' ? '/static/app/' : '/',
   build: {
     outDir: path.resolve(rootDir, '../maicong-music/static/app'),

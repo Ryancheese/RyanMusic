@@ -10,6 +10,7 @@ interface NeteaseAuth {
   uid: number;
   nickname: string;
   avatar: string;
+  vip?: number;
   updatedAt?: number;
 }
 
@@ -39,8 +40,13 @@ export class NeteaseAccount {
       uid: auth.uid,
       nickname: auth.nickname,
       avatar: auth.avatar,
+      vip: auth.vip ?? 0,
       updatedAt: auth.updatedAt || 0,
     };
+  }
+
+  sessionCookie(): string | null {
+    return this.read()?.cookie ?? null;
   }
 
   logout() {
@@ -85,6 +91,7 @@ export class NeteaseAccount {
       uid,
       nickname: String(profile?.nickname || ''),
       avatar: String(profile?.avatarUrl || ''),
+      vip: Number(profile?.vipType ?? account?.vipType ?? 0),
     };
   }
 
@@ -195,7 +202,7 @@ export class NeteaseAccount {
     const offset = Math.max(0, Number(post.offset || 0));
     let limit = Number(post.limit || 10);
     if (limit <= 0) limit = 10;
-    if (limit > 50) limit = 50;
+    if (limit > 200) limit = 200;
     return [offset, limit];
   }
 

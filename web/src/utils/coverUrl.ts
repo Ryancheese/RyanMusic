@@ -29,6 +29,10 @@ export const getSizedCoverUrl = (url: string | null | undefined, size: number): 
             return trimmedUrl;
         }
 
+        if (urlObj.hostname === '127.0.0.1' || urlObj.hostname === 'localhost' || urlObj.pathname.includes('api.php')) {
+            return trimmedUrl;
+        }
+
         if (urlObj.protocol === 'folia-cover:') {
             return withLocalCoverThumbnailSize(urlObj, normalizedSize);
         }

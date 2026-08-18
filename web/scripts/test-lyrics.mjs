@@ -42,4 +42,30 @@ if (findLatestActiveLineIndex(lines, 1.2) !== 0) {
   throw new Error('Active line lookup should follow Folia render window');
 }
 
+const qrc = `[0,800]你(0,200)好(200,200)吗(400,200)`;
+if (detectLyricParseFormat(qrc) !== 'qrc') {
+  throw new Error('QRC content should be detected as qrc, got ' + detectLyricParseFormat(qrc));
+}
+const qrcLines = trackToVisualizerLines({ lrc: '[00:00.00]fallback', yrc: qrc });
+if (qrcLines[0]?.words.length < 3) {
+  throw new Error('QRC in yrc field should keep word-level timings');
+}
+
+const headedQrc = `[ti:晴天]\n[ar:周杰伦]\n[offset:0]\n[10510,800]故事(10510,200)的(10710,200)小黄花(10910,400)`;
+if (detectLyricParseFormat(headedQrc) !== 'qrc') {
+  throw new Error('QRC with metadata header should still be detected as qrc, got ' + detectLyricParseFormat(headedQrc));
+}
+const headedLines = trackToVisualizerLines({ lrc: '[00:10.51]fallback', yrc: headedQrc });
+const headedMain = headedLines.find((line) => line.fullText.includes('故事'));
+if (Math.abs((headedMain?.words[0]?.startTime || 0) - 10.51) > 0.001) {
+  throw new Error('Absolute QRC word time should stay absolute, got ' + headedMain?.words[0]?.startTime);
+}
+
+const relativeQrc = `[10510,800]你(0,200)好(200,200)吗(400,200)`;
+const relativeLines = trackToVisualizerLines({ yrc: relativeQrc });
+const relativeMain = relativeLines.find((line) => line.fullText.includes('你'));
+if (Math.abs((relativeMain?.words[0]?.startTime || 0) - 10.51) > 0.001) {
+  throw new Error('Relative QRC word time should add line start, got ' + relativeMain?.words[0]?.startTime);
+}
+
 console.log('lyric parser tests passed');

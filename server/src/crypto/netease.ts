@@ -1,5 +1,5 @@
 import { createCipheriv, createHash, randomInt } from 'node:crypto';
-import { NETEASE_UA, UA } from '../config.ts';
+import { NETEASE_UA, randomCnIp, withOsPcCookie } from '../config.ts';
 import { request, type HttpResult } from '../http.ts';
 
 const LINUX_KEY = Buffer.from('7246674226682325323F5E6544673A51', 'hex');
@@ -93,13 +93,20 @@ export async function neteaseHttp(
   cookie = '',
   extraHeaders: Record<string, string> = {},
 ): Promise<HttpResult> {
+  const cnIp = randomCnIp();
   const headers: Record<string, string> = {
-    'User-Agent': UA,
+    'User-Agent': extraHeaders['User-Agent'] || NETEASE_UA,
     Referer: 'https://music.163.com/',
     Origin: 'https://music.163.com',
+    'X-Real-IP': cnIp,
+    'X-Forwarded-For': cnIp,
     ...extraHeaders,
   };
-  return request(method, url, { headers: cookieMap(headers, cookie), body, redirect: 'manual' });
+  return request(method, url, {
+    headers: cookieMap(headers, cookie ? withOsPcCookie(cookie) : cookie),
+    body,
+    redirect: 'manual',
+  });
 }
 
 export async function linuxForward(
@@ -187,7 +194,8 @@ export async function eapiRequest(
   const cookieParts = Object.entries(header).map(
     ([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`,
   );
-  if (cookie) cookieParts.push(cookie);
+  if (cookie) cookieParts.push(withOsPcCookie(cookie));
+  const cnIp = randomCnIp();
   let last: HttpResult = {
     ok: false,
     status: 0,
@@ -204,6 +212,8 @@ export async function eapiRequest(
         Referer: 'https://music.163.com/',
         Origin: 'https://music.163.com',
         Cookie: cookieParts.join('; '),
+        'X-Real-IP': cnIp,
+        'X-Forwarded-For': cnIp,
       },
       body: encoded,
     });

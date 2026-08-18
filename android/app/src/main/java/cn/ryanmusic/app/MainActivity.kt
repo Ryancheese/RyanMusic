@@ -42,10 +42,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnUseCloud: Button
     private lateinit var btnRetryLocal: Button
 
-    private var phpServer: PhpServer? = null
     private var baseUrl: String = "http://127.0.0.1:18765/"
     private var keepAliveStarted = false
-    private var lastLocalError: String = ""
 
     private val notifyPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -80,12 +78,7 @@ class MainActivity : AppCompatActivity() {
             connectRemote(remoteUrlInput.text?.toString().orEmpty(), PersistMode.CUSTOM)
         }
         btnUseCloud.setOnClickListener { connectCloud(PersistMode.CLOUD) }
-        btnRetryLocal.setOnClickListener {
-            fallbackPanel.visibility = View.GONE
-            overlay.visibility = View.VISIBLE
-            loading.visibility = View.VISIBLE
-            bootstrapLocal()
-        }
+        btnRetryLocal.setOnClickListener { connectCloud(PersistMode.CLOUD) }
 
         setupWebView()
         setupBackPress()
@@ -105,24 +98,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startPreferredServer() {
-        when (prefs().getString(KEY_MODE, MODE_LOCAL)) {
-            MODE_CLOUD -> connectCloud(PersistMode.CLOUD)
+        when (prefs().getString(KEY_MODE, MODE_CLOUD)) {
             MODE_CUSTOM -> {
                 val saved = prefs().getString(KEY_REMOTE, "").orEmpty().trim()
                 if (saved.isNotEmpty()) {
                     connectRemote(saved, PersistMode.CUSTOM)
                 } else {
-                    bootstrapLocal()
+                    connectCloud(PersistMode.CLOUD)
                 }
             }
-            else -> {
-                if (prefs().getBoolean(KEY_LOCAL_FAILED, false)) {
-                    statusText.setText(R.string.falling_back_cloud)
-                    connectCloud(PersistMode.NONE)
-                } else {
-                    bootstrapLocal()
-                }
-            }
+            else -> connectCloud(PersistMode.CLOUD)
         }
     }
 
@@ -141,27 +126,15 @@ class MainActivity : AppCompatActivity() {
                         .setTitle(R.string.app_name)
                         .setItems(
                             arrayOf(
-                                getString(R.string.menu_use_local),
                                 getString(R.string.menu_use_cloud),
                                 getString(R.string.menu_change_server),
                                 getString(R.string.menu_exit),
                             ),
                         ) { _, which ->
                             when (which) {
-                                0 -> {
-                                    phpServer?.stop()
-                                    phpServer = null
-                                    stopKeepAlive()
-                                    bootstrapLocal()
-                                }
-                                1 -> {
-                                    phpServer?.stop()
-                                    phpServer = null
-                                    stopKeepAlive()
-                                    connectCloud(PersistMode.CLOUD)
-                                }
-                                2 -> showServerPicker()
-                                3 -> finish()
+                                0 -> connectCloud(PersistMode.CLOUD)
+                                1 -> showServerPicker()
+                                2 -> finish()
                             }
                         }
                         .show()
@@ -174,8 +147,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showServerPicker() {
-        phpServer?.stop()
-        phpServer = null
         stopKeepAlive()
         webView.visibility = View.GONE
         overlay.visibility = View.VISIBLE
@@ -243,51 +214,6 @@ class MainActivity : AppCompatActivity() {
         webView.evaluateJavascript(script, null)
     }
 
-    private fun bootstrapLocal() {
-        thread(name = "ryan-bootstrap") {
-            try {
-                runOnUiThread {
-                    statusText.setText(R.string.starting)
-                    fallbackPanel.visibility = View.GONE
-                    overlay.visibility = View.VISIBLE
-                    loading.visibility = View.VISIBLE
-                    webView.visibility = View.GONE
-                }
-                val www = SiteInstaller.ensureInstalled(this)
-                val server = PhpServer(this)
-                phpServer = server
-                val port = server.start(www)
-                baseUrl = "http://127.0.0.1:$port/"
-                prefs().edit()
-                    .putString(KEY_MODE, MODE_LOCAL)
-                    .putBoolean(KEY_LOCAL_FAILED, false)
-                    .apply()
-                runOnUiThread { webView.loadUrl(baseUrl) }
-            } catch (e: Exception) {
-                lastLocalError = e.message ?: "unknown"
-                prefs().edit().putBoolean(KEY_LOCAL_FAILED, true).apply()
-                runOnUiThread {
-                    statusText.setText(R.string.falling_back_cloud)
-                    fallbackPanel.visibility = View.GONE
-                    overlay.visibility = View.VISIBLE
-                    loading.visibility = View.VISIBLE
-                    webView.visibility = View.GONE
-                    connectCloud(PersistMode.NONE)
-                }
-            }
-        }
-    }
-
-    private fun showChooser(detail: String) {
-        stopKeepAlive()
-        overlay.visibility = View.VISIBLE
-        loading.visibility = View.GONE
-        webView.visibility = View.GONE
-        fallbackPanel.visibility = View.VISIBLE
-        statusText.text = getString(R.string.local_php_failed, detail.take(240))
-        Toast.makeText(this, R.string.toast_use_remote, Toast.LENGTH_LONG).show()
-    }
-
     private fun connectCloud(persist: PersistMode) {
         connectRemote(BuildConfig.CLOUD_ORIGIN, persist, connectingLabel = R.string.connecting_cloud)
     }
@@ -337,25 +263,14 @@ class MainActivity : AppCompatActivity() {
                     PersistMode.NONE -> { /* 自动回退不改下次启动偏好 */ }
                 }
                 editor.apply()
-                phpServer?.stop()
-                phpServer = null
                 runOnUiThread { webView.loadUrl(baseUrl) }
             } catch (e: Exception) {
                 runOnUiThread {
-                    val detail = if (lastLocalError.isNotBlank()) {
-                        lastLocalError
-                    } else {
-                        e.message ?: "unknown"
-                    }
-                    if (persist == PersistMode.NONE) {
-                        showChooser(detail)
-                    } else {
-                        overlay.visibility = View.VISIBLE
-                        loading.visibility = View.GONE
-                        fallbackPanel.visibility = View.VISIBLE
-                        statusText.text = getString(R.string.remote_failed, e.message ?: "unknown")
-                        Toast.makeText(this, statusText.text, Toast.LENGTH_LONG).show()
-                    }
+                    overlay.visibility = View.VISIBLE
+                    loading.visibility = View.GONE
+                    fallbackPanel.visibility = View.VISIBLE
+                    statusText.text = getString(R.string.remote_failed, e.message ?: "unknown")
+                    Toast.makeText(this, statusText.text, Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -415,8 +330,6 @@ class MainActivity : AppCompatActivity() {
             webView.destroy()
         } catch (_: Exception) {
         }
-        phpServer?.stop()
-        phpServer = null
         super.onDestroy()
     }
 
@@ -430,8 +343,6 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_REMOTE = "remote_url"
         private const val KEY_USE_REMOTE_LEGACY = "use_remote"
         private const val KEY_MODE = "server_mode"
-        private const val KEY_LOCAL_FAILED = "local_php_failed"
-        private const val MODE_LOCAL = "local"
         private const val MODE_CLOUD = "cloud"
         private const val MODE_CUSTOM = "custom"
     }

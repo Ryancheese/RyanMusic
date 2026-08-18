@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { MotionValue } from 'framer-motion';
-import { ListMusic, Palette } from 'lucide-react';
+import { ListMusic } from 'lucide-react';
 import type { AudioBands, ThemeTokens, Track, VisualizerMode } from '../types';
 import { findLatestActiveLineIndex, trackToVisualizerLines } from '../lib/lyrics';
 import { prefersLightweightVisualizer } from '../lib/media';
+import { coverRefreshUrl } from '../api';
 import { toFoliaTheme } from '../lib/visualizer';
 import VisualizerRenderer from './visualizer/VisualizerRenderer';
-import LyricsStylePicker from './LyricsStylePicker';
 
 interface PlayerViewProps {
   track: Track | null;
@@ -21,10 +21,9 @@ interface PlayerViewProps {
   audioBands: AudioBands;
   paused?: boolean;
   isPanelOpen?: boolean;
-  styleOpen: boolean;
-  onStyleOpenChange: (open: boolean) => void;
   onToggleChrome: () => void;
   onOpenPanel?: () => void;
+  onLyricLineSeek?: (time: number) => void;
 }
 
 const PlayerView: React.FC<PlayerViewProps> = ({
@@ -40,10 +39,9 @@ const PlayerView: React.FC<PlayerViewProps> = ({
   audioBands,
   paused = false,
   isPanelOpen = false,
-  styleOpen,
-  onStyleOpenChange,
   onToggleChrome,
   onOpenPanel,
+  onLyricLineSeek,
 }) => {
   const lines = useMemo(() => trackToVisualizerLines(track), [track]);
   const foliaTheme = useMemo(() => toFoliaTheme(theme, accent), [accent, theme]);
@@ -62,7 +60,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
   }, [currentTime, lines]);
 
   return (
-    <div className="absolute inset-0 z-0 overflow-hidden" onClick={onToggleChrome}>
+    <div className="absolute inset-0 z-20 overflow-hidden" onClick={onToggleChrome}>
       {track && lines.length > 0 ? (
         <VisualizerRenderer
           mode={visualizerMode}
@@ -76,11 +74,12 @@ const PlayerView: React.FC<PlayerViewProps> = ({
           showText
           songTitle={track.title}
           songArtist={track.author}
-          coverUrl={track.pic}
+          coverUrl={track.pic || coverRefreshUrl(track.type, track.songid)}
           seed={track.songid}
           paused={paused}
           isPanelOpen={isPanelOpen}
           isPlayerChromeHidden={chromeHidden}
+          onLyricLineSeek={onLyricLineSeek}
           background={{
             mode: 'common',
             common: {
@@ -95,53 +94,22 @@ const PlayerView: React.FC<PlayerViewProps> = ({
         </div>
       )}
 
-      {!chromeHidden && (
-        <>
-          <button
-            type="button"
-            className={`absolute left-4 z-40 rounded-full px-3 py-2 text-xs backdrop-blur-md md:left-6 ${
-              isDaylight ? 'bg-white/70' : 'bg-black/40'
-            }`}
-            style={{ top: 'max(1rem, calc(var(--safe-top) + 0.75rem))' }}
-            onClick={(event) => {
-              event.stopPropagation();
-              onStyleOpenChange(true);
-            }}
-          >
-            <span className="flex items-center gap-1.5">
-              <Palette size={14} />
-              歌词样式
-            </span>
-          </button>
-          {onOpenPanel && (
-            <button
-              type="button"
-              className={`absolute right-4 z-40 rounded-full p-2.5 backdrop-blur-md md:hidden ${
-                isDaylight ? 'bg-white/70' : 'bg-black/40'
-              }`}
-              style={{ top: 'max(1rem, calc(var(--safe-top) + 0.75rem))' }}
-              onClick={(event) => {
-                event.stopPropagation();
-                onOpenPanel();
-              }}
-              aria-label="打开播放队列"
-            >
-              <ListMusic size={16} />
-            </button>
-          )}
-        </>
+      {!chromeHidden && onOpenPanel && (
+        <button
+          type="button"
+          className={`absolute right-4 z-40 rounded-full p-2.5 backdrop-blur-md md:hidden ${
+            isDaylight ? 'bg-white/70' : 'bg-black/40'
+          }`}
+          style={{ top: 'max(1rem, calc(var(--safe-top) + 0.75rem))' }}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenPanel();
+          }}
+          aria-label="打开正在播放"
+        >
+          <ListMusic size={16} />
+        </button>
       )}
-
-      <LyricsStylePicker
-        open={styleOpen}
-        mode={visualizerMode}
-        isDaylight={isDaylight}
-        onClose={() => onStyleOpenChange(false)}
-        onChange={(mode) => {
-          onVisualizerModeChange(mode);
-          onStyleOpenChange(false);
-        }}
-      />
     </div>
   );
 };

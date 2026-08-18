@@ -5,9 +5,10 @@ import { Hono } from 'hono';
 import { NeteaseAccount } from './accounts/netease.ts';
 import { QqAccount } from './accounts/qq.ts';
 import { FileCache } from './cache.ts';
-import { UA, VERSION, apiSecret, type MusicSource } from './config.ts';
+import { NETEASE_UA, UA, VERSION, apiSecret, randomCnIp, type MusicSource } from './config.ts';
+import { LyricsService } from './lyrics.ts';
 import { NeteaseService } from './netease.ts';
-import { docPage, spaHtml } from './pages.ts';
+import { spaHtml } from './pages.ts';
 import { QqService } from './qq.ts';
 import { verifySign } from './sign.ts';
 import { mediaReferer, parseSongUrl } from './util.ts';
@@ -25,19 +26,33 @@ function jsonResponse(data: unknown, code: number, error: string, extra: Record<
   });
 }
 
-async function proxyMedia(url: string, req: Request, opts: { download?: boolean; filename?: string; contentType?: string }) {
+async function proxyMedia(
+  url: string,
+  req: Request,
+  opts: { download?: boolean; filename?: string; contentType?: string; cookie?: string },
+) {
+  const neteaseCdn = /(163\.com|126\.net|netease)/i.test(url);
+  const cnIp = neteaseCdn ? randomCnIp() : '';
   const headers: Record<string, string> = {
-    'User-Agent': UA,
+    'User-Agent': neteaseCdn ? NETEASE_UA : UA,
     Referer: mediaReferer(url),
     Accept: '*/*',
   };
+  if (cnIp) {
+    headers['X-Real-IP'] = cnIp;
+    headers['X-Forwarded-For'] = cnIp;
+  }
+  if (opts.cookie) headers.Cookie = opts.cookie;
   const range = req.headers.get('range');
   if (range) headers.Range = range;
   try {
     const res = await fetch(url, { headers, redirect: 'follow' });
+    if (res.status >= 400) {
+      return new Response(opts.download ? '无法获取播放地址' : '上游资源不可用', { status: res.status });
+    }
     const out = new Headers();
     out.set('Content-Type', res.headers.get('content-type') || opts.contentType || 'audio/mpeg');
-    out.set('Cache-Control', 'no-store');
+    out.set('Cache-Control', opts.contentType?.startsWith('image/') ? 'public, max-age=86400' : 'no-store');
     out.set('Accept-Ranges', 'bytes');
     const len = res.headers.get('content-length');
     if (len) out.set('Content-Length', len);
@@ -51,10 +66,9 @@ async function proxyMedia(url: string, req: Request, opts: { download?: boolean;
     }
     return new Response(res.body, { status: res.status, headers: out });
   } catch {
-    if (!opts.download) {
-      return Response.redirect(url, 302);
-    }
-    return new Response('无法获取播放地址', { status: 502 });
+    return new Response(opts.download || !opts.contentType?.startsWith('image/') ? '无法获取播放地址' : '封面不可用', {
+      status: 502,
+    });
   }
 }
 
@@ -66,6 +80,13 @@ export function createApp(options: AppOptions) {
   const qq = new QqService(cache, secret);
   const neteaseAccount = new NeteaseAccount(cache, netease);
   const qqAccount = new QqAccount(cache, qq);
+  const lyrics = new LyricsService(
+    cache,
+    netease,
+    qq,
+    () => neteaseAccount.sessionCookie(),
+    () => qqAccount.sessionCookie(),
+  );
   const app = new Hono();
 
   const mime: Record<string, string> = {
@@ -98,8 +119,12 @@ export function createApp(options: AppOptions) {
   app.get('/static/*', (c) => sendFile(c.req.path.slice(1)));
   app.get('/favicon.ico', () => sendFile('favicon.ico'));
 
-  app.get('/help.php', (c) => c.html(docPage(options.webRoot, 'help')));
-  app.get('/disclaimer.php', (c) => c.html(docPage(options.webRoot, 'disclaimer')));
+  app.get('/help.php', (c) => c.redirect('/?doc=help', 302));
+  app.get('/help', (c) => c.redirect('/?doc=help', 302));
+  app.get('/disclaimer.php', (c) => c.redirect('/?doc=disclaimer', 302));
+  app.get('/disclaimer', (c) => c.redirect('/?doc=disclaimer', 302));
+  app.get('/privacy.php', (c) => c.redirect('/?doc=privacy', 302));
+  app.get('/privacy', (c) => c.redirect('/?doc=privacy', 302));
 
   app.all('/api.php', async (c) => {
     const get = (c.req.query('get') || '').trim();
@@ -115,26 +140,39 @@ export function createApp(options: AppOptions) {
     if (type === 'netease' && !/^\d+$/.test(id)) return c.text('Invalid id', 400);
 
     if (get === 'url') {
-      const play =
-        type === 'qq' ? await qq.resolvePlayUrl(id) : await netease.resolvePlayUrl(id);
+      const useAuth = Boolean(c.req.query('auth'));
+      const neteaseCookie = useAuth ? neteaseAccount.sessionCookie() || '' : '';
+      let play =
+        type === 'qq'
+          ? await qq.resolvePlayUrl(id)
+          : await netease.resolvePlayUrl(id, neteaseCookie);
+      if (!play && useAuth && type === 'netease') {
+        play = await netease.resolvePlayUrl(id, '');
+      }
       if (!play) return c.text('无法获取播放地址', 502);
       let name = c.req.query('name') || 'RyanMusic';
       name = name.replace(/[\\/:*?"<>|\x00-\x1F]/g, '_');
       if (!/\.mp3$/i.test(name)) name += '.mp3';
-      const streamed = await proxyMedia(play, c.req.raw, {
+      const proxyOpts = {
         download: Boolean(c.req.query('dl')),
         filename: name,
         contentType: 'audio/mpeg',
-      });
-      if (streamed.status === 502 && !c.req.query('dl')) return c.redirect(play, 302);
+        cookie: type === 'netease' ? neteaseCookie : undefined,
+      };
+      let streamed = await proxyMedia(play, c.req.raw, proxyOpts);
+      if (streamed.status >= 400 && type === 'netease') {
+        const fallback = await netease.resolvePlayUrl(id, '');
+        if (fallback && fallback !== play) {
+          streamed = await proxyMedia(fallback, c.req.raw, { ...proxyOpts, cookie: undefined });
+        }
+      }
       return streamed;
     }
     if (get === 'pic') {
       const pic = type === 'qq' ? await qq.resolvePicUrl(id) : await netease.resolvePicUrl(id);
       if (!pic) return c.text('封面不存在', 404);
       const streamed = await proxyMedia(pic, c.req.raw, { contentType: 'image/jpeg' });
-      if (streamed.status >= 400) return c.redirect(pic, 302);
-      return streamed;
+      return streamed.status >= 400 ? c.text('封面不存在', 404) : streamed;
     }
     if (get === 'lrc') {
       if (type !== 'qq') return c.text('该音源歌词无需代理', 400);
@@ -176,6 +214,20 @@ export function createApp(options: AppOptions) {
       if (action.startsWith('qq_')) {
         const result = await qqAccount.handle(action, post);
         return jsonResponse(result.data, result.code, result.error);
+      }
+      if (action === 'lyrics') {
+        const lyricType = (post.type || '').trim();
+        const lyricId = (post.id || '').trim();
+        if (lyricType !== 'netease' && lyricType !== 'qq') {
+          return jsonResponse('', 403, '歌词类型无效');
+        }
+        if (!lyricId) return jsonResponse('', 403, '缺少歌曲 ID');
+        try {
+          const data = await lyrics.fetch(lyricType, lyricId);
+          return jsonResponse(data, 200, '');
+        } catch (err) {
+          return jsonResponse('', 502, `(°ー°〃) ${err instanceof Error ? err.message : '歌词获取失败'}`);
+        }
       }
 
       const input = (post.input || '').trim();

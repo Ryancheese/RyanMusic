@@ -6,9 +6,11 @@ import { QqService } from '../qq.ts';
 import {
   cookieGet,
   cookieToMap,
+  getGtk,
   hash33,
   mergeCookies,
   normalizeCookie,
+  qqGuid,
   readJson,
   removeFile,
   writeJson,
@@ -18,6 +20,7 @@ interface QqAuth {
   cookie: string;
   uin: string;
   nickname: string;
+  vip?: number;
   updatedAt?: number;
 }
 
@@ -56,8 +59,13 @@ export class QqAccount {
       loggedIn: true,
       uin: auth.uin,
       nickname: auth.nickname,
+      vip: auth.vip ?? 0,
       updatedAt: auth.updatedAt || 0,
     };
+  }
+
+  sessionCookie(): string | null {
+    return this.read()?.cookie ?? null;
   }
 
   async handle(action: string, post: Record<string, string>) {
@@ -96,7 +104,7 @@ export class QqAccount {
     return Boolean(map.qm_keyst || map.qqmusic_key);
   }
 
-  private async profileValidate(cookie: string) {
+  private async profileValidate(cookie: string, allowFallback = false) {
     const uin = this.extractUin(cookie);
     if (!uin || !this.hasMusicKey(cookie)) return null;
     const qs = new URLSearchParams({
@@ -116,7 +124,9 @@ export class QqAccount {
         },
       },
     );
-    if (!res.json || Number(res.json.code) === 1000) return null;
+    if (!res.json || Number(res.json.code) === 1000) {
+      return allowFallback ? { uin, nickname: `QQ ${uin}`, cookie } : null;
+    }
     const nickname =
       res.json.data?.creator?.nick || res.json.data?.userinfo?.nick || `QQ ${uin}`;
     return { uin, nickname: String(nickname), cookie };
@@ -136,15 +146,15 @@ export class QqAccount {
   }
 
   private async qqGet(url: string, cookie = '', extra: Record<string, string> = {}) {
-    return request('GET', url, {
-      headers: {
-        Referer: extra.Referer || 'https://y.qq.com/',
-        Origin: 'https://y.qq.com',
-        Cookie: cookie,
-        ...extra,
-      },
-      redirect: 'manual',
-    });
+    const headers: Record<string, string> = {
+      Referer: extra.Referer || 'https://y.qq.com/',
+      Cookie: cookie,
+      ...extra,
+    };
+    if (!headers.Origin && !/ptlogin2\.qq\.com/i.test(url)) {
+      headers.Origin = 'https://y.qq.com';
+    }
+    return request('GET', url, { headers, redirect: 'manual' });
   }
 
   private async qqPost(url: string, body: string | Record<string, string>, cookie = '') {
@@ -244,36 +254,64 @@ export class QqAccount {
   }
 
   private async finishQr(checkSigUrl: string, qrsigCookie: string) {
-    let followed = await this.followCollect(checkSigUrl, qrsigCookie);
-    let cookie = followed.cookie;
-    followed = await this.followCollect(
-      'https://graph.qq.com/oauth2.0/login_jump',
-      cookie,
-      5,
-      'https://xui.ptlogin2.qq.com/',
-    );
-    cookie = followed.cookie;
-    const map = cookieToMap(cookie);
-    const gtkVal = map.p_skey || map.skey || map.p_lskey || map.lskey || map.superkey || '';
-    const gtk = gtkVal ? hash33(gtkVal) : 5381;
-    const authBody = {
+    let cookie = qrsigCookie;
+    let url = checkSigUrl;
+    let pSkey = '';
+    for (let hop = 0; hop < 8 && url; hop++) {
+      const res = await request('GET', url, {
+        headers: {
+          Cookie: cookie,
+          Referer: hop === 0 ? 'https://xui.ptlogin2.qq.com/' : url,
+        },
+        redirect: 'manual',
+      });
+      cookie = mergeCookies(cookie, res.cookies);
+      pSkey = cookieGet(cookie, 'p_skey') || cookieGet(cookie, 'skey');
+      const loc = this.headerLocation(res.headers);
+      if (!loc) break;
+      url = new URL(unescapeRedirect(loc), url).toString();
+      if (pSkey && /y\.qq\.com|graph\.qq\.com/i.test(url)) break;
+    }
+    if (!pSkey) return null;
+
+    const gtk = getGtk(pSkey);
+    const authFields = {
       response_type: 'code',
       client_id: '100497308',
       redirect_uri: 'https://y.qq.com/portal/wx_redirect.html?login_type=1&surl=https://y.qq.com/',
+      scope: 'get_user_info,get_app_friends',
       state: 'state',
       switch: '',
       from_ptlogin: '1',
       src: '1',
       update_auth: '1',
-      openapi: '1010',
+      openapi: '1010_1030',
       g_tk: String(gtk),
-      auth_time: String(Math.floor(Date.now() / 1000)),
-      ui: '',
+      auth_time: new Date().toString(),
+      ui: qqGuid(),
     };
-    const auth = await this.qqPost('https://graph.qq.com/oauth2.0/authorize', authBody, cookie);
+    const postAuthorize = async (body: string | URLSearchParams, contentType?: string) =>
+      request('POST', 'https://graph.qq.com/oauth2.0/authorize', {
+        headers: {
+          Cookie: cookie,
+          Referer: 'https://graph.qq.com/oauth2.0/login_jump',
+          Origin: 'https://graph.qq.com',
+          ...(contentType ? { 'Content-Type': contentType } : {}),
+        },
+        body,
+        redirect: 'manual',
+      });
+
+    let auth = await postAuthorize(new URLSearchParams(authFields));
     cookie = mergeCookies(cookie, auth.cookies);
     let loc = this.headerLocation(auth.headers);
     let code = this.extractOauthCode(auth.headers, auth.body, loc);
+    if (!code) {
+      auth = await postAuthorize(new URLSearchParams(authFields).toString(), 'application/x-www-form-urlencoded');
+      cookie = mergeCookies(cookie, auth.cookies);
+      loc = this.headerLocation(auth.headers);
+      code = this.extractOauthCode(auth.headers, auth.body, loc);
+    }
     if (!code && loc) {
       const jump = await this.followCollect(loc, cookie, 6, 'https://graph.qq.com/');
       cookie = jump.cookie;
@@ -281,10 +319,11 @@ export class QqAccount {
     }
     if (!code) {
       if (this.hasMusicKey(cookie) && this.extractUin(cookie)) {
-        return this.profileValidate(cookie);
+        return this.profileValidate(cookie, true);
       }
       return null;
     }
+
     const payloads = [
       {
         comm: { g_tk: gtk, platform: 'yqq', ct: 24, cv: 0 },
@@ -296,27 +335,35 @@ export class QqAccount {
       },
     ];
     for (const payload of payloads) {
-      const login = await request('POST', 'https://u.y.qq.com/cgi-bin/musicu.fcg', {
-        headers: { Referer: 'https://y.qq.com/', Cookie: cookie, 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      cookie = mergeCookies(cookie, login.cookies);
-      const json = login.json;
-      let data: any = null;
-      if (json) {
-        for (const rk of ['req', 'req_0', 'req1', 'req0']) {
-          if (json[rk]?.data) {
-            data = json[rk].data;
-            break;
+      const body = JSON.stringify(payload);
+      const attempts = [
+        { 'Content-Type': 'application/json' },
+        { 'Content-Type': 'application/x-www-form-urlencoded' },
+      ];
+      for (const headers of attempts) {
+        const login = await request('POST', 'https://u.y.qq.com/cgi-bin/musicu.fcg', {
+          headers: { Referer: 'https://y.qq.com/', Cookie: cookie, ...headers },
+          body,
+        });
+        cookie = mergeCookies(cookie, login.cookies);
+        const json = login.json;
+        let data: any = null;
+        if (json) {
+          for (const rk of ['req', 'req_0', 'req1', 'req0']) {
+            if (json[rk]?.data) {
+              data = json[rk].data;
+              break;
+            }
           }
         }
+        if (data && (data.musickey || data.key || data.qm_keyst)) {
+          cookie = this.applyMusicLogin(cookie, data);
+          break;
+        }
       }
-      if (data && (data.musickey || data.key)) {
-        cookie = this.applyMusicLogin(cookie, data);
-        break;
-      }
+      if (this.hasMusicKey(cookie)) break;
     }
-    return this.profileValidate(cookie);
+    return this.profileValidate(cookie, true);
   }
 
   private async qrCheck() {

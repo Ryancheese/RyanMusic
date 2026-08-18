@@ -70,7 +70,13 @@ curl -fsSL https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/macos/ins
 
 ### 更新
 
-朋友或本机需要更新到最新版时，**再执行一次上面的安装命令**即可（会重新编译并覆盖 `/Applications/RyanMusic.app`）。更新前请先完全退出 RyanMusic。
+macOS 桌面版可在应用内点右上角循环箭头，或菜单栏 **RyanMusic → 检查更新**，从 GitHub Releases 下载对应架构的 DMG 并自动替换。没有新版本时会提示已是最新。
+
+也可再执行一次安装命令覆盖：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/macos/install.sh | bash
+```
 
 本地已有仓库时也可：
 

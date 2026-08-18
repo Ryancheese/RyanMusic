@@ -1,7 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, Disc, Loader2, Play, Plus, Search, X } from 'lucide-react';
+import { AlertCircle, Play, Plus, Search, X } from 'lucide-react';
 import type { MusicSource, ThemeTokens, Track } from '../types';
+import CoverArt from './CoverArt';
+import RyanLoader from './RyanLoader';
 
 interface SearchWorkspaceProps {
   open: boolean;
@@ -88,7 +90,9 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                 }}
               >
                 {isSearching ? (
-                  <Loader2 className="absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 animate-spin opacity-50" />
+                  <span className="absolute top-1/2 left-3.5 -translate-y-1/2">
+                    <RyanLoader size={18} />
+                  </span>
                 ) : (
                   <Search className="absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 opacity-45" />
                 )}
@@ -145,7 +149,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
           >
             {isSearching && tracks.length === 0 ? (
               <div className="flex h-full items-center justify-center">
-                <Loader2 className="h-9 w-9 animate-spin opacity-45" />
+                <RyanLoader size={64} label="搜索中…" />
               </div>
             ) : error && tracks.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-3 text-center opacity-65">
@@ -170,13 +174,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                         onClick={() => onPlay(track, index)}
                         className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-zinc-500/15"
                       >
-                        {track.pic ? (
-                          <img src={track.pic} alt="" className="h-full w-full object-cover" />
-                        ) : (
-                          <span className="flex h-full w-full items-center justify-center opacity-30">
-                            <Disc size={22} />
-                          </span>
-                        )}
+                        <CoverArt src={track.pic} />
                         <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
                           <Play size={18} fill="currentColor" />
                         </span>
@@ -197,7 +195,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                         type="button"
                         onClick={() => onAddQueue(track)}
                         className="shrink-0 rounded-full p-2 opacity-60 transition-all hover:bg-white/10 hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                        title="加入播放列表"
+                        title="加入播放队列"
                       >
                         <Plus size={16} />
                       </button>
@@ -206,7 +204,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                 ))}
                 {isLoadingMore && (
                   <div className="flex justify-center py-4">
-                    <Loader2 className="h-5 w-5 animate-spin opacity-40" />
+                    <RyanLoader size={28} />
                   </div>
                 )}
               </div>

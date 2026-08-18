@@ -8,6 +8,22 @@ export const UA =
 export const NETEASE_UA =
   'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.29.205117';
 
+const CN_IP_A = [36, 58, 111, 112, 114, 117, 120, 123, 183, 218, 223];
+
+export function randomCnIp(): string {
+  const a = CN_IP_A[Math.floor(Math.random() * CN_IP_A.length)];
+  const b = 1 + Math.floor(Math.random() * 254);
+  const c = 1 + Math.floor(Math.random() * 254);
+  const d = 1 + Math.floor(Math.random() * 254);
+  return `${a}.${b}.${c}.${d}`;
+}
+
+export function withOsPcCookie(cookie: string): string {
+  if (!cookie) return 'os=pc; appver=3.1.29.205117';
+  if (/(?:^|;\s*)os=/.test(cookie)) return cookie;
+  return `${cookie}; os=pc; appver=3.1.29.205117`;
+}
+
 export type MusicSource = 'netease' | 'qq';
 
 export interface Track {

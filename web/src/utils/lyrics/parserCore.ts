@@ -543,6 +543,18 @@ export const parseQRC = (
  options: LyricProcessingOptions = {},
  romanizationString: string = ''
 ): LyricData => {
+ const unwrapXml = (value: string) => {
+  const match = value.match(/LyricContent="([^"]*)"/) || value.match(/LyricContent='([^']*)'/);
+  if (!match) return value;
+  return match[1]
+    .replace(/&#10;/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&');
+ };
+ qrcString = unwrapXml(qrcString);
+ translationString = unwrapXml(translationString);
+ romanizationString = unwrapXml(romanizationString);
  const rawLinesData: Array<{
  words: Word[];
  startTime: number;
@@ -606,6 +618,8 @@ export const parseQRC = (
 
  const prefersLeadingText = textChunks[0].trim().length > 0 && textChunks[textChunks.length - 1].trim().length === 0;
  const prefersTrailingText = textChunks[0].trim().length === 0 && textChunks[textChunks.length - 1].trim().length > 0;
+ const firstTagStart = tags[0]?.startMs ?? 0;
+ const wordTimesAreRelative = firstTagStart + 8 < lineStartTimeMs && firstTagStart <= lineDurationMs + 24;
 
  for (let index = 0; index < tags.length; index += 1) {
  const tag = tags[index];
@@ -629,10 +643,11 @@ export const parseQRC = (
  continue;
  }
 
+ const wordStartMs = wordTimesAreRelative ? lineStartTimeMs + tag.startMs : tag.startMs;
  words.push({
  text,
- startTime: tag.startMs / 1000,
- endTime: (tag.startMs + tag.durationMs) / 1000
+ startTime: wordStartMs / 1000,
+ endTime: (wordStartMs + tag.durationMs) / 1000
  });
  fullText += text;
  }

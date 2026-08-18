@@ -1,20 +1,70 @@
+export function decodeEntities(str: string): string {
+  return str
+    .replace(/&#13;/g, '')
+    .replace(/&#10;/g, '\n')
+    .replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+export function timedLyricScore(text?: string | null): number {
+  const raw = text || '';
+  if (!raw.trim()) return 0;
+  const word = (raw.match(/\[\d+,\d+\]/g) || []).length;
+  const lrc = (raw.match(/\[\d{2}:\d{2}/g) || []).length;
+  return word * 10 + lrc;
+}
+
+export function pickRicherLyric(primary: string, fallback: string): string {
+  return timedLyricScore(primary) >= timedLyricScore(fallback) ? primary || fallback : fallback;
+}
+
+function convertNeteaseJsonLyricLine(line: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
+  try {
+    const obj = JSON.parse(trimmed) as { t?: number; c?: Array<{ tx?: string }> };
+    if (typeof obj.t !== 'number' || !Array.isArray(obj.c)) return null;
+    const text = obj.c.map((part) => part?.tx || '').join('');
+    const ms = Math.max(0, obj.t);
+    const m = Math.floor(ms / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    const cs = ms % 1000;
+    return `[${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(3, '0')}]${text}`;
+  } catch {
+    return null;
+  }
+}
+
+export function normalizeNeteaseLyric(text: string): string {
+  if (!text) return '';
+  return text
+    .split(/\r?\n/)
+    .map((line) => convertNeteaseJsonLyricLine(line) ?? line)
+    .join('\n');
+}
+
 export function neteaseLyricText(
   payload: Record<string, any> | null | undefined,
   field: 'lrc' | 'yrc' | 'tlyric',
 ): string {
   if (!payload || typeof payload !== 'object') return '';
+  let raw = '';
   if (field === 'yrc') {
-    if (payload.yrc?.lyric) return String(payload.yrc.lyric);
-    if (payload.lrc?.yrc?.lyric) return String(payload.lrc.yrc.lyric);
-    return '';
+    raw = payload.yrc?.lyric ? String(payload.yrc.lyric) : payload.lrc?.yrc?.lyric ? String(payload.lrc.yrc.lyric) : '';
+  } else if (field === 'tlyric') {
+    if (payload.yrc?.lyric && payload.ytlrc?.lyric) raw = String(payload.ytlrc.lyric);
+    else if (payload.lrc?.ytlrc?.lyric) raw = String(payload.lrc.ytlrc.lyric);
+    else if (payload.tlyric?.lyric) raw = String(payload.tlyric.lyric);
+  } else {
+    raw = payload.lrc?.lyric ? String(payload.lrc.lyric) : '';
   }
-  if (field === 'tlyric') {
-    if (payload.yrc?.lyric && payload.ytlrc?.lyric) return String(payload.ytlrc.lyric);
-    if (payload.lrc?.ytlrc?.lyric) return String(payload.lrc.ytlrc.lyric);
-    if (payload.tlyric?.lyric) return String(payload.tlyric.lyric);
-    return '';
-  }
-  return payload.lrc?.lyric ? String(payload.lrc.lyric) : '';
+  return normalizeNeteaseLyric(raw);
 }
 
 export function sliceNameSearchSongids(songids: Array<string | number>, page: number) {
@@ -33,17 +83,6 @@ export function sliceNameSearchSongids(songids: Array<string | number>, page: nu
 export function nameSearchSourcePage(page: number): number {
   const n = Number(page);
   return n < 1 || Number.isNaN(n) ? 1 : n;
-}
-
-export function decodeEntities(str: string): string {
-  return str
-    .replace(/&#13;/g, '')
-    .replace(/&#10;/g, '\n')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
 }
 
 export function jsonpToJson(raw: string): any {

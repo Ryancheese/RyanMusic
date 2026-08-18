@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { LoopMode, MusicSource, PlayerStatus, Track } from '../types';
 import { fetchTrackById } from '../api';
 import { trackKey } from '../types';
-import { useLibraryStore } from './libraryStore';
+import { timedLyricScore } from '../lib/lyrics';
 
 interface PlayerState {
   source: MusicSource;
@@ -23,6 +23,7 @@ interface PlayerState {
     entry: { type: MusicSource; songid: string },
     queue?: { type: MusicSource; songid: string }[],
   ) => Promise<void>;
+  patchCurrentLyrics: (lyrics: Pick<Track, 'lrc' | 'yrc' | 'tlyric'>) => void;
 }
 
 const LOOP_ORDER: LoopMode[] = ['off', 'all', 'one'];
@@ -55,13 +56,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       error: '',
       source: track.type,
     });
-    useLibraryStore.getState().addRecent(track);
   },
   addToQueue: (track) => {
     const queue = get().queue;
     if (queue.some((item) => trackKey(item) === trackKey(track))) return;
     set({ queue: [...queue, track] });
-    useLibraryStore.getState().addToPlaylist(track);
   },
   playLibraryEntry: async (entry, queueEntries) => {
     set({ status: 'loading', error: '' });
@@ -86,5 +85,34 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (tracks.length) {
       set({ queue: tracks, index: index < 0 ? 0 : index });
     }
+  },
+  patchCurrentLyrics: (lyrics) => {
+    const { queue, index } = get();
+    const current = queue[index];
+    if (!current) return;
+    const nextLrc = timedLyricScore(lyrics.lrc) >= timedLyricScore(current.lrc)
+      ? (lyrics.lrc || current.lrc)
+      : current.lrc;
+    const nextYrc = timedLyricScore(lyrics.yrc) >= timedLyricScore(current.yrc)
+      ? (lyrics.yrc || current.yrc || '')
+      : (current.yrc || '');
+    const nextTlyric = timedLyricScore(lyrics.tlyric) >= timedLyricScore(current.tlyric)
+      ? (lyrics.tlyric || current.tlyric || '')
+      : (current.tlyric || '');
+    if (
+      current.lrc === nextLrc
+      && (current.yrc || '') === nextYrc
+      && (current.tlyric || '') === nextTlyric
+    ) {
+      return;
+    }
+    const next = queue.slice();
+    next[index] = {
+      ...current,
+      lrc: nextLrc,
+      yrc: nextYrc,
+      tlyric: nextTlyric,
+    };
+    set({ queue: next });
   },
 }));

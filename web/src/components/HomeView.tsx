@@ -1,89 +1,116 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Clock3, Heart, ListMusic, Search, Settings, SunMoon } from 'lucide-react';
-import { Grid3DSlider, type Grid3DSliderItem } from './Grid3DSlider';
-import type { HomeTab, MusicSource, ThemeTokens } from '../types';
+import { ArrowLeft, CircleHelp, Cloud, Music2, Palette, RefreshCw, Search, SunMoon, UserRound } from 'lucide-react';
+import { AlbumWaterfall, type AlbumWaterfallItem } from './AlbumWaterfall';
+import ThemeAccentPicker from './ThemeAccentPicker';
+import type { HomeTab, ThemeTokens } from '../types';
 import { coverRefreshUrl } from '../api';
+import type { CloudPlaylist } from '../api';
 import type { LibraryEntry } from '../store/libraryStore';
+import type { AccountStatus } from '../api';
+import type { LegalTab } from '../legal';
 
 interface HomeViewProps {
   theme: ThemeTokens;
   isDaylight: boolean;
-  source: MusicSource;
   homeTab: HomeTab;
-  channel: 'all' | MusicSource;
-  liked: LibraryEntry[];
-  recent: LibraryEntry[];
-  playlist: LibraryEntry[];
+  neteasePlaylists: CloudPlaylist[];
+  qqPlaylists: CloudPlaylist[];
+  neteaseOpen: CloudPlaylist | null;
+  qqOpen: CloudPlaylist | null;
+  neteaseTracks: LibraryEntry[];
+  qqTracks: LibraryEntry[];
+  cloudLoading: boolean;
+  cloudSyncing: boolean;
+  cloudError: string;
   hasCurrentTrack: boolean;
   searchQuery: string;
+  updateAvailable?: boolean;
   onSearchQueryChange: (query: string) => void;
   onOpenSearch: (submit?: boolean) => void;
-  onSourceChange: (source: MusicSource) => void;
   onHomeTabChange: (tab: HomeTab) => void;
-  onChannelChange: (channel: 'all' | MusicSource) => void;
   onSelectEntry: (entry: LibraryEntry, queue: LibraryEntry[]) => void;
+  onOpenPlaylist: (playlist: CloudPlaylist) => void;
+  onBackPlaylist: () => void;
   onToggleTheme: () => void;
+  onOpenAccount: () => void;
+  onOpenLegal: (tab: LegalTab) => void;
+  onCheckUpdate: () => void;
+  netease: AccountStatus | null;
+  qq: AccountStatus | null;
 }
 
 const TABS: { id: HomeTab; label: string; icon: React.ReactNode }[] = [
-  { id: 'liked', label: '喜欢', icon: <Heart size={14} /> },
-  { id: 'recent', label: '最近', icon: <Clock3 size={14} /> },
-  { id: 'playlist', label: '播放列表', icon: <ListMusic size={14} /> },
+  { id: 'netease', label: '网易云', icon: <Cloud size={14} /> },
+  { id: 'qq', label: 'QQ', icon: <Music2 size={14} /> },
 ];
+
+function httpsUrl(url?: string) {
+  if (!url) return undefined;
+  return url.replace(/^http:\/\//i, 'https://');
+}
 
 const HomeView: React.FC<HomeViewProps> = ({
   theme,
   isDaylight,
-  source,
   homeTab,
-  channel,
-  liked,
-  recent,
-  playlist,
+  neteasePlaylists,
+  qqPlaylists,
+  neteaseOpen,
+  qqOpen,
+  neteaseTracks,
+  qqTracks,
+  cloudLoading,
+  cloudSyncing,
+  cloudError,
   hasCurrentTrack,
   searchQuery,
+  updateAvailable = false,
   onSearchQueryChange,
   onOpenSearch,
-  onSourceChange,
   onHomeTabChange,
-  onChannelChange,
   onSelectEntry,
+  onOpenPlaylist,
+  onBackPlaylist,
   onToggleTheme,
+  onOpenAccount,
+  onOpenLegal,
+  onCheckUpdate,
+  netease,
+  qq,
 }) => {
-  const [focusedIndex, setFocusedIndex] = useState(0);
-  const lists: Record<HomeTab, LibraryEntry[]> = { liked, recent, playlist };
-  const filtered = lists[homeTab].filter((item) => channel === 'all' || item.type === channel);
-  const items: Grid3DSliderItem[] = useMemo(
-    () =>
-      filtered.map((item) => ({
-        id: `${item.type}-${item.songid}`,
-        name: item.title,
-        description: `${item.author} · ${item.type === 'qq' ? 'QQ' : '网易云'}`,
-        coverUrl: coverRefreshUrl(item.type, item.songid),
-      })),
-    [filtered],
-  );
+  const [accentOpen, setAccentOpen] = useState(false);
+  const openPlaylist = homeTab === 'netease' ? neteaseOpen : qqOpen;
+  const cloudPlaylists = homeTab === 'netease' ? neteasePlaylists : qqPlaylists;
+  const cloudTracks = homeTab === 'netease' ? neteaseTracks : qqTracks;
+  const loggedIn = homeTab === 'netease' ? Boolean(netease?.loggedIn) : Boolean(qq?.loggedIn);
+  const showingPlaylists = !openPlaylist;
+  const showingCloudTracks = Boolean(openPlaylist);
+
+  const items: AlbumWaterfallItem[] = useMemo(() => {
+    if (showingPlaylists) {
+      return cloudPlaylists.map((item) => ({
+        id: `pl-${item.id}`,
+        name: item.name,
+        description: `${item.trackCount || 0} 首${item.subscribed ? ' · 收藏' : ''}`,
+        coverUrl: httpsUrl(item.cover),
+      }));
+    }
+    return cloudTracks.map((item) => ({
+      id: `${item.type}-${item.songid}`,
+      name: item.title,
+      description: `${item.author} · ${item.type === 'qq' ? 'QQ' : '网易云'}`,
+      coverUrl: coverRefreshUrl(item.type, item.songid),
+    }));
+  }, [cloudPlaylists, cloudTracks, showingPlaylists]);
 
   const navPillBg = isDaylight ? 'bg-black/5' : 'bg-white/8';
   const inputBg = isDaylight ? 'bg-black/[0.04]' : 'bg-white/[0.06]';
-  const emptyCopy =
-    homeTab === 'liked' ? '还没有喜欢的歌曲，搜索后点红心即可收藏' : homeTab === 'recent' ? '播放过的歌曲会出现在这里' : '把歌曲加入播放列表后在这里浏览';
-
-  const sourcePills = (
-    <div className={`flex rounded-full p-1 ${navPillBg}`}>
-      {(['netease', 'qq'] as MusicSource[]).map((item) => (
-        <button
-          key={item}
-          type="button"
-          onClick={() => onSourceChange(item)}
-          className={`rounded-full px-3 py-1 text-xs ${source === item ? (isDaylight ? 'bg-white shadow-sm text-black' : 'bg-white text-black') : 'opacity-55'}`}
-        >
-          {item === 'netease' ? '网易云' : 'QQ'}
-        </button>
-      ))}
-    </div>
-  );
+  const emptyCopy = !loggedIn
+    ? '登录后即可同步账号歌单'
+    : cloudSyncing || cloudLoading
+      ? '正在同步歌单…'
+      : cloudError || (showingPlaylists ? '还没有歌单，打开登录面板可重新同步' : '这个歌单是空的');
 
   const tabPills = (
     <div className={`relative rounded-full p-1 backdrop-blur-md ${navPillBg}`}>
@@ -94,11 +121,8 @@ const HomeView: React.FC<HomeViewProps> = ({
             <button
               key={tab.id}
               type="button"
-              onClick={() => {
-                setFocusedIndex(0);
-                onHomeTabChange(tab.id);
-              }}
-              className="relative inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-medium md:px-4 md:text-sm"
+              onClick={() => onHomeTabChange(tab.id)}
+              className="relative inline-flex items-center justify-center rounded-full px-2.5 py-1.5 text-xs font-medium md:px-4 md:text-sm"
             >
               {active && (
                 <motion.span
@@ -122,19 +146,57 @@ const HomeView: React.FC<HomeViewProps> = ({
     <>
       <button
         type="button"
+        onClick={onOpenAccount}
+        className={`rounded-full px-2.5 py-2 text-xs ${isDaylight ? 'bg-black/5' : 'bg-white/10'}`}
+        title="登录网易云 / QQ"
+      >
+        <span className="flex items-center gap-1.5">
+          <UserRound size={16} />
+          <span className="hidden sm:inline">
+            {netease?.loggedIn || qq?.loggedIn
+              ? [netease?.loggedIn ? '网易' : '', qq?.loggedIn ? 'QQ' : ''].filter(Boolean).join(' / ')
+              : '登录'}
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
         onClick={onToggleTheme}
         className={`rounded-full p-2 ${isDaylight ? 'bg-black/5' : 'bg-white/10'}`}
         title="切换日夜主题"
       >
         <SunMoon size={16} />
       </button>
-      <a
-        href="help.php"
+      <button
+        type="button"
+        onClick={() => setAccentOpen(true)}
         className={`rounded-full p-2 ${isDaylight ? 'bg-black/5' : 'bg-white/10'}`}
-        title="帮助"
+        title="主题色"
+        aria-label="主题色"
       >
-        <Settings size={16} />
-      </a>
+        <Palette size={16} style={{ color: 'var(--text-accent)' }} />
+      </button>
+      <button
+        type="button"
+        onClick={onCheckUpdate}
+        className={`relative rounded-full p-2 ${isDaylight ? 'bg-black/5' : 'bg-white/10'}`}
+        title="检查更新"
+        aria-label="检查更新"
+      >
+        <RefreshCw size={16} />
+        {updateAvailable ? (
+          <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-sky-400" />
+        ) : null}
+      </button>
+      <button
+        type="button"
+        onClick={() => onOpenLegal('help')}
+        className={`rounded-full p-2 ${isDaylight ? 'bg-black/5' : 'bg-white/10'}`}
+        title="使用帮助"
+        aria-label="使用帮助"
+      >
+        <CircleHelp size={16} />
+      </button>
     </>
   );
 
@@ -151,11 +213,10 @@ const HomeView: React.FC<HomeViewProps> = ({
               <div className="text-[11px] tracking-[0.35em] opacity-50">RYAN</div>
               <div className="text-lg font-semibold tracking-[0.18em]">MUSIC</div>
             </div>
-            {sourcePills}
             <div className="ml-auto flex items-center gap-2 md:hidden">{themeButtons}</div>
           </div>
 
-          <div className="order-3 flex justify-center md:order-none">{tabPills}</div>
+          <div className="order-3 flex justify-center overflow-x-auto md:order-none">{tabPills}</div>
 
           <div className="order-2 flex items-center gap-2 md:order-none md:justify-end">
             <form
@@ -177,42 +238,49 @@ const HomeView: React.FC<HomeViewProps> = ({
             <div className="hidden items-center gap-2 md:flex">{themeButtons}</div>
           </div>
         </div>
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-0.5">
-          {(['all', 'netease', 'qq'] as const).map((item) => (
+        <div className="mt-3 flex items-center gap-2">
+          {openPlaylist ? (
             <button
-              key={item}
               type="button"
-              onClick={() => {
-                setFocusedIndex(0);
-                onChannelChange(item);
-              }}
-              className={`shrink-0 rounded-full px-3 py-1 text-[11px] ${
-                channel === item
-                  ? isDaylight
-                    ? 'bg-black text-white'
-                    : 'bg-white text-black'
-                  : isDaylight
-                    ? 'bg-black/5 opacity-70'
-                    : 'bg-white/8 opacity-70'
-              }`}
+              onClick={onBackPlaylist}
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] ${isDaylight ? 'bg-black/5' : 'bg-white/8'}`}
             >
-              {item === 'all' ? '全部' : item === 'netease' ? '网易云' : 'QQ'}
+              <ArrowLeft size={12} />
+              返回歌单
             </button>
-          ))}
+          ) : null}
+          <span className="truncate text-[11px] opacity-60">
+            {openPlaylist
+              ? openPlaylist.name
+              : loggedIn
+                ? `${cloudPlaylists.length} 个歌单`
+                : '未登录'}
+          </span>
         </div>
       </div>
 
-      <Grid3DSlider
+      <AlbumWaterfall
         items={items}
-        focusedIndex={focusedIndex}
-        onFocusedIndexChange={setFocusedIndex}
-        onSelect={(_, index) => {
-          const entry = filtered[index];
-          if (entry) onSelectEntry(entry, filtered);
+        onSelect={(item, index) => {
+          if (showingPlaylists) {
+            const playlistItem = cloudPlaylists.find((entry) => `pl-${entry.id}` === item.id)
+              || cloudPlaylists[index];
+            if (playlistItem) onOpenPlaylist(playlistItem);
+            return;
+          }
+          const entry = cloudTracks.find((row) => `${row.type}-${row.songid}` === item.id) || cloudTracks[index];
+          if (entry) onSelectEntry(entry, cloudTracks);
         }}
         isDaylight={isDaylight}
+        isLoading={cloudSyncing || cloudLoading}
         emptyMessage={emptyCopy}
         hasFloatingPlayer={hasCurrentTrack}
+      />
+
+      <ThemeAccentPicker
+        open={accentOpen}
+        isDaylight={isDaylight}
+        onClose={() => setAccentOpen(false)}
       />
     </div>
   );

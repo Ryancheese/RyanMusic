@@ -1,6 +1,6 @@
 import { bootstrapBase, type Track } from './config.ts';
 import { FileCache } from './cache.ts';
-import { encodeLinuxData, linuxForward, neteaseApi, neteaseHttp } from './crypto/netease.ts';
+import { encodeLinuxData, linuxForward, neteaseApi, neteaseHttp, eapiRequest, weapiRequest } from './crypto/netease.ts';
 import { followLocation, request } from './http.ts';
 import { proxyUrl } from './sign.ts';
 import {
@@ -95,9 +95,18 @@ export class NeteaseService {
     return res.json;
   }
 
-  async resolvePlayUrl(songid: string): Promise<string | null> {
-    const cached = this.cache.getTtl('netease_play', songid);
+  async resolvePlayUrl(songid: string, cookie = ''): Promise<string | null> {
+    const cacheKey = cookie ? 'netease_play_auth' : 'netease_play';
+    const cached = this.cache.getTtl(cacheKey, songid);
     if (cached) return cached;
+
+    if (cookie) {
+      const authUrl = await this.cookiePlayUrl(songid, cookie);
+      if (authUrl) {
+        this.cache.setTtl(cacheKey, songid, authUrl, 600);
+        return authUrl;
+      }
+    }
 
     let url = await this.officialPlayUrl(songid);
     if (!url) url = await this.bootstrapPlayUrl(songid);
@@ -106,6 +115,41 @@ export class NeteaseService {
       url = httpsNeteaseUrl(url);
       this.cache.setTtl('netease_play', songid, url, 600);
       return url;
+    }
+    return null;
+  }
+
+  async cookiePlayUrl(songid: string, cookie: string): Promise<string | null> {
+    const id = Number(songid);
+    if (!id || !cookie) return null;
+    // Folia: /song/url/v1?level=exhigh&randomCNIP=true&https=true, encodeType=flac。
+    // standard 对会员曲常返回空链接。
+    const levels = ['exhigh', 'higher', 'standard'];
+    const encodeTypes = ['flac', 'mp3'];
+    for (const level of levels) {
+      for (const encodeType of encodeTypes) {
+        const res = await eapiRequest(
+          '/api/song/enhance/player/url/v1',
+          { ids: `[${id}]`, level, encodeType },
+          cookie,
+        );
+        const item = res.json?.data?.[0];
+        const url = item?.url as string | undefined;
+        if (item?.freeTrialInfo) continue;
+        if (url && !isBadMediaUrl(url) && !/\/404/i.test(url)) {
+          return httpsNeteaseUrl(url);
+        }
+      }
+    }
+    const weapi = await weapiRequest(
+      '/weapi/song/enhance/player/url/v1',
+      { ids: `[${id}]`, level: 'exhigh', encodeType: 'flac' },
+      cookie,
+    );
+    const item = weapi.json?.data?.[0];
+    const url = item?.url as string | undefined;
+    if (url && !item?.freeTrialInfo && !isBadMediaUrl(url) && !/\/404/i.test(url)) {
+      return httpsNeteaseUrl(url);
     }
     return null;
   }
