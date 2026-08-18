@@ -85,6 +85,31 @@ export function nameSearchSourcePage(page: number): number {
   return n < 1 || Number.isNaN(n) ? 1 : n;
 }
 
+export function firstTruthy<T>(tasks: Array<() => Promise<T | null | undefined>>): Promise<T | null> {
+  return new Promise((resolve) => {
+    let pending = tasks.length;
+    let settled = false;
+    if (!pending) {
+      resolve(null);
+      return;
+    }
+    for (const task of tasks) {
+      void task().then((value) => {
+        if (!settled && value) {
+          settled = true;
+          resolve(value);
+          return;
+        }
+        pending -= 1;
+        if (!settled && pending === 0) resolve(null);
+      }).catch(() => {
+        pending -= 1;
+        if (!settled && pending === 0) resolve(null);
+      });
+    }
+  });
+}
+
 export function jsonpToJson(raw: string): any {
   const text = raw.trim();
   if (!text) return null;

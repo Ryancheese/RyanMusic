@@ -71,7 +71,7 @@ export class QqAccount {
   async handle(action: string, post: Record<string, string>) {
     switch (action) {
       case 'qq_status':
-        return ok(this.status());
+        return ok(await this.statusFresh());
       case 'qq_logout':
         removeFile(this.authFile);
         removeFile(this.qrFile);
@@ -136,6 +136,51 @@ export class QqAccount {
     return { uin, nickname: String(nickname), cookie };
   }
 
+  private async fetchVip(uin: string, cookie: string): Promise<number> {
+    const payload = {
+      comm: { ct: 24, cv: 0, uin, format: 'json' },
+      req: {
+        module: 'userInfo.VipQueryServer',
+        method: 'SRFVipQuery_V2',
+        param: { uin_list: [uin] },
+      },
+    };
+    const res = await request('POST', 'https://u.y.qq.com/cgi-bin/musicu.fcg', {
+      headers: {
+        Cookie: cookie,
+        Referer: 'https://y.qq.com/',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      timeoutMs: 6000,
+    });
+    const data = res.json?.req?.data || {};
+    const info = data.info_map?.[uin] || data.infoMap?.[uin] || data;
+    const current = info.cur || info;
+    const value = Number(
+      current.vip_flag
+      ?? current.iVipFlag
+      ?? current.iSuperVip
+      ?? current.iYearVip
+      ?? info.iVipFlag
+      ?? 0,
+    );
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  private async withVip(account: { uin: string; nickname: string; cookie: string }): Promise<QqAuth> {
+    return { ...account, vip: await this.fetchVip(account.uin, account.cookie) };
+  }
+
+  private async statusFresh() {
+    const auth = this.read();
+    if (!auth) return { loggedIn: false as const };
+    if (auth.vip == null) {
+      this.write({ ...auth, vip: await this.fetchVip(auth.uin, auth.cookie) });
+    }
+    return this.status();
+  }
+
   private async cookieSave(raw: string) {
     let cookie = normalizeCookie(raw);
     if (!cookie) return fail(400, '请粘贴 Cookie');
@@ -145,7 +190,7 @@ export class QqAccount {
     }
     const account = await this.profileValidate(cookie);
     if (!account) return fail(401, 'Cookie 无效：需含 uin 与 qm_keyst/qqmusic_key，请从 y.qq.com 复制');
-    this.write(account);
+    this.write(await this.withVip(account));
     return ok(this.status());
   }
 
@@ -424,7 +469,7 @@ export class QqAccount {
           data: { ...payload, loggedIn: false, message: '扫码成功但换取音乐凭证失败，请刷新二维码或改用 Cookie' },
         };
       }
-      this.write(account);
+      this.write(await this.withVip(account));
       removeFile(this.qrFile);
       payload.loggedIn = true;
       payload.uin = account.uin;

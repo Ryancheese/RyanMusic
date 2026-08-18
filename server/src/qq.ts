@@ -2,9 +2,11 @@ import { bootstrapBase, UA, type Track } from './config.ts';
 import { FileCache } from './cache.ts';
 import { followLocation, request } from './http.ts';
 import { proxyUrl } from './sign.ts';
-import { decodeEntities, isBadMediaUrl, jsonpToJson, nameSearchSourcePage, sliceNameSearchSongids } from './util.ts';
+import { decodeEntities, firstTruthy, isBadMediaUrl, jsonpToJson, nameSearchSourcePage, sliceNameSearchSongids } from './util.ts';
 
 export class QqService {
+  private readonly playInflight = new Map<string, Promise<string | null>>();
+
   constructor(
     private readonly cache: FileCache,
     private readonly secret: string,
@@ -81,7 +83,10 @@ export class QqService {
     const ids = list.map((s: any) => String(s.songmid || s.mid || '')).filter(Boolean);
     const sliced = sliceNameSearchSongids(ids, page);
     if (!sliced.songids.length) return null;
-    const tracks = await this.songsByIds(sliced.songids.map(String));
+    const byId = new Map(list.map((song: any) => [String(song.songmid || song.mid || ''), song]));
+    const tracks = sliced.songids
+      .map((id) => this.trackFromSong(byId.get(String(id))))
+      .filter((item): item is Track => Boolean(item));
     return { tracks, hasMore: sliced.has_more };
   }
 
@@ -94,30 +99,27 @@ export class QqService {
     });
     const data = res.json?.data;
     if (!Array.isArray(data)) return [];
-    return Promise.all(
-      data.map(async (value: any) => {
-        const id = String(value.mid || '');
-        const authors = Array.isArray(value.singer)
-          ? value.singer.map((s: any) => s.title || s.name).filter(Boolean)
-          : [];
-        const lrc = await this.fetchLyric(id);
-        const albumMid = value.album?.mid || '';
-        const pic = albumMid
-          ? `http://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg`
-          : '';
-        return this.wrap({
-          type: 'qq',
-          songid: id,
-          title: String(value.title || '未知曲目'),
-          author: authors.join(',') || '未知艺人',
-          link: `https://y.qq.com/n/ryqq/songDetail/${id}`,
-          lrc: decodeEntities(String(lrc.lyric || '')),
-          tlyric: decodeEntities(String(lrc.trans || '')),
-          url: '',
-          pic,
-        });
-      }),
-    );
+    return data.map((value: any) => {
+      const id = String(value.mid || '');
+      const authors = Array.isArray(value.singer)
+        ? value.singer.map((s: any) => s.title || s.name).filter(Boolean)
+        : [];
+      const albumMid = value.album?.mid || '';
+      const pic = albumMid
+        ? `http://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg`
+        : '';
+      return this.wrap({
+        type: 'qq',
+        songid: id,
+        title: String(value.title || '未知曲目'),
+        author: authors.join(',') || '未知艺人',
+        link: `https://y.qq.com/n/ryqq/songDetail/${id}`,
+        lrc: '',
+        tlyric: '',
+        url: '',
+        pic,
+      });
+    });
   }
 
   async fetchLyric(songmid: string): Promise<{ lyric?: string; trans?: string }> {
@@ -137,23 +139,87 @@ export class QqService {
     return jsonpToJson(res.body) || {};
   }
 
-  async resolvePlayUrl(songmid: string): Promise<string | null> {
-    const cached = this.cache.getTtl('qq_play', songmid);
+  async resolvePlayUrl(songmid: string, cookie = ''): Promise<string | null> {
+    const inflightKey = `${cookie ? 'auth' : 'private'}:${songmid}`;
+    const inflight = this.playInflight.get(inflightKey);
+    if (inflight) return inflight;
+    const pending = this.resolvePlayUrlInner(songmid, cookie).finally(() => {
+      this.playInflight.delete(inflightKey);
+    });
+    this.playInflight.set(inflightKey, pending);
+    return pending;
+  }
+
+  private async resolvePlayUrlInner(songmid: string, cookie = ''): Promise<string | null> {
+    const cacheKey = cookie ? 'qq_play_auth' : 'qq_play';
+    const cached = this.cache.getTtl(cacheKey, songmid);
     if (cached) return cached;
-    const code = await this.getPyqCode(songmid);
-    if (code) {
-      const url = await this.pyqFollow(songmid, code);
-      if (url && !isBadMediaUrl(url)) {
-        this.cache.setTtl('qq_play', songmid, url, 1800);
-        return url;
+    if (cookie) {
+      const official = await this.officialPlayUrl(songmid, cookie);
+      if (official) {
+        this.cache.setTtl(cacheKey, songmid, official, 600);
+        return official;
       }
     }
-    const fallback = await this.bootstrapPlayUrl(songmid);
-    if (fallback && !isBadMediaUrl(fallback)) {
-      this.cache.setTtl('qq_play', songmid, fallback, 1800);
-      return fallback;
+    const url = await firstTruthy([
+      () => this.pyqPlayUrl(songmid),
+      () => this.bootstrapPlayUrl(songmid),
+    ]);
+    if (url && !isBadMediaUrl(url)) {
+      this.cache.setTtl('qq_play', songmid, url, 1800);
+      return url;
     }
     return null;
+  }
+
+  private async pyqPlayUrl(songmid: string): Promise<string | null> {
+    const code = await this.getPyqCode(songmid);
+    if (!code) return null;
+    const url = await this.pyqFollow(songmid, code);
+    return url && !isBadMediaUrl(url) ? url : null;
+  }
+
+  private async officialPlayUrl(songmid: string, cookie: string): Promise<string | null> {
+    const map = Object.fromEntries(
+      cookie.split(';').map((part) => {
+        const index = part.indexOf('=');
+        return index > 0
+          ? [part.slice(0, index).trim(), part.slice(index + 1).trim()]
+          : ['', ''];
+      }),
+    );
+    const rawUin = map.uin || map.wxuin || map.qqmusic_uin || '0';
+    const uin = rawUin.replace(/^o/i, '').replace(/^0+/, '') || '0';
+    const payload = {
+      comm: { uin, format: 'json', ct: 24, cv: 0, platform: 'wk_v17' },
+      req_0: {
+        module: 'vkey.GetVkeyServer',
+        method: 'CgiGetVkey',
+        param: {
+          guid: '10000',
+          songmid: [songmid],
+          songtype: [0],
+          uin,
+          loginflag: 1,
+          platform: '20',
+        },
+      },
+    };
+    const res = await request('POST', 'https://u.y.qq.com/cgi-bin/musicu.fcg', {
+      headers: {
+        Cookie: cookie,
+        Referer: 'https://y.qq.com/',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      timeoutMs: 6000,
+    });
+    const data = res.json?.req_0?.data;
+    const purl = String(data?.midurlinfo?.[0]?.purl || '');
+    if (!purl) return null;
+    const sip = String(data?.sip?.[0] || 'https://dl.stream.qqmusic.qq.com/');
+    const url = `${sip.replace(/\/$/, '')}/${purl.replace(/^\//, '')}`;
+    return isBadMediaUrl(url) ? null : url;
   }
 
   private async getPyqCode(songmid: string): Promise<string | null> {

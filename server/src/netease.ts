@@ -4,14 +4,16 @@ import { encodeLinuxData, linuxForward, neteaseApi, neteaseHttp, eapiRequest, we
 import { followLocation, request } from './http.ts';
 import { proxyUrl } from './sign.ts';
 import {
+  firstTruthy,
   httpsNeteaseUrl,
   isBadMediaUrl,
   nameSearchSourcePage,
-  neteaseLyricText,
   sliceNameSearchSongids,
 } from './util.ts';
 
 export class NeteaseService {
+  private readonly playInflight = new Map<string, Promise<string | null>>();
+
   constructor(
     private readonly cache: FileCache,
     private readonly secret: string,
@@ -40,7 +42,11 @@ export class NeteaseService {
     const ids = songs.map((s: any) => String(s.id));
     const sliced = sliceNameSearchSongids(ids, page);
     if (!sliced.songids.length) return null;
-    const tracks = await this.songsByIds(sliced.songids.map(String));
+    const byId = new Map(songs.map((song: any) => [String(song.id), song]));
+    const tracks = sliced.songids
+      .map((id) => this.trackFromSong(byId.get(String(id))))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      .map((item) => this.wrap({ ...item, lrc: '', url: '' }));
     return { tracks, hasMore: sliced.has_more };
   }
 
@@ -58,29 +64,25 @@ export class NeteaseService {
     const songs = res.json?.songs;
     if (!Array.isArray(songs)) return [];
 
-    const details = await Promise.all(
-      songs.map(async (value: any) => {
-        const id = String(value.id);
-        const lrc = await this.fetchLyric(id, cookie);
-        const authors = Array.isArray(value.artists)
-          ? value.artists.map((a: any) => a.name).filter(Boolean)
-          : [];
-        const pic = value.album?.picUrl ? `${value.album.picUrl}?param=300x300` : '';
-        return this.wrap({
-          type: 'netease',
-          songid: id,
-          title: String(value.name || '未知曲目'),
-          author: authors.join(',') || '未知艺人',
-          link: `http://music.163.com/#/song?id=${id}`,
-          lrc: neteaseLyricText(lrc, 'lrc'),
-          yrc: neteaseLyricText(lrc, 'yrc'),
-          tlyric: neteaseLyricText(lrc, 'tlyric'),
-          url: '',
-          pic,
-        });
-      }),
-    );
-    return details;
+    return songs.map((value: any) => {
+      const id = String(value.id);
+      const authors = Array.isArray(value.artists)
+        ? value.artists.map((a: any) => a.name).filter(Boolean)
+        : [];
+      const pic = value.album?.picUrl ? `${value.album.picUrl}?param=300x300` : '';
+      return this.wrap({
+        type: 'netease',
+        songid: id,
+        title: String(value.name || '未知曲目'),
+        author: authors.join(',') || '未知艺人',
+        link: `http://music.163.com/#/song?id=${id}`,
+        lrc: '',
+        yrc: '',
+        tlyric: '',
+        url: '',
+        pic,
+      });
+    });
   }
 
   async fetchLyric(id: string, cookie = ''): Promise<any> {
@@ -107,9 +109,20 @@ export class NeteaseService {
   ];
 
   async resolvePlayUrl(songid: string, cookie = '', level = ''): Promise<string | null> {
+    const inflightKey = `${cookie ? 'auth' : 'private'}:${level || 'auto'}:${songid}`;
+    const inflight = this.playInflight.get(inflightKey);
+    if (inflight) return inflight;
+    const pending = this.resolvePlayUrlInner(songid, cookie, level).finally(() => {
+      this.playInflight.delete(inflightKey);
+    });
+    this.playInflight.set(inflightKey, pending);
+    return pending;
+  }
+
+  private async resolvePlayUrlInner(songid: string, cookie = '', level = ''): Promise<string | null> {
     const cacheKey = cookie
-      ? `netease_play_auth_${level || 'auto'}`
-      : 'netease_play';
+      ? `netease_play_auth_v4_${level || 'auto'}`
+      : 'netease_play_v4';
     const cached = this.cache.getTtl(cacheKey, songid);
     if (cached) return cached;
 
@@ -121,13 +134,12 @@ export class NeteaseService {
       }
     }
 
-    let url = await this.officialPlayUrl(songid);
-    if (!url) url = await this.bootstrapPlayUrl(songid);
+    let url = await this.bootstrapPlayUrl(songid);
     if (!url) url = await this.metingPlayUrl(songid);
     if (url && !isBadMediaUrl(url) && !/\/404/.test(url)) {
-      url = httpsNeteaseUrl(url);
-      this.cache.setTtl('netease_play', songid, url, 600);
-      return url;
+      const safeUrl = httpsNeteaseUrl(url);
+      this.cache.setTtl('netease_play_v4', songid, safeUrl, 600);
+      return safeUrl;
     }
     return null;
   }
@@ -166,8 +178,16 @@ export class NeteaseService {
         ['exhigh', 'higher', 'standard'].includes(item.level)
       );
 
-    for (const item of ordered) {
-      const hit = await this.fetchPlayUrlForLevel(id, cookie, item.level, item.encodeType);
+    if (!preferred) {
+      const fastUrl = await firstTruthy(
+        ordered.map((item) => async () => {
+          const hit = await this.fetchPlayUrlForLevel(id, cookie, item.level, item.encodeType);
+          return hit?.url;
+        }),
+      );
+      if (fastUrl) return fastUrl;
+    } else {
+      const hit = await this.fetchPlayUrlForLevel(id, cookie, preferred.level, preferred.encodeType);
       if (hit?.url) return hit.url;
     }
     if (preferred) {
@@ -183,7 +203,7 @@ export class NeteaseService {
     );
     const item = weapi.json?.data?.[0];
     const url = item?.url as string | undefined;
-    if (url && !item?.freeTrialInfo && !isBadMediaUrl(url) && !/\/404/i.test(url)) {
+    if (url && !this.isTrialPlayItem(item) && !isBadMediaUrl(url) && !/\/404/i.test(url)) {
       return httpsNeteaseUrl(url);
     }
     return null;
@@ -202,7 +222,7 @@ export class NeteaseService {
     );
     const item = res.json?.data?.[0];
     const url = item?.url as string | undefined;
-    if (item?.freeTrialInfo) return null;
+    if (this.isTrialPlayItem(item)) return null;
     if (!url || isBadMediaUrl(url) || /\/404/i.test(url)) return null;
     return {
       url: httpsNeteaseUrl(url),
@@ -211,17 +231,17 @@ export class NeteaseService {
     };
   }
 
-  private async officialPlayUrl(songid: string): Promise<string | null> {
-    const encoded = encodeLinuxData({
-      method: 'POST',
-      url: 'http://music.163.com/api/song/enhance/player/url',
-      params: { ids: [Number(songid)], br: 320000 },
-    });
-    const res = await neteaseHttp('POST', 'http://music.163.com/api/linux/forward', encoded, '', {
-      Referer: 'http://music.163.com/',
-    });
-    const url = res.json?.data?.[0]?.url as string | undefined;
-    return url && !isBadMediaUrl(url) ? url : null;
+  private isTrialPlayItem(item: any): boolean {
+    if (!item) return false;
+    if (item.freeTrialInfo) return true;
+    const time = Number(item.time || 0);
+    if (time > 0 && time <= 60_000) return true;
+    const privilege = item.freeTrialPrivilege;
+    return Boolean(
+      privilege
+      && (privilege.resConsumable || privilege.userConsumable)
+      && time > 0,
+    );
   }
 
   private async bootstrapPlayUrl(songid: string): Promise<string | null> {

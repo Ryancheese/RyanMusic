@@ -143,14 +143,18 @@ export function createApp(options: AppOptions) {
       const useAuth = Boolean(c.req.query('auth'));
       const level = String(c.req.query('level') || '').trim();
       const neteaseCookie = useAuth ? neteaseAccount.sessionCookie() || '' : '';
+      const qqCookie = useAuth ? qqAccount.sessionCookie() || '' : '';
       let play =
         type === 'qq'
-          ? await qq.resolvePlayUrl(id)
+          ? await qq.resolvePlayUrl(id, qqCookie)
           : await netease.resolvePlayUrl(id, neteaseCookie, level);
-      if (!play && useAuth && type === 'netease') {
-        play = await netease.resolvePlayUrl(id, '', level);
+      if (!play && useAuth) {
+        play = type === 'qq'
+          ? await qq.resolvePlayUrl(id)
+          : await netease.resolvePlayUrl(id, '', level);
       }
       if (!play) return c.text('无法获取播放地址', 502);
+      if (c.req.query('probe')) return new Response(null, { status: 204 });
       let name = c.req.query('name') || 'RyanMusic';
       name = name.replace(/[\\/:*?"<>|\x00-\x1F]/g, '_');
       if (!/\.mp3$/i.test(name)) name += '.mp3';
@@ -158,11 +162,13 @@ export function createApp(options: AppOptions) {
         download: Boolean(c.req.query('dl')),
         filename: name,
         contentType: 'audio/mpeg',
-        cookie: type === 'netease' ? neteaseCookie : undefined,
+        cookie: type === 'netease' ? neteaseCookie : type === 'qq' ? qqCookie : undefined,
       };
       let streamed = await proxyMedia(play, c.req.raw, proxyOpts);
-      if (streamed.status >= 400 && type === 'netease') {
-        const fallback = await netease.resolvePlayUrl(id, '');
+      if (streamed.status >= 400 && useAuth) {
+        const fallback = type === 'qq'
+          ? await qq.resolvePlayUrl(id)
+          : await netease.resolvePlayUrl(id, '');
         if (fallback && fallback !== play) {
           streamed = await proxyMedia(fallback, c.req.raw, { ...proxyOpts, cookie: undefined });
         }

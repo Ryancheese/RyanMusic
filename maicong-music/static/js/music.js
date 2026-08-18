@@ -192,7 +192,7 @@ $(function() {
         return { playlists: [], nickname: '', syncedAt: 0 };
       }
       return data;
-    } catch (e) {
+      } catch (e) {
       return { playlists: [], nickname: '', syncedAt: 0 };
     }
   }
@@ -255,7 +255,7 @@ $(function() {
   }
 
   function toLibItem(track) {
-    return {
+      return {
       type: track.type,
       songid: String(track.songid),
       title: track.title || '暂无',
@@ -1917,11 +1917,11 @@ $(function() {
         var $orb = $(this);
         var glow = i === 0 ? g0 : i === 1 ? g1 : g2;
         var rgb = rgbToStr(glow);
-        $orb.css({
+      $orb.css({
           background: orbGradient(rgb),
           '--orb-opacity': (orbOpacityBase * rand(0.92, 1.08)).toFixed(2),
           '--orb-base-scale': rand(0.98, 1.12).toFixed(2),
-          left: rand(-12, 72) + '%',
+        left: rand(-12, 72) + '%',
           top: rand(-12, 72) + '%'
         });
         $orb.addClass('is-visible');
@@ -2838,7 +2838,7 @@ $(function() {
         if (selector === '#j-src-btn') {
           el = document.querySelector('#j-show') || document.querySelector('#j-main');
           if (!isTargetVisible(el)) return;
-        } else {
+    } else {
           return;
         }
       }
@@ -3112,9 +3112,9 @@ $(function() {
                   $('#j-lrc').text(data.lrc);
                   $('#j-lrc-btn')
                     .attr(
-                      'href',
-                      'data:application/octet-stream;base64,' +
-                        btoa(unescape(encodeURIComponent(data.lrc)))
+                    'href',
+                    'data:application/octet-stream;base64,' +
+                      btoa(unescape(encodeURIComponent(data.lrc)))
                     )
                     .attr('download', name + '.lrc')
                     .attr('data-save-name', name);
@@ -3142,41 +3142,41 @@ $(function() {
                   } else {
                     clearSearchBrowse();
 
-                    if (player) {
-                      player.pause();
-                    }
+                  if (player) {
+                    player.pause();
+                  }
 
-                    playerList = result.data;
+                  playerList = result.data;
                     page = 1;
 
-                    setValue(playerList[0]);
+                  setValue(playerList[0]);
                     addRecent(playerList[0]);
                     syncLikeButton(playerList[0]);
                     persistPlaylistFromPlayer();
                     renderLibrary();
 
                     $('#j-player').empty();
-                    player = new APlayer({
-                      element: $('#j-player')[0],
-                      autoplay: false,
-                      narrow: false,
-                      showlrc: 1,
-                      mutex: false,
-                      mode: 'circulation',
-                      preload: 'metadata',
-                      theme: '#fa2d55',
-                      music: result.data
-                    });
+                  player = new APlayer({
+                    element: $('#j-player')[0],
+                    autoplay: false,
+                    narrow: false,
+                    showlrc: 1,
+                    mutex: false,
+                    mode: 'circulation',
+                    preload: 'metadata',
+                    theme: '#fa2d55',
+                    music: result.data
+                  });
                     player._playbackBound = false;
-                    bindPlayerStudio(player);
-                    bindPlayerPlayback(
-                      player,
-                      function() {
-                        return playerList[player.playIndex];
-                      },
-                      setValue,
-                      siteTitle
-                    );
+                  bindPlayerStudio(player);
+                  bindPlayerPlayback(
+                    player,
+                    function() {
+                      return playerList[player.playIndex];
+                    },
+                    setValue,
+                    siteTitle
+                  );
                     if (ambientGlow) {
                       ambientGlow.bindPlayer(player, function() {
                         return playerList[player.playIndex];
@@ -3185,13 +3185,13 @@ $(function() {
                         ambientGlow.setCover(playerList[0].pic, playerList[0]);
                       }
                     }
-                    movePlayButton();
-                    tunePlayerStudio(player);
+                  movePlayButton();
+                  tunePlayerStudio(player);
 
                     loadMoreState.requestNext = function() {
                       if (isload || !loadMoreState.hasMore) return;
                       page += 1;
-                      ajax(input, filter, type, page);
+                    ajax(input, filter, type, page);
                     };
                     // 搜索栏常驻，结果区同页展开
                     showResultMain(true);
@@ -3203,8 +3203,8 @@ $(function() {
                     renderSearchBrowse();
                   } else {
                     var prevCount = playerList.length;
-                    player.addMusic(result.data);
-                    playerList = playerList.concat(result.data);
+                  player.addMusic(result.data);
+                  playerList = playerList.concat(result.data);
                     persistPlaylistFromPlayer();
                     renderLibrary();
                     refreshPlayerListAfterAppend(player, {
@@ -3235,7 +3235,7 @@ $(function() {
                   updateInfiniteLoadState(false, filter);
                   if (searchBrowseActive) {
                     setSearchBrowseStatus('没有更多了');
-                    setTimeout(function() {
+                  setTimeout(function() {
                       setSearchBrowseStatus('');
                     }, 1200);
                   } else {
@@ -3282,7 +3282,7 @@ $(function() {
                   setSearchBrowseStatus('');
                 } else {
                   setLoadStatus('');
-                }
+              }
               }
               requestAnimationFrame(function() {
                 maybeLoadMoreFromScroll();

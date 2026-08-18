@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { type MotionValue, useMotionValueEvent } from 'framer-motion';
 
 interface ProgressBarProps {
@@ -57,6 +57,26 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
     [duration],
   );
 
+  const finishDragging = useCallback(() => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    const value = Number(inputRef.current?.value || 0);
+    updateUI(value, true, true);
+    onSeek(value);
+  }, [onSeek, updateUI]);
+
+  useEffect(() => {
+    const finish = () => finishDragging();
+    window.addEventListener('pointerup', finish, true);
+    window.addEventListener('pointercancel', finish, true);
+    window.addEventListener('blur', finish);
+    return () => {
+      window.removeEventListener('pointerup', finish, true);
+      window.removeEventListener('pointercancel', finish, true);
+      window.removeEventListener('blur', finish);
+    };
+  }, [finishDragging]);
+
   useLayoutEffect(() => {
     updateUI(currentTime.get(), true);
   }, [currentTime, updateUI]);
@@ -101,15 +121,13 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
           onPointerDown={(event) => {
             if (disabled) return;
             isDraggingRef.current = true;
-            event.currentTarget.setPointerCapture(event.pointerId);
+            event.stopPropagation();
           }}
-          onPointerUp={(event) => {
-            if (disabled) return;
-            isDraggingRef.current = false;
-            const value = Number(event.currentTarget.value);
-            updateUI(value, true, true);
-            onSeek(value);
+          onPointerMove={(event) => {
+            if (isDraggingRef.current && event.buttons === 0) finishDragging();
           }}
+          onPointerUp={finishDragging}
+          onPointerCancel={finishDragging}
           onInput={(event) => {
             if (disabled) return;
             const value = Number(event.currentTarget.value);

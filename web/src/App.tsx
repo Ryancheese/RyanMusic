@@ -109,9 +109,11 @@ const App: React.FC = () => {
 
   const [authFallback, setAuthFallback] = useState(false);
   const track = queue[index] || null;
-  const authedPlay = !authFallback && Boolean(
-    (track?.type === 'netease' && netease?.loggedIn) || (track?.type === 'qq' && qq?.loggedIn),
+  const vipPlay = Boolean(
+    (track?.type === 'netease' && netease?.loggedIn && Number(netease.vip) > 0)
+    || (track?.type === 'qq' && qq?.loggedIn && Number(qq.vip) > 0),
   );
+  const authedPlay = !authFallback && vipPlay;
   const mediaUrl = useMemo(() => {
     if (!track?.url) return '';
     if (!authedPlay) return track.url;
@@ -158,7 +160,7 @@ const App: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     setQualityOptions([]);
-    if (!track || track.type !== 'netease' || !netease?.loggedIn || authFallback) {
+    if (!track || track.type !== 'netease' || !vipPlay || authFallback) {
       setAudioQuality('');
       return;
     }
@@ -178,7 +180,7 @@ const App: React.FC = () => {
       }
     });
     return () => { cancelled = true; };
-  }, [authFallback, netease?.loggedIn, track?.songid, track?.type]);
+  }, [authFallback, vipPlay, track?.songid, track?.type]);
 
 
   const goHome = useCallback(() => {
@@ -410,7 +412,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     setAuthFallback(false);
-  }, [track?.songid, track?.type, netease?.loggedIn, qq?.loggedIn]);
+  }, [track?.songid, track?.type, netease?.loggedIn, netease?.vip, qq?.loggedIn, qq?.vip]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -420,6 +422,8 @@ const App: React.FC = () => {
     if (previous !== mediaUrl) {
       const sameSong = audio.getAttribute('data-songid') === songKey;
       const keep = sameSong ? audio.currentTime : 0;
+      setBuffering(true);
+      setStatus('loading');
       audio.setAttribute('data-src', mediaUrl);
       audio.setAttribute('data-songid', songKey);
       audio.src = mediaUrl;
@@ -472,8 +476,7 @@ const App: React.FC = () => {
   }, [qq?.loggedIn, syncQq]);
 
   useEffect(() => {
-    if (!track) return;
-    // 搜索结果常已带歌词，起播时跳过，避免和官链抢带宽
+    if (!track || status !== 'playing') return;
     if (track.lrc || track.yrc) return;
     const type = track.type;
     const id = track.songid;
@@ -485,7 +488,26 @@ const App: React.FC = () => {
     return () => {
       alive = false;
     };
-  }, [netease?.loggedIn, patchCurrentLyrics, qq?.loggedIn, track?.lrc, track?.songid, track?.type, track?.yrc]);
+  }, [patchCurrentLyrics, status, track?.lrc, track?.songid, track?.type, track?.yrc]);
+
+  useEffect(() => {
+    const next = queue[index + 1];
+    if (!next?.url) return;
+    const nextVip = Boolean(
+      (next.type === 'netease' && netease?.loggedIn && Number(netease.vip) > 0)
+      || (next.type === 'qq' && qq?.loggedIn && Number(qq.vip) > 0),
+    );
+    try {
+      const url = new URL(next.url, window.location.origin);
+      url.searchParams.set('probe', '1');
+      if (nextVip) url.searchParams.set('auth', '1');
+      const controller = new AbortController();
+      void fetch(url, { signal: controller.signal }).catch(() => undefined);
+      return () => controller.abort();
+    } catch {
+      return undefined;
+    }
+  }, [index, netease?.loggedIn, netease?.vip, qq?.loggedIn, qq?.vip, queue]);
 
   useEffect(() => {
     if (!track?.pic) {
@@ -630,18 +652,25 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 flex h-full w-full flex-col overflow-hidden font-sans transition-colors duration-500" style={appStyle}>
+    <div className="app-shell fixed inset-0 flex h-full w-full flex-col overflow-hidden font-sans transition-colors duration-500" style={appStyle}>
       <div className="ryan-accent-wash" aria-hidden />
       <audio
         ref={audioRef}
-        preload="metadata"
+        preload="auto"
         onPlay={() => {
           setBuffering(false);
           setStatus('playing');
         }}
-        onPause={() => setStatus('paused')}
-        onWaiting={() => setBuffering(true)}
-        onStalled={() => setBuffering(true)}
+        onPause={() => {
+          setBuffering(false);
+          setStatus('paused');
+        }}
+        onWaiting={() => {
+          if (audioRef.current && !audioRef.current.paused) setBuffering(true);
+        }}
+        onStalled={() => {
+          if (audioRef.current && !audioRef.current.paused) setBuffering(true);
+        }}
         onPlaying={() => setBuffering(false)}
         onCanPlay={() => setBuffering(false)}
         onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
@@ -721,7 +750,7 @@ const App: React.FC = () => {
           audioPower={audioPower}
           audioBands={audioBands}
           paused={status !== 'playing'}
-          buffering={buffering || status === 'loading'}
+          buffering={(buffering || status === 'loading') && status !== 'paused'}
           onBack={goHome}
           isPanelOpen={panelOpen}
           onOpenPanel={() => {
@@ -784,7 +813,7 @@ const App: React.FC = () => {
           visualizerMode={visualizerMode}
           background={backgroundConfig}
           styleOpen={styleOpen}
-          buffering={buffering || status === 'loading'}
+          buffering={(buffering || status === 'loading') && status !== 'paused'}
           onStyleOpenChange={setStyleOpen}
           onVisualizerModeChange={(mode) => {
             setVisualizerMode(mode);
@@ -870,7 +899,7 @@ const App: React.FC = () => {
         canPrev={Boolean(track)}
         canNext={Boolean(track) && (index + 1 < queue.length || loopMode === 'all')}
         isDaylight={isDaylight}
-        buffering={buffering || status === 'loading'}
+        buffering={(buffering || status === 'loading') && status !== 'paused'}
         isHidden={view === 'player' && chromeHidden}
         onSeek={seek}
         onTogglePlay={togglePlay}

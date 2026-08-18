@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { decodeEntities, neteaseLyricText, nameSearchSourcePage, sliceNameSearchSongids, timedLyricScore } from '../src/util.ts';
+import { decodeEntities, firstTruthy, neteaseLyricText, nameSearchSourcePage, sliceNameSearchSongids, timedLyricScore } from '../src/util.ts';
 
 test('netease lyric payload prefers yrc and word-level translation', () => {
   const payload = {
@@ -42,4 +42,10 @@ test('name search paging uses source page and first 10 ids', () => {
   const ten = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   assert.deepEqual(sliceNameSearchSongids(ten, 1), { songids: ten, has_more: true });
   assert.deepEqual(sliceNameSearchSongids([1, 2], 1), { songids: [1, 2], has_more: false });
+});
+
+test('play URL race returns first usable result', async () => {
+  const late = () => new Promise<string>((resolve) => setTimeout(() => resolve('late'), 20));
+  assert.equal(await firstTruthy([() => Promise.resolve(null), () => Promise.resolve('fast'), late]), 'fast');
+  assert.equal(await firstTruthy([() => Promise.resolve(null), () => Promise.reject(new Error('no'))]), null);
 });

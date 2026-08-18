@@ -46,6 +46,13 @@ html.platform-macos-app {
   --safe-bottom: 0px;
 }
 
+/* WKWebView 在缩放后的窗口边缘偶尔会留下一个设备像素的底色缝隙。 */
+html.platform-macos-app .app-shell {
+  inset: -1px;
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
+}
+
 :root {
   --bg-color: #09090b;
   --text-primary: #f4f4f5;
