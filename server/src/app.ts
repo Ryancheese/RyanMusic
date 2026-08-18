@@ -12,6 +12,7 @@ import { spaHtml } from './pages.ts';
 import { QqService } from './qq.ts';
 import { verifySign } from './sign.ts';
 import { mediaReferer, parseSongUrl } from './util.ts';
+import { serializeBrowserCookie, type BrowserCookie } from './accounts/browserSession.ts';
 
 export interface AppOptions {
   webRoot: string;
@@ -19,10 +20,21 @@ export interface AppOptions {
   coreMarker?: string;
 }
 
-function jsonResponse(data: unknown, code: number, error: string, extra: Record<string, unknown> = {}) {
+function jsonResponse(
+  data: unknown,
+  code: number,
+  error: string,
+  extra: Record<string, unknown> = {},
+  cookies: BrowserCookie[] = [],
+  secure = false,
+) {
+  const headers = new Headers({ 'Content-Type': 'application/json; charset=utf-8' });
+  for (const cookie of cookies) {
+    headers.append('Set-Cookie', serializeBrowserCookie(cookie, secure));
+  }
   return new Response(JSON.stringify({ data, code, error, ...extra }), {
     status: 200,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    headers,
   });
 }
 
@@ -142,8 +154,9 @@ export function createApp(options: AppOptions) {
     if (get === 'url') {
       const useAuth = Boolean(c.req.query('auth'));
       const level = String(c.req.query('level') || '').trim();
-      const neteaseCookie = useAuth ? neteaseAccount.sessionCookie() || '' : '';
-      const qqCookie = useAuth ? qqAccount.sessionCookie() || '' : '';
+      const headerCookie = c.req.header('cookie') || '';
+      const neteaseCookie = useAuth ? neteaseAccount.sessionCookie(headerCookie) || '' : '';
+      const qqCookie = useAuth ? qqAccount.sessionCookie(headerCookie) || '' : '';
       let play =
         type === 'qq'
           ? await qq.resolvePlayUrl(id, qqCookie)
@@ -214,24 +227,42 @@ export function createApp(options: AppOptions) {
         if (typeof v === 'string') post[k] = v;
       }
       const action = (post.action || '').trim();
+      const headerCookie = c.req.header('cookie') || '';
+      const secure = c.req.url.startsWith('https:');
       if (action.startsWith('netease_')) {
         if (action === 'netease_qualities') {
           const songid = String(post.id || post.songid || '').trim();
-          const cookie = neteaseAccount.sessionCookie() || '';
+          const cookie = neteaseAccount.sessionCookie(headerCookie) || '';
           if (!songid || !cookie) {
-            return jsonResponse({ qualities: [] }, 200);
+            return jsonResponse({ qualities: [] }, 200, '', {}, [], secure);
           }
           const qualities = await netease.probePlayQualities(songid, cookie);
-          return jsonResponse({ qualities }, 200);
+          return jsonResponse({ qualities }, 200, '', {}, [], secure);
         }
-        const result = await neteaseAccount.handle(action, post);
-        return jsonResponse(result.data, result.code, result.error);
+        const result = await neteaseAccount.handle(action, post, headerCookie);
+        return jsonResponse(
+          result.data,
+          result.code,
+          result.error,
+          {},
+          ('cookies' in result && result.cookies) || [],
+          secure,
+        );
       }
       if (action.startsWith('qq_')) {
-        const result = await qqAccount.handle(action, post);
-        return jsonResponse(result.data, result.code, result.error);
+        const result = await qqAccount.handle(action, post, headerCookie);
+        return jsonResponse(
+          result.data,
+          result.code,
+          result.error,
+          {},
+          ('cookies' in result && result.cookies) || [],
+          secure,
+        );
       }
       if (action === 'lyrics') {
+        neteaseAccount.sessionCookie(headerCookie);
+        qqAccount.sessionCookie(headerCookie);
         const lyricType = (post.type || '').trim();
         const lyricId = (post.id || '').trim();
         if (lyricType !== 'netease' && lyricType !== 'qq') {

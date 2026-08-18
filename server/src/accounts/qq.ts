@@ -4,6 +4,16 @@ import { FileCache } from '../cache.ts';
 import { request } from '../http.ts';
 import { QqService } from '../qq.ts';
 import {
+  QQ_COOKIE,
+  QQ_META,
+  clearCookies,
+  parseJsonMeta,
+  persistCookies,
+  readPackedCookie,
+  type BrowserCookie,
+  type QqMeta,
+} from './browserSession.ts';
+import {
   cookieGet,
   cookieToMap,
   getGtk,
@@ -35,6 +45,7 @@ interface QrSession {
 export class QqAccount {
   private readonly authFile: string;
   private readonly qrFile: string;
+  private incomingCookie = '';
 
   constructor(
     cache: FileCache,
@@ -45,7 +56,17 @@ export class QqAccount {
   }
 
   private read(): QqAuth | null {
-    return readJson<QqAuth>(this.authFile);
+    const file = readJson<QqAuth>(this.authFile);
+    if (file?.cookie) return file;
+    const cookie = readPackedCookie(this.incomingCookie, QQ_COOKIE);
+    if (!cookie) return null;
+    const meta = parseJsonMeta<QqMeta>(this.incomingCookie, QQ_META);
+    return {
+      cookie,
+      uin: meta?.uin || this.extractUin(cookie),
+      nickname: meta?.nickname || '',
+      vip: meta?.vip ?? 0,
+    };
   }
 
   private write(data: QqAuth) {
@@ -64,18 +85,32 @@ export class QqAccount {
     };
   }
 
-  sessionCookie(): string | null {
+  sessionCookie(requestCookie = ''): string | null {
+    if (requestCookie) this.incomingCookie = requestCookie;
     return this.read()?.cookie ?? null;
   }
 
-  async handle(action: string, post: Record<string, string>) {
+  async handle(action: string, post: Record<string, string>, requestCookie = '') {
+    this.incomingCookie = requestCookie;
     switch (action) {
-      case 'qq_status':
-        return ok(await this.statusFresh());
+      case 'qq_status': {
+        const data = await this.statusFresh();
+        const auth = this.read();
+        return {
+          ...ok(data),
+          cookies: auth?.cookie
+            ? persistCookies(auth.cookie, QQ_META, QQ_COOKIE, {
+              uin: auth.uin,
+              nickname: auth.nickname,
+              vip: auth.vip ?? 0,
+            })
+            : undefined,
+        };
+      }
       case 'qq_logout':
         removeFile(this.authFile);
         removeFile(this.qrFile);
-        return ok({ ok: true });
+        return { ...ok({ ok: true }), cookies: clearCookies(QQ_COOKIE, QQ_META) };
       case 'qq_cookie_save':
         return this.cookieSave(post.cookie || '');
       case 'qq_qr_key':
@@ -191,7 +226,17 @@ export class QqAccount {
     const account = await this.profileValidate(cookie);
     if (!account) return fail(401, 'Cookie 无效：需含 uin 与 qm_keyst/qqmusic_key，请从 y.qq.com 复制');
     this.write(await this.withVip(account));
-    return ok(this.status());
+    const auth = this.read();
+    return {
+      ...ok(this.status()),
+      cookies: auth?.cookie
+        ? persistCookies(auth.cookie, QQ_META, QQ_COOKIE, {
+          uin: auth.uin,
+          nickname: auth.nickname,
+          vip: auth.vip ?? 0,
+        })
+        : undefined,
+    };
   }
 
   private async qqGet(url: string, cookie = '', extra: Record<string, string> = {}) {
@@ -475,6 +520,17 @@ export class QqAccount {
       payload.uin = account.uin;
       payload.nickname = account.nickname;
       payload.message = '登录成功';
+      const stored = this.read();
+      return {
+        ...ok(payload),
+        cookies: stored?.cookie
+          ? persistCookies(stored.cookie, QQ_META, QQ_COOKIE, {
+            uin: stored.uin,
+            nickname: stored.nickname,
+            vip: stored.vip ?? 0,
+          })
+          : undefined,
+      };
     }
     return ok(payload);
   }
@@ -687,10 +743,10 @@ function unescapeRedirect(url: string): string {
   return url.replace(/\\\//g, '/').replace(/&amp;/g, '&');
 }
 
-function ok(data: unknown) {
-  return { code: 200, error: '', data };
+function ok(data: unknown, cookies?: BrowserCookie[]) {
+  return { code: 200, error: '', data, cookies };
 }
 
 function fail(code: number, error: string, data: unknown = '') {
-  return { code, error, data };
+  return { code, error, data, cookies: undefined as BrowserCookie[] | undefined };
 }

@@ -2,6 +2,17 @@ import { join } from 'node:path';
 import { FileCache } from '../cache.ts';
 import { cookieCsrf, eapiRequest, mergeCookies, neteaseApi, weapiRequest } from '../crypto/netease.ts';
 import { NeteaseService } from '../netease.ts';
+import {
+  NE_COOKIE,
+  NE_META,
+  clearCookies,
+  compactNeteaseCookie,
+  parseJsonMeta,
+  persistCookies,
+  readPackedCookie,
+  type BrowserCookie,
+  type NeteaseMeta,
+} from './browserSession.ts';
 import { normalizeCookie, readJson, removeFile, writeJson } from './session.ts';
 
 interface NeteaseAuth {
@@ -16,6 +27,7 @@ interface NeteaseAuth {
 
 export class NeteaseAccount {
   private readonly file: string;
+  private incomingCookie = '';
 
   constructor(
     cache: FileCache,
@@ -32,11 +44,11 @@ export class NeteaseAccount {
     writeJson(this.file, { ...data, updatedAt: Math.floor(Date.now() / 1000) });
   }
 
-  status() {
-    const auth = this.read();
-    if (!auth) return { loggedIn: false };
+  status(requestCookie = '') {
+    const auth = this.resolveAuth(requestCookie);
+    if (!auth) return { loggedIn: false as const };
     return {
-      loggedIn: true,
+      loggedIn: true as const,
       uid: auth.uid,
       nickname: auth.nickname,
       avatar: auth.avatar,
@@ -45,8 +57,37 @@ export class NeteaseAccount {
     };
   }
 
-  sessionCookie(): string | null {
-    return this.read()?.cookie ?? null;
+  sessionCookie(requestCookie = ''): string | null {
+    if (requestCookie) this.incomingCookie = requestCookie;
+    return this.resolveAuth(requestCookie || this.incomingCookie)?.cookie ?? null;
+  }
+
+  private resolveAuth(requestCookie = ''): NeteaseAuth | null {
+    const header = requestCookie || this.incomingCookie;
+    const fileAuth = this.read();
+    if (fileAuth?.cookie) return fileAuth;
+    const cookie = readPackedCookie(header, NE_COOKIE);
+    if (!cookie || !/MUSIC_U=/.test(cookie)) return null;
+    const meta = parseJsonMeta<NeteaseMeta>(header, NE_META);
+    return {
+      cookie,
+      csrf: cookieCsrf(cookie),
+      uid: meta?.uid || 0,
+      nickname: meta?.nickname || '',
+      avatar: meta?.avatar || '',
+      vip: meta?.vip ?? 0,
+    };
+  }
+
+  private sessionCookies(auth: NeteaseAuth | null): BrowserCookie[] {
+    if (!auth?.cookie) return clearCookies(NE_COOKIE, NE_META);
+    const compact = compactNeteaseCookie(auth.cookie);
+    return persistCookies(compact, NE_META, NE_COOKIE, {
+      uid: auth.uid,
+      nickname: auth.nickname,
+      avatar: auth.avatar,
+      vip: auth.vip ?? 0,
+    });
   }
 
   logout() {
@@ -54,12 +95,16 @@ export class NeteaseAccount {
     return { ok: true };
   }
 
-  async handle(action: string, post: Record<string, string>) {
+  async handle(action: string, post: Record<string, string>, requestCookie = '') {
+    this.incomingCookie = requestCookie;
     switch (action) {
-      case 'netease_status':
-        return ok(this.status());
+      case 'netease_status': {
+        const data = this.status(requestCookie);
+        const auth = this.resolveAuth(requestCookie);
+        return { ...ok(data), cookies: auth ? this.sessionCookies(auth) : undefined };
+      }
       case 'netease_logout':
-        return ok(this.logout());
+        return { ...ok(this.logout()), cookies: clearCookies(NE_COOKIE, NE_META) };
       case 'netease_cookie_save':
         return this.cookieSave(post.cookie || '');
       case 'netease_qr_key':
@@ -67,17 +112,17 @@ export class NeteaseAccount {
       case 'netease_qr_check':
         return this.qrCheck(post.key || '');
       case 'netease_playlists':
-        return this.playlists();
+        return this.playlists(requestCookie);
       case 'netease_likelist':
-        return this.likelist(post);
+        return this.likelist(post, requestCookie);
       case 'netease_like':
-        return this.likeSong(post);
+        return this.likeSong(post, requestCookie);
       case 'netease_like_check':
-        return this.likeCheck(post);
+        return this.likeCheck(post, requestCookie);
       case 'netease_playlist_detail':
-        return this.playlistDetail(post);
+        return this.playlistDetail(post, requestCookie);
       case 'netease_songs_by_ids':
-        return this.songsByIds(post.ids || '');
+        return this.songsByIds(post.ids || '', requestCookie);
       default:
         return fail(400, '未知操作');
     }
@@ -104,8 +149,9 @@ export class NeteaseAccount {
     if (!cookie || !/MUSIC_U=/.test(cookie)) return fail(400, '请粘贴包含 MUSIC_U 的 Cookie');
     const account = await this.accountGet(cookie);
     if (!account) return fail(401, 'Cookie 无效或已过期，请重新从浏览器复制');
-    this.write({ cookie, csrf: cookieCsrf(cookie), ...account });
-    return ok(this.status());
+    const auth = { cookie, csrf: cookieCsrf(cookie), ...account };
+    this.write(auth);
+    return { ...ok(this.status()), cookies: this.sessionCookies(auth) };
   }
 
   private async qrKey() {
@@ -170,17 +216,21 @@ export class NeteaseAccount {
       return { code: 502, error: '登录态校验失败，请改用 Cookie', data: { ...payload, loggedIn: false } };
     }
     this.write({ cookie, csrf: cookieCsrf(cookie), ...account });
-    return ok({ ...payload, loggedIn: true, ...account });
+    return { ...ok({ ...payload, loggedIn: true, ...account }), cookies: this.sessionCookies({
+      cookie,
+      csrf: cookieCsrf(cookie),
+      ...account,
+    }) };
   }
 
-  private requireAuth() {
-    const auth = this.read();
-    if (!auth) return null;
+  private requireAuth(requestCookie = '') {
+    const auth = this.resolveAuth(requestCookie);
+    if (!auth?.cookie) return null;
     return auth;
   }
 
-  private async playlists() {
-    const auth = this.requireAuth();
+  private async playlists(requestCookie = '') {
+    const auth = this.requireAuth(requestCookie);
     if (!auth) return fail(401, '请先登录网易云');
     const res = await neteaseApi(
       '/api/user/playlist',
@@ -232,8 +282,8 @@ export class NeteaseAccount {
     };
   }
 
-  private async likeSong(post: Record<string, string>) {
-    const auth = this.requireAuth();
+  private async likeSong(post: Record<string, string>, requestCookie = '') {
+    const auth = this.requireAuth(requestCookie);
     if (!auth) return fail(401, '请先登录网易云');
     const id = String(post.id || '').replace(/\D/g, '');
     if (!id) return fail(400, '歌曲 ID 无效');
@@ -257,8 +307,8 @@ export class NeteaseAccount {
     return ok({ liked: like, id });
   }
 
-  private async likeCheck(post: Record<string, string>) {
-    const auth = this.requireAuth();
+  private async likeCheck(post: Record<string, string>, requestCookie = '') {
+    const auth = this.requireAuth(requestCookie);
     if (!auth) return fail(401, '请先登录网易云');
     const id = Number(String(post.id || '').replace(/\D/g, ''));
     if (!id) return fail(400, '歌曲 ID 无效');
@@ -267,8 +317,8 @@ export class NeteaseAccount {
     return ok({ liked: ids.includes(id), id: String(id) });
   }
 
-  private async likelist(post: Record<string, string>) {
-    const auth = this.requireAuth();
+  private async likelist(post: Record<string, string>, requestCookie = '') {
+    const auth = this.requireAuth(requestCookie);
     if (!auth) return fail(401, '请先登录网易云');
     const [offset, limit] = this.pageParams(post);
     const res = await neteaseApi('/api/song/like/get', { uid: auth.uid }, auth.cookie, 'POST');
@@ -309,8 +359,8 @@ export class NeteaseAccount {
     });
   }
 
-  private async playlistDetail(post: Record<string, string>) {
-    const auth = this.requireAuth();
+  private async playlistDetail(post: Record<string, string>, requestCookie = '') {
+    const auth = this.requireAuth(requestCookie);
     if (!auth) return fail(401, '请先登录网易云');
     const id = (post.id || '').trim();
     if (!/^\d+$/.test(id)) return fail(400, '歌单 ID 无效');
@@ -319,8 +369,8 @@ export class NeteaseAccount {
     return ok(page);
   }
 
-  private async songsByIds(raw: string) {
-    const auth = this.requireAuth();
+  private async songsByIds(raw: string, requestCookie = '') {
+    const auth = this.requireAuth(requestCookie);
     if (!auth) return fail(401, '请先登录网易云');
     if (!raw.trim()) return ok({ tracks: [] });
     let ids = raw.split(',').map((n) => Number(n)).filter((n) => n > 0);
@@ -329,10 +379,10 @@ export class NeteaseAccount {
   }
 }
 
-function ok(data: unknown) {
-  return { code: 200, error: '', data };
+function ok(data: unknown, cookies?: BrowserCookie[]) {
+  return { code: 200, error: '', data, cookies };
 }
 
 function fail(code: number, error: string, data: unknown = '') {
-  return { code, error, data };
+  return { code, error, data, cookies: undefined as BrowserCookie[] | undefined };
 }

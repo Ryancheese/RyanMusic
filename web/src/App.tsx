@@ -3,7 +3,7 @@ import { useMotionValue } from 'framer-motion';
 import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type Track, type VisualizerMode } from './types';
 import { buildDownloadUrl, canNativeSave, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type PlayQuality } from './api';
 import { extractAccentFromImage } from './lib/color';
-import { isMobileViewport, isWindowsApp, prefersLightweightVisualizer } from './lib/media';
+import { isMacosApp, isMobileViewport, isWindowsApp, prefersLightweightVisualizer } from './lib/media';
 import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig, writeVisualizerMode } from './lib/visualizer';
 import { useLibraryStore } from './store/libraryStore';
 import { useCloudStore } from './store/cloudStore';
@@ -108,6 +108,8 @@ const App: React.FC = () => {
   const closeQqPlaylist = useCloudStore((state) => state.closeQqPlaylist);
 
   const [authFallback, setAuthFallback] = useState(false);
+  const [webUseAuth, setWebUseAuth] = useState(false);
+  const nativeApp = isWindowsApp() || isMacosApp();
   const viewRef = useRef(view);
   viewRef.current = view;
   const track = queue[index] || null;
@@ -115,7 +117,7 @@ const App: React.FC = () => {
     (track?.type === 'netease' && netease?.loggedIn && Number(netease.vip) > 0)
     || (track?.type === 'qq' && qq?.loggedIn && Number(qq.vip) > 0),
   );
-  const authedPlay = !authFallback && vipPlay;
+  const authedPlay = Boolean(vipPlay && (nativeApp ? !authFallback : webUseAuth));
   const mediaUrl = useMemo(() => {
     if (!track?.url) return '';
     if (!authedPlay) return track.url;
@@ -414,6 +416,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     setAuthFallback(false);
+    setWebUseAuth(false);
   }, [track?.songid, track?.type, netease?.loggedIn, netease?.vip, qq?.loggedIn, qq?.vip]);
 
   useEffect(() => {
@@ -678,14 +681,16 @@ const App: React.FC = () => {
         onDurationChange={(event) => {
           const next = event.currentTarget.duration || 0;
           setDuration(next);
-          if (authedPlay && Number.isFinite(next) && next > 1 && next <= 32.5) {
-            setAuthFallback(true);
+          if (Number.isFinite(next) && next > 1 && next <= 50) {
+            if (nativeApp && authedPlay) setAuthFallback(true);
+            if (!nativeApp && vipPlay && !webUseAuth) setWebUseAuth(true);
           }
         }}
         onEnded={() => playNext(true)}
         onError={() => {
           setBuffering(false);
-          if (authedPlay) setAuthFallback(true);
+          if (nativeApp && authedPlay) setAuthFallback(true);
+          else if (!nativeApp && webUseAuth) setWebUseAuth(false);
         }}
       />
 

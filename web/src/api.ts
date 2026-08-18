@@ -37,6 +37,7 @@ export async function searchMusic(options: {
 
   const response = await fetch(origin(), {
     method: 'POST',
+    credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
       'X-Requested-With': 'XMLHttpRequest',
@@ -82,6 +83,7 @@ export async function postAction<T = unknown>(action: string, data: Record<strin
   const body = new URLSearchParams({ action, ...data });
   const response = await fetch(origin(), {
     method: 'POST',
+    credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
       'X-Requested-With': 'XMLHttpRequest',

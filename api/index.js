@@ -2551,6 +2551,77 @@ async function eapiRequest(apiPath, data, cookie = "") {
   return last;
 }
 
+// src/accounts/browserSession.ts
+var NE_COOKIE = "rm_ne";
+var NE_META = "rm_ne_meta";
+var QQ_COOKIE = "rm_qq";
+var QQ_META = "rm_qq_meta";
+function packValue(raw2) {
+  return Buffer.from(raw2, "utf8").toString("base64url");
+}
+function unpackValue(packed) {
+  if (!packed) return "";
+  try {
+    return Buffer.from(packed, "base64url").toString("utf8");
+  } catch {
+    return "";
+  }
+}
+function cookieHeaderValue(header, name) {
+  const parts = header.split(";");
+  for (const part of parts) {
+    const item = part.trim();
+    const eq = item.indexOf("=");
+    if (eq <= 0) continue;
+    if (item.slice(0, eq).trim() === name) return item.slice(eq + 1).trim();
+  }
+  return "";
+}
+function readPackedCookie(header, name) {
+  return unpackValue(cookieHeaderValue(header, name));
+}
+function serializeBrowserCookie(cookie, secure) {
+  const maxAge = cookie.maxAge ?? 0;
+  const parts = [
+    `${cookie.name}=${cookie.value}`,
+    "Path=/",
+    `Max-Age=${Math.max(0, maxAge)}`,
+    "SameSite=Lax",
+    "HttpOnly"
+  ];
+  if (secure) parts.push("Secure");
+  return parts.join("; ");
+}
+function compactNeteaseCookie(cookie) {
+  const map = {};
+  for (const part of cookie.split(";")) {
+    const item = part.trim();
+    const eq = item.indexOf("=");
+    if (eq <= 0) continue;
+    map[item.slice(0, eq).trim()] = item.slice(eq + 1).trim();
+  }
+  const parts = ["MUSIC_U", "__csrf", "MUSIC_CSRF"].filter((key) => map[key]).map((key) => `${key}=${map[key]}`);
+  return parts.length ? parts.join("; ") : cookie;
+}
+function persistCookies(cookie, metaName, cookieName, meta) {
+  return [
+    { name: cookieName, value: packValue(cookie), maxAge: 60 * 60 * 24 * 30 },
+    { name: metaName, value: packValue(JSON.stringify(meta)), maxAge: 60 * 60 * 24 * 30 }
+  ];
+}
+function clearCookies(...names) {
+  return names.map((name) => ({ name, value: "", maxAge: 0 }));
+}
+function parseJsonMeta(header, name) {
+  const raw2 = readPackedCookie(header, name);
+  if (!raw2) return null;
+  try {
+    return JSON.parse(raw2);
+  } catch {
+    return null;
+  }
+}
+
 // src/accounts/session.ts
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -2627,14 +2698,15 @@ var NeteaseAccount = class {
     this.file = join2(cache.dir("netease_auth"), "session.json");
   }
   file;
+  incomingCookie = "";
   read() {
     return readJson(this.file);
   }
   write(data) {
     writeJson(this.file, { ...data, updatedAt: Math.floor(Date.now() / 1e3) });
   }
-  status() {
-    const auth = this.read();
+  status(requestCookie = "") {
+    const auth = this.resolveAuth(requestCookie);
     if (!auth) return { loggedIn: false };
     return {
       loggedIn: true,
@@ -2645,19 +2717,50 @@ var NeteaseAccount = class {
       updatedAt: auth.updatedAt || 0
     };
   }
-  sessionCookie() {
-    return this.read()?.cookie ?? null;
+  sessionCookie(requestCookie = "") {
+    if (requestCookie) this.incomingCookie = requestCookie;
+    return this.resolveAuth(requestCookie || this.incomingCookie)?.cookie ?? null;
+  }
+  resolveAuth(requestCookie = "") {
+    const header = requestCookie || this.incomingCookie;
+    const fileAuth = this.read();
+    if (fileAuth?.cookie) return fileAuth;
+    const cookie = readPackedCookie(header, NE_COOKIE);
+    if (!cookie || !/MUSIC_U=/.test(cookie)) return null;
+    const meta = parseJsonMeta(header, NE_META);
+    return {
+      cookie,
+      csrf: cookieCsrf(cookie),
+      uid: meta?.uid || 0,
+      nickname: meta?.nickname || "",
+      avatar: meta?.avatar || "",
+      vip: meta?.vip ?? 0
+    };
+  }
+  sessionCookies(auth) {
+    if (!auth?.cookie) return clearCookies(NE_COOKIE, NE_META);
+    const compact = compactNeteaseCookie(auth.cookie);
+    return persistCookies(compact, NE_META, NE_COOKIE, {
+      uid: auth.uid,
+      nickname: auth.nickname,
+      avatar: auth.avatar,
+      vip: auth.vip ?? 0
+    });
   }
   logout() {
     removeFile(this.file);
     return { ok: true };
   }
-  async handle(action, post) {
+  async handle(action, post, requestCookie = "") {
+    this.incomingCookie = requestCookie;
     switch (action) {
-      case "netease_status":
-        return ok(this.status());
+      case "netease_status": {
+        const data = this.status(requestCookie);
+        const auth = this.resolveAuth(requestCookie);
+        return { ...ok(data), cookies: auth ? this.sessionCookies(auth) : void 0 };
+      }
       case "netease_logout":
-        return ok(this.logout());
+        return { ...ok(this.logout()), cookies: clearCookies(NE_COOKIE, NE_META) };
       case "netease_cookie_save":
         return this.cookieSave(post.cookie || "");
       case "netease_qr_key":
@@ -2665,17 +2768,17 @@ var NeteaseAccount = class {
       case "netease_qr_check":
         return this.qrCheck(post.key || "");
       case "netease_playlists":
-        return this.playlists();
+        return this.playlists(requestCookie);
       case "netease_likelist":
-        return this.likelist(post);
+        return this.likelist(post, requestCookie);
       case "netease_like":
-        return this.likeSong(post);
+        return this.likeSong(post, requestCookie);
       case "netease_like_check":
-        return this.likeCheck(post);
+        return this.likeCheck(post, requestCookie);
       case "netease_playlist_detail":
-        return this.playlistDetail(post);
+        return this.playlistDetail(post, requestCookie);
       case "netease_songs_by_ids":
-        return this.songsByIds(post.ids || "");
+        return this.songsByIds(post.ids || "", requestCookie);
       default:
         return fail(400, "\u672A\u77E5\u64CD\u4F5C");
     }
@@ -2700,8 +2803,9 @@ var NeteaseAccount = class {
     if (!cookie || !/MUSIC_U=/.test(cookie)) return fail(400, "\u8BF7\u7C98\u8D34\u5305\u542B MUSIC_U \u7684 Cookie");
     const account = await this.accountGet(cookie);
     if (!account) return fail(401, "Cookie \u65E0\u6548\u6216\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u91CD\u65B0\u4ECE\u6D4F\u89C8\u5668\u590D\u5236");
-    this.write({ cookie, csrf: cookieCsrf(cookie), ...account });
-    return ok(this.status());
+    const auth = { cookie, csrf: cookieCsrf(cookie), ...account };
+    this.write(auth);
+    return { ...ok(this.status()), cookies: this.sessionCookies(auth) };
   }
   async qrKey() {
     let unikey = "";
@@ -2763,15 +2867,19 @@ var NeteaseAccount = class {
       return { code: 502, error: "\u767B\u5F55\u6001\u6821\u9A8C\u5931\u8D25\uFF0C\u8BF7\u6539\u7528 Cookie", data: { ...payload, loggedIn: false } };
     }
     this.write({ cookie, csrf: cookieCsrf(cookie), ...account });
-    return ok({ ...payload, loggedIn: true, ...account });
+    return { ...ok({ ...payload, loggedIn: true, ...account }), cookies: this.sessionCookies({
+      cookie,
+      csrf: cookieCsrf(cookie),
+      ...account
+    }) };
   }
-  requireAuth() {
-    const auth = this.read();
-    if (!auth) return null;
+  requireAuth(requestCookie = "") {
+    const auth = this.resolveAuth(requestCookie);
+    if (!auth?.cookie) return null;
     return auth;
   }
-  async playlists() {
-    const auth = this.requireAuth();
+  async playlists(requestCookie = "") {
+    const auth = this.requireAuth(requestCookie);
     if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
     const res = await neteaseApi(
       "/api/user/playlist",
@@ -2818,8 +2926,8 @@ var NeteaseAccount = class {
       tracks
     };
   }
-  async likeSong(post) {
-    const auth = this.requireAuth();
+  async likeSong(post, requestCookie = "") {
+    const auth = this.requireAuth(requestCookie);
     if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
     const id = String(post.id || "").replace(/\D/g, "");
     if (!id) return fail(400, "\u6B4C\u66F2 ID \u65E0\u6548");
@@ -2842,8 +2950,8 @@ var NeteaseAccount = class {
     }
     return ok({ liked: like, id });
   }
-  async likeCheck(post) {
-    const auth = this.requireAuth();
+  async likeCheck(post, requestCookie = "") {
+    const auth = this.requireAuth(requestCookie);
     if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
     const id = Number(String(post.id || "").replace(/\D/g, ""));
     if (!id) return fail(400, "\u6B4C\u66F2 ID \u65E0\u6548");
@@ -2851,8 +2959,8 @@ var NeteaseAccount = class {
     const ids = Array.isArray(res.json?.ids) ? res.json.ids.map(Number) : [];
     return ok({ liked: ids.includes(id), id: String(id) });
   }
-  async likelist(post) {
-    const auth = this.requireAuth();
+  async likelist(post, requestCookie = "") {
+    const auth = this.requireAuth(requestCookie);
     if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
     const [offset, limit] = this.pageParams(post);
     const res = await neteaseApi("/api/song/like/get", { uid: auth.uid }, auth.cookie, "POST");
@@ -2892,8 +3000,8 @@ var NeteaseAccount = class {
       tracks: await this.netease.songsByIdsV3(pageIds, auth.cookie)
     });
   }
-  async playlistDetail(post) {
-    const auth = this.requireAuth();
+  async playlistDetail(post, requestCookie = "") {
+    const auth = this.requireAuth(requestCookie);
     if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
     const id = (post.id || "").trim();
     if (!/^\d+$/.test(id)) return fail(400, "\u6B4C\u5355 ID \u65E0\u6548");
@@ -2901,8 +3009,8 @@ var NeteaseAccount = class {
     const page = await this.playlistPage(Number(id), auth.cookie, offset, limit);
     return ok(page);
   }
-  async songsByIds(raw2) {
-    const auth = this.requireAuth();
+  async songsByIds(raw2, requestCookie = "") {
+    const auth = this.requireAuth(requestCookie);
     if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
     if (!raw2.trim()) return ok({ tracks: [] });
     let ids = raw2.split(",").map((n) => Number(n)).filter((n) => n > 0);
@@ -2910,11 +3018,11 @@ var NeteaseAccount = class {
     return ok({ tracks: await this.netease.songsByIdsV3(ids, auth.cookie) });
   }
 };
-function ok(data) {
-  return { code: 200, error: "", data };
+function ok(data, cookies) {
+  return { code: 200, error: "", data, cookies };
 }
 function fail(code, error, data = "") {
-  return { code, error, data };
+  return { code, error, data, cookies: void 0 };
 }
 
 // src/accounts/qq.ts
@@ -2929,8 +3037,19 @@ var QqAccount = class {
   }
   authFile;
   qrFile;
+  incomingCookie = "";
   read() {
-    return readJson(this.authFile);
+    const file = readJson(this.authFile);
+    if (file?.cookie) return file;
+    const cookie = readPackedCookie(this.incomingCookie, QQ_COOKIE);
+    if (!cookie) return null;
+    const meta = parseJsonMeta(this.incomingCookie, QQ_META);
+    return {
+      cookie,
+      uin: meta?.uin || this.extractUin(cookie),
+      nickname: meta?.nickname || "",
+      vip: meta?.vip ?? 0
+    };
   }
   write(data) {
     writeJson(this.authFile, { ...data, updatedAt: Math.floor(Date.now() / 1e3) });
@@ -2946,17 +3065,29 @@ var QqAccount = class {
       updatedAt: auth.updatedAt || 0
     };
   }
-  sessionCookie() {
+  sessionCookie(requestCookie = "") {
+    if (requestCookie) this.incomingCookie = requestCookie;
     return this.read()?.cookie ?? null;
   }
-  async handle(action, post) {
+  async handle(action, post, requestCookie = "") {
+    this.incomingCookie = requestCookie;
     switch (action) {
-      case "qq_status":
-        return ok2(await this.statusFresh());
+      case "qq_status": {
+        const data = await this.statusFresh();
+        const auth = this.read();
+        return {
+          ...ok2(data),
+          cookies: auth?.cookie ? persistCookies(auth.cookie, QQ_META, QQ_COOKIE, {
+            uin: auth.uin,
+            nickname: auth.nickname,
+            vip: auth.vip ?? 0
+          }) : void 0
+        };
+      }
       case "qq_logout":
         removeFile(this.authFile);
         removeFile(this.qrFile);
-        return ok2({ ok: true });
+        return { ...ok2({ ok: true }), cookies: clearCookies(QQ_COOKIE, QQ_META) };
       case "qq_cookie_save":
         return this.cookieSave(post.cookie || "");
       case "qq_qr_key":
@@ -3059,7 +3190,15 @@ var QqAccount = class {
     const account = await this.profileValidate(cookie);
     if (!account) return fail2(401, "Cookie \u65E0\u6548\uFF1A\u9700\u542B uin \u4E0E qm_keyst/qqmusic_key\uFF0C\u8BF7\u4ECE y.qq.com \u590D\u5236");
     this.write(await this.withVip(account));
-    return ok2(this.status());
+    const auth = this.read();
+    return {
+      ...ok2(this.status()),
+      cookies: auth?.cookie ? persistCookies(auth.cookie, QQ_META, QQ_COOKIE, {
+        uin: auth.uin,
+        nickname: auth.nickname,
+        vip: auth.vip ?? 0
+      }) : void 0
+    };
   }
   async qqGet(url, cookie = "", extra = {}) {
     const headers = {
@@ -3331,6 +3470,15 @@ ${body}`;
       payload.uin = account.uin;
       payload.nickname = account.nickname;
       payload.message = "\u767B\u5F55\u6210\u529F";
+      const stored = this.read();
+      return {
+        ...ok2(payload),
+        cookies: stored?.cookie ? persistCookies(stored.cookie, QQ_META, QQ_COOKIE, {
+          uin: stored.uin,
+          nickname: stored.nickname,
+          vip: stored.vip ?? 0
+        }) : void 0
+      };
     }
     return ok2(payload);
   }
@@ -3533,11 +3681,11 @@ ${body}`;
 function unescapeRedirect(url) {
   return url.replace(/\\\//g, "/").replace(/&amp;/g, "&");
 }
-function ok2(data) {
-  return { code: 200, error: "", data };
+function ok2(data, cookies) {
+  return { code: 200, error: "", data, cookies };
 }
 function fail2(code, error, data = "") {
-  return { code, error, data };
+  return { code, error, data, cookies: void 0 };
 }
 
 // src/cache.ts
@@ -4087,7 +4235,7 @@ var NeteaseService = class _NeteaseService {
     return pending;
   }
   async resolvePlayUrlInner(songid, cookie = "", level = "") {
-    const cacheKey = cookie ? `netease_play_auth_v4_${level || "auto"}` : "netease_play_v4";
+    const cacheKey = cookie ? `netease_play_auth_v5_${level || "auto"}` : "netease_play_v5";
     const cached = this.cache.getTtl(cacheKey, songid);
     if (cached) return cached;
     if (cookie) {
@@ -4104,7 +4252,9 @@ var NeteaseService = class _NeteaseService {
     ]);
     if (url && /^https?:\/\//i.test(url) && !/\/404/i.test(url)) {
       const safeUrl = httpsNeteaseUrl(url);
-      this.cache.setTtl("netease_play_v4", songid, safeUrl, 600);
+      if (!isTrialMediaUrl(safeUrl)) {
+        this.cache.setTtl("netease_play_v5", songid, safeUrl, 600);
+      }
       return safeUrl;
     }
     return null;
@@ -4655,10 +4805,14 @@ function formatCacheStamp() {
 
 // src/app.ts
 init_sign();
-function jsonResponse(data, code, error, extra = {}) {
+function jsonResponse(data, code, error, extra = {}, cookies = [], secure = false) {
+  const headers = new Headers({ "Content-Type": "application/json; charset=utf-8" });
+  for (const cookie of cookies) {
+    headers.append("Set-Cookie", serializeBrowserCookie(cookie, secure));
+  }
   return new Response(JSON.stringify({ data, code, error, ...extra }), {
     status: 200,
-    headers: { "Content-Type": "application/json; charset=utf-8" }
+    headers
   });
 }
 async function proxyMedia(url, req, opts) {
@@ -4766,8 +4920,9 @@ function createApp(options) {
     if (get === "url") {
       const useAuth = Boolean(c.req.query("auth"));
       const level = String(c.req.query("level") || "").trim();
-      const neteaseCookie = useAuth ? neteaseAccount.sessionCookie() || "" : "";
-      const qqCookie = useAuth ? qqAccount.sessionCookie() || "" : "";
+      const headerCookie = c.req.header("cookie") || "";
+      const neteaseCookie = useAuth ? neteaseAccount.sessionCookie(headerCookie) || "" : "";
+      const qqCookie = useAuth ? qqAccount.sessionCookie(headerCookie) || "" : "";
       let play = type === "qq" ? await qq.resolvePlayUrl(id, qqCookie) : await netease.resolvePlayUrl(id, neteaseCookie, level);
       if (!play && useAuth) {
         play = type === "qq" ? await qq.resolvePlayUrl(id) : await netease.resolvePlayUrl(id, "", level);
@@ -4829,24 +4984,42 @@ function createApp(options) {
         if (typeof v === "string") post[k] = v;
       }
       const action = (post.action || "").trim();
+      const headerCookie = c.req.header("cookie") || "";
+      const secure = c.req.url.startsWith("https:");
       if (action.startsWith("netease_")) {
         if (action === "netease_qualities") {
           const songid = String(post.id || post.songid || "").trim();
-          const cookie = neteaseAccount.sessionCookie() || "";
+          const cookie = neteaseAccount.sessionCookie(headerCookie) || "";
           if (!songid || !cookie) {
-            return jsonResponse({ qualities: [] }, 200);
+            return jsonResponse({ qualities: [] }, 200, "", {}, [], secure);
           }
           const qualities = await netease.probePlayQualities(songid, cookie);
-          return jsonResponse({ qualities }, 200);
+          return jsonResponse({ qualities }, 200, "", {}, [], secure);
         }
-        const result = await neteaseAccount.handle(action, post);
-        return jsonResponse(result.data, result.code, result.error);
+        const result = await neteaseAccount.handle(action, post, headerCookie);
+        return jsonResponse(
+          result.data,
+          result.code,
+          result.error,
+          {},
+          "cookies" in result && result.cookies || [],
+          secure
+        );
       }
       if (action.startsWith("qq_")) {
-        const result = await qqAccount.handle(action, post);
-        return jsonResponse(result.data, result.code, result.error);
+        const result = await qqAccount.handle(action, post, headerCookie);
+        return jsonResponse(
+          result.data,
+          result.code,
+          result.error,
+          {},
+          "cookies" in result && result.cookies || [],
+          secure
+        );
       }
       if (action === "lyrics") {
+        neteaseAccount.sessionCookie(headerCookie);
+        qqAccount.sessionCookie(headerCookie);
         const lyricType = (post.type || "").trim();
         const lyricId = (post.id || "").trim();
         if (lyricType !== "netease" && lyricType !== "qq") {

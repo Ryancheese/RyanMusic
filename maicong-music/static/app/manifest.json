@@ -1,6 +1,6 @@
 {
-  "_createSonnetPixiRuntime---az73p-.js": {
-    "file": "assets/createSonnetPixiRuntime---az73p-.js",
+  "_createSonnetPixiRuntime-C-xNMBhJ.js": {
+    "file": "assets/createSonnetPixiRuntime-C-xNMBhJ.js",
     "name": "createSonnetPixiRuntime",
     "isDynamicEntry": true,
     "imports": [
@@ -11,12 +11,12 @@
     ]
   },
   "index.html": {
-    "file": "assets/index-C51ubjEB.js",
+    "file": "assets/index-BB_FaY4j.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "dynamicImports": [
-      "_createSonnetPixiRuntime---az73p-.js"
+      "_createSonnetPixiRuntime-C-xNMBhJ.js"
     ],
     "css": [
       "assets/index-DHHrsoXK.css"
@@ -49,36 +49,36 @@
     ]
   },
   "node_modules/pixi.js/lib/environment-browser/browserAll.mjs": {
-    "file": "assets/browserAll-CMHV6aV3.js",
+    "file": "assets/browserAll-BJcRC4Ib.js",
     "name": "browserAll",
     "src": "node_modules/pixi.js/lib/environment-browser/browserAll.mjs",
     "isDynamicEntry": true,
     "imports": [
-      "_createSonnetPixiRuntime---az73p-.js",
+      "_createSonnetPixiRuntime-C-xNMBhJ.js",
       "node_modules/pixi.js/lib/index.mjs",
       "node_modules/pixi.js/lib/environment-webworker/webworkerAll.mjs",
       "index.html"
     ]
   },
   "node_modules/pixi.js/lib/environment-webworker/webworkerAll.mjs": {
-    "file": "assets/webworkerAll-E0zL89xJ.js",
+    "file": "assets/webworkerAll-D563T4-T.js",
     "name": "webworkerAll",
     "src": "node_modules/pixi.js/lib/environment-webworker/webworkerAll.mjs",
     "isDynamicEntry": true,
     "imports": [
       "node_modules/pixi.js/lib/index.mjs",
-      "_createSonnetPixiRuntime---az73p-.js",
+      "_createSonnetPixiRuntime-C-xNMBhJ.js",
       "index.html"
     ]
   },
   "node_modules/pixi.js/lib/index.mjs": {
-    "file": "assets/index-BIiI3Fbm.js",
+    "file": "assets/index-CqssXEsy.js",
     "name": "index",
     "src": "node_modules/pixi.js/lib/index.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_createSonnetPixiRuntime---az73p-.js"
+      "_createSonnetPixiRuntime-C-xNMBhJ.js"
     ],
     "dynamicImports": [
       "node_modules/pixi.js/lib/environment-browser/browserAll.mjs",

@@ -3,6 +3,7 @@ import { LogOut, RefreshCw, X } from 'lucide-react';
 import type { ThemeTokens } from '../types';
 import { postAction, type AccountStatus } from '../api';
 import { useCloudStore } from '../store/cloudStore';
+import { isMacosApp, isWindowsApp } from '../lib/media';
 import RyanLoader from './RyanLoader';
 
 type Provider = 'netease' | 'qq';
@@ -35,6 +36,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
   syncMessage = '',
 }) => {
   const [tab, setTab] = useState<Provider>('netease');
+  const nativeApp = isWindowsApp() || isMacosApp();
   const [status, setStatus] = useState('');
   const [qr, setQr] = useState('');
   const [cookie, setCookie] = useState('');
@@ -48,6 +50,13 @@ const AccountModal: React.FC<AccountModalProps> = ({
     const current = tab === 'netease' ? netease : qq;
     if (current?.loggedIn) {
       setQr('');
+      return;
+    }
+    if (!nativeApp) {
+      setQr('');
+      setStatus(tab === 'netease'
+        ? '网页端播放默认走私链，已关闭扫码登录。同步歌单请粘贴 Cookie。'
+        : '网页端播放默认走私链，已关闭扫码登录。同步歌单请粘贴 Cookie。');
       return;
     }
     let stop = false;
@@ -115,7 +124,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
       stop = true;
       if (timer) window.clearInterval(timer);
     };
-  }, [open, tab, netease?.loggedIn, qq?.loggedIn, onChanged]);
+  }, [open, tab, nativeApp, netease?.loggedIn, qq?.loggedIn, onChanged]);
 
   if (!open) return null;
   const current = tab === 'netease' ? netease : qq;
@@ -179,7 +188,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
               {current?.vip ? ' · 会员' : ' · 非会员将走 RyanMusic 音源'}
             </p>
             <p className="text-xs opacity-60">
-              会员曲目优先走官方播放（与 Folia 相同）。非会员或官方无地址时，自动回退 RyanMusic。
+              网页端默认走 RyanMusic 音源。登录只用于同步歌单；电脑客户端仍可走官方完整音质。
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -200,8 +209,11 @@ const AccountModal: React.FC<AccountModalProps> = ({
         ) : (
           <div className="space-y-3 text-sm">
             <p className="text-xs opacity-60">
-              登录后会员曲目走官方播放与逐字歌词；非会员仍用 RyanMusic 播放。
+              {nativeApp
+                ? '登录后会员曲目走官方播放与逐字歌词；非会员仍用 RyanMusic 播放。'
+                : '网页端已关闭扫码登录，播放默认走私链。如需同步歌单，请粘贴浏览器 Cookie。'}
             </p>
+            {nativeApp ? (
             <div className="flex flex-col items-center gap-2">
               {qr ? <img src={qr} alt="登录二维码" width={180} height={180} className="rounded-xl bg-white p-2" /> : (
                 <div className="flex h-[180px] w-[180px] items-center justify-center rounded-xl bg-white/5">
@@ -210,8 +222,11 @@ const AccountModal: React.FC<AccountModalProps> = ({
               )}
               <p className="text-xs opacity-70">{status}</p>
             </div>
-            <details className="rounded-2xl bg-white/5 p-3">
-              <summary className="cursor-pointer text-xs opacity-70">扫码不行？改用 Cookie</summary>
+            ) : (
+              <p className="text-xs opacity-70">{status}</p>
+            )}
+            <details className="rounded-2xl bg-white/5 p-3" open={!nativeApp}>
+              <summary className="cursor-pointer text-xs opacity-70">{nativeApp ? '扫码不行？改用 Cookie' : '粘贴 Cookie 同步歌单'}</summary>
               <p className="mt-2 text-[11px] opacity-50">
                 {tab === 'netease'
                   ? '浏览器登录 music.163.com，复制请求头 Cookie（需含 MUSIC_U）。仅存本机。'

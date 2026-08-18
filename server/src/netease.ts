@@ -7,6 +7,7 @@ import {
   firstTruthy,
   httpsNeteaseUrl,
   isBadMediaUrl,
+  isTrialMediaUrl,
   nameSearchSourcePage,
   sliceNameSearchSongids,
 } from './util.ts';
@@ -121,8 +122,8 @@ export class NeteaseService {
 
   private async resolvePlayUrlInner(songid: string, cookie = '', level = ''): Promise<string | null> {
     const cacheKey = cookie
-      ? `netease_play_auth_v4_${level || 'auto'}`
-      : 'netease_play_v4';
+      ? `netease_play_auth_v5_${level || 'auto'}`
+      : 'netease_play_v5';
     const cached = this.cache.getTtl(cacheKey, songid);
     if (cached) return cached;
 
@@ -143,7 +144,9 @@ export class NeteaseService {
     ]);
     if (url && /^https?:\/\//i.test(url) && !/\/404/i.test(url)) {
       const safeUrl = httpsNeteaseUrl(url);
-      this.cache.setTtl('netease_play_v4', songid, safeUrl, 600);
+      if (!isTrialMediaUrl(safeUrl)) {
+        this.cache.setTtl('netease_play_v5', songid, safeUrl, 600);
+      }
       return safeUrl;
     }
     return null;
