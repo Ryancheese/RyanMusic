@@ -26,7 +26,7 @@ interface AlbumWaterfallProps {
   emptyMessage?: string;
   hasFloatingPlayer?: boolean;
   layoutMode?: LibraryLayoutMode;
-  /** 叠在蜂窝/方形上：纯封面或铭牌（下方常驻名称） */
+  /** å å¨èçª/æ¹å½¢ä¸ï¼çº¯å°é¢æé­çï¼ä¸æ¹å¸¸é©»åç§°ï¼ */
   cardStyle?: LibraryCardStyle;
 }
 
@@ -59,7 +59,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   onSelect,
   isDaylight,
   isLoading = false,
-  emptyMessage = '还没有内容',
+  emptyMessage = 'è¿æ²¡æåå®¹',
   hasFloatingPlayer = false,
   layoutMode = 'square',
   cardStyle = 'plaque',
@@ -77,6 +77,11 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
     originY: 0,
     distance: 0,
   });
+  const rafPaintRef = useRef(0);
+  const pendingOffsetRef = useRef({ x: 0, y: 0 });
+  const lastVisibleAtRef = useRef(0);
+  const lastVisibleOffsetRef = useRef({ x: 0, y: 0 });
+  const forceVisibleRef = useRef(false);
   const [size, setSize] = useState(() => ({
     width: typeof window !== 'undefined' ? window.innerWidth : 0,
     height: typeof window !== 'undefined' ? window.innerHeight : 0,
@@ -88,7 +93,8 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   const isSquare = layoutMode === 'square';
   const isPlaque = layoutMode === 'honeycomb' && cardStyle === 'plaque';
   const layout = layoutForWidth(size.width, isSquare ? 'square' : layoutMode, zoom);
-  const textReserve = isPlaque ? Math.round(layout.card * 0.46) : 0;
+  // 标题 + 副标题 + 内边距，固定紧凑高度，避免随卡片变大留下大块空白
+  const textReserve = isPlaque ? 52 : 0;
   const cellHeight = layout.card + textReserve;
   const rowSpacingY = layout.spacingY + textReserve;
   const clipRadius = Math.hypot(size.width, size.height) / 2 + Math.max(layout.card, cellHeight);
@@ -106,7 +112,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
     return map;
   }, [coords]);
 
-  const ringRadius = Math.ceil(clipRadius / Math.min(layout.spacingX, rowSpacingY)) + 1;
+  const ringRadius = Math.ceil(clipRadius / Math.min(layout.spacingX, rowSpacingY)) + 2;
 
   const applyCardFrame = useCallback((el: HTMLElement, coord: HexGridCoord, dx: number, dy: number) => {
     const centerX = coord.baseX + dx;
@@ -129,17 +135,46 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       coords,
       -dx,
       -dy,
-      clipRadius + layout.card + CARD_GAP,
+      clipRadius + layout.card + CARD_GAP * 2,
     );
     setVisible((prev) => (areIndexListsEqual(prev, next) ? prev : next));
   }, [clipRadius, coordByKey, coords, layout.card, layout.spacingX, rowSpacingY, ringRadius]);
 
   const paint = useCallback((dx: number, dy: number) => {
-    coords.forEach((coord) => {
-      const el = cardRefs.current[coord.index];
-      if (el) applyCardFrame(el, coord, dx, dy);
-    });
+    const refs = cardRefs.current;
+    for (let i = 0; i < refs.length; i += 1) {
+      const el = refs[i];
+      const coord = coords[i];
+      if (el && coord) applyCardFrame(el, coord, dx, dy);
+    }
   }, [applyCardFrame, coords]);
+
+  const flushVisible = useCallback((dx: number, dy: number, force = false) => {
+    const now = performance.now();
+    const moved = Math.hypot(
+      dx - lastVisibleOffsetRef.current.x,
+      dy - lastVisibleOffsetRef.current.y,
+    );
+    const minMove = Math.max(24, Math.min(layout.spacingX, rowSpacingY) * 0.28);
+    if (!force && now - lastVisibleAtRef.current < 90 && moved < minMove) return;
+    lastVisibleAtRef.current = now;
+    lastVisibleOffsetRef.current = { x: dx, y: dy };
+    refreshVisible(dx, dy);
+  }, [layout.spacingX, refreshVisible, rowSpacingY]);
+
+  const scheduleFrame = useCallback((dx: number, dy: number, opts?: { forceVisible?: boolean }) => {
+    pendingOffsetRef.current = { x: dx, y: dy };
+    if (opts?.forceVisible) forceVisibleRef.current = true;
+    if (rafPaintRef.current) return;
+    rafPaintRef.current = window.requestAnimationFrame(() => {
+      rafPaintRef.current = 0;
+      const next = pendingOffsetRef.current;
+      const forceVisible = forceVisibleRef.current;
+      forceVisibleRef.current = false;
+      paint(next.x, next.y);
+      flushVisible(next.x, next.y, forceVisible);
+    });
+  }, [flushVisible, paint]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -151,9 +186,18 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => () => {
+    if (rafPaintRef.current) {
+      window.cancelAnimationFrame(rafPaintRef.current);
+      rafPaintRef.current = 0;
+    }
+  }, []);
+
   useEffect(() => {
     if (isList || isSquare) return;
     offsetRef.current = { x: 0, y: 0 };
+    lastVisibleOffsetRef.current = { x: 0, y: 0 };
+    lastVisibleAtRef.current = 0;
     refreshVisible(0, 0);
     requestAnimationFrame(() => paint(0, 0));
   }, [items.length, layout.spacingX, rowSpacingY, layoutMode, paint, refreshVisible, isList, isSquare, isPlaque, zoom]);
@@ -177,7 +221,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (isList || !dragRef.current.active) return;
+    if (isList || isSquare || !dragRef.current.active) return;
     const dist = Math.hypot(event.clientX - dragRef.current.startX, event.clientY - dragRef.current.startY);
     dragRef.current.distance = dist;
     if (dist >= 8 && !dragRef.current.captured) {
@@ -185,11 +229,11 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       dragRef.current.captured = true;
     }
     if (!dragRef.current.captured) return;
+    event.preventDefault();
     const dx = dragRef.current.originX + (event.clientX - dragRef.current.startX);
     const dy = dragRef.current.originY + (event.clientY - dragRef.current.startY);
     offsetRef.current = { x: dx, y: dy };
-    paint(dx, dy);
-    refreshVisible(dx, dy);
+    scheduleFrame(dx, dy);
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -204,6 +248,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       } catch {
         // ignore
       }
+      scheduleFrame(offsetRef.current.x, offsetRef.current.y, { forceVisible: true });
     }
     if (dragged || showSkeleton || !items.length) return;
     const hit = (event.target as HTMLElement | null)?.closest?.('[data-waterfall-index]')
@@ -217,6 +262,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   const endDrag = () => {
     dragRef.current.active = false;
     dragRef.current.captured = false;
+    scheduleFrame(offsetRef.current.x, offsetRef.current.y, { forceVisible: true });
   };
 
   useEffect(() => {
@@ -225,7 +271,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
     if (!element) return;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
-      // 触控板捏合在 macOS 上表现为 ctrl+wheel；Cmd+滚轮也可缩放
+      // è§¦æ§æ¿æåå¨ macOS ä¸è¡¨ç°ä¸º ctrl+wheelï¼Cmd+æ»è½®ä¹å¯ç¼©æ¾
       if (event.ctrlKey || event.metaKey) {
         const factor = Math.exp(-event.deltaY * 0.008);
         setZoom((prev) => {
@@ -238,14 +284,13 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         x: offsetRef.current.x - event.deltaX,
         y: offsetRef.current.y - event.deltaY,
       };
-      paint(offsetRef.current.x, offsetRef.current.y);
-      refreshVisible(offsetRef.current.x, offsetRef.current.y);
+      scheduleFrame(offsetRef.current.x, offsetRef.current.y);
     };
     element.addEventListener('wheel', onWheel, { passive: false });
     return () => element.removeEventListener('wheel', onWheel);
-  }, [paint, refreshVisible, isList, isSquare]);
+  }, [scheduleFrame, isList, isSquare]);
 
-  // 切换蜂窝/方形时重置缩放，避免间距错乱残留
+  // åæ¢èçª/æ¹å½¢æ¶éç½®ç¼©æ¾ï¼é¿åé´è·éä¹±æ®ç
   useEffect(() => {
     setZoom(1);
   }, [layoutMode]);
@@ -338,7 +383,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         </div>
         {showRefreshOverlay ? (
           <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/10 backdrop-blur-[1px]">
-            <RyanLoader size={52} label="同步中…" />
+            <RyanLoader size={52} label="åæ­¥ä¸­â¦" />
           </div>
         ) : null}
       </div>
@@ -410,7 +455,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         </div>
         {showRefreshOverlay ? (
           <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/10 backdrop-blur-[1px]">
-            <RyanLoader size={52} label="同步中…" />
+            <RyanLoader size={52} label="åæ­¥ä¸­â¦" />
           </div>
         ) : null}
       </div>
@@ -467,7 +512,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                       cardRefs.current[index] = el;
                     }}
                     data-waterfall-index={index}
-                    className={`group absolute top-1/2 left-1/2 overflow-hidden rounded-2xl border-0 outline-none ring-0 ${isPlaque ? 'flex flex-col p-2.5 transition hover:brightness-110' : ''}`}
+                    className={`group absolute top-1/2 left-1/2 overflow-hidden rounded-2xl border-0 outline-none ring-0 ${isPlaque ? 'flex flex-col p-2.5 hover:brightness-110' : ''}`}
                     style={{
                       width: layout.card,
                       height: cellHeight,
@@ -475,6 +520,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                       marginTop: -cellHeight / 2,
                       willChange: 'transform, opacity',
                       isolation: 'isolate',
+                      contain: 'layout style',
                       boxShadow: isPlaque
                         ? (isDaylight ? '0 8px 22px rgba(0,0,0,0.08)' : '0 10px 28px rgba(0,0,0,0.45)')
                         : '0 14px 28px rgba(0,0,0,0.22)',
@@ -506,12 +552,12 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                       ) : null}
                     </div>
                     {isPlaque ? (
-                      <div className="min-w-0 px-0.5 pt-2.5 pb-0.5 text-left" style={{ height: textReserve - 10 }}>
+                      <div className="min-w-0 shrink-0 px-0.5 pt-2 pb-0.5 text-left">
                         <div className="truncate text-[13px] font-semibold leading-snug tracking-tight">
                           {item.name}
                         </div>
                         {item.description ? (
-                          <div className="mt-1 truncate text-[11px] leading-snug opacity-45">
+                          <div className="mt-0.5 truncate text-[11px] leading-snug opacity-45">
                             {item.description}
                           </div>
                         ) : null}
@@ -523,7 +569,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       </div>
       {showRefreshOverlay ? (
         <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/10 backdrop-blur-[1px]">
-          <RyanLoader size={52} label="同步中…" />
+          <RyanLoader size={52} label="åæ­¥ä¸­â¦" />
         </div>
       ) : null}
     </div>
