@@ -266,3 +266,46 @@ export interface PlayQuality {
 export async function fetchNeteaseQualities(songid: string) {
   return postAction<{ qualities: PlayQuality[] }>('netease_qualities', { id: songid });
 }
+
+export interface SongComment {
+  id: string;
+  userId: string;
+  nickname: string;
+  avatar: string;
+  content: string;
+  time: number;
+  timeStr: string;
+  likedCount: number;
+  liked: boolean;
+  location: string;
+  reply: { nickname: string; content: string } | null;
+}
+
+export interface CommentsPayload {
+  total: number;
+  more: boolean;
+  offset: number;
+  limit: number;
+  hotComments: SongComment[];
+  comments: SongComment[];
+  neteaseId: string;
+  matched: { type: 'netease'; songid: string; title: string; author: string } | null;
+}
+
+export function fetchNeteaseComments(options: {
+  type: MusicSource;
+  id: string;
+  title?: string;
+  artist?: string;
+  offset?: number;
+  limit?: number;
+}) {
+  return postAction<CommentsPayload>('netease_comments', {
+    type: options.type,
+    id: String(options.id),
+    title: options.title || '',
+    artist: options.artist || '',
+    offset: String(options.offset || 0),
+    limit: String(options.limit || 20),
+  });
+}

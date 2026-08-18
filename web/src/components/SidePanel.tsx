@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
-import { AudioLines, ChevronDown, Download, FileDown, Home, Image, ListMusic, Palette, RefreshCw, ScrollText, X } from 'lucide-react';
+import { AudioLines, ChevronDown, Download, FileDown, Home, Image, ListMusic, MessageCircle, Palette, RefreshCw, ScrollText, X } from 'lucide-react';
 import type { LyricProviderSource, ThemeTokens, Track, VisualizerMode } from '../types';
 import type { VisualizerBackgroundConfig } from './visualizer/backgrounds/definition';
 import { coverRefreshUrl } from '../api';
@@ -14,6 +14,7 @@ import CoverArt from './CoverArt';
 import RyanLoader from './RyanLoader';
 import InterludeDots from './InterludeDots';
 import WordByWordBadge from './WordByWordBadge';
+import SongComments from './SongComments';
 import { isInterludeLine } from '../utils/lyrics/parserCore';
 
 function lyricSourceLabel(source?: Track['lyricSource']): string {
@@ -80,7 +81,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
   onSwitchLyricSource,
 }) => {
   const isMobile = useIsMobile();
-  const [tab, setTab] = useState<'lyrics' | 'queue'>('lyrics');
+  const [tab, setTab] = useState<'lyrics' | 'queue' | 'comments'>('lyrics');
   const [settingsTab, setSettingsTab] = useState<StageSettingsTab>('lyrics');
   const [lineIndex, setLineIndex] = useState(-1);
   const [qualityOpen, setQualityOpen] = useState(false);
@@ -319,6 +320,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
               {([
                 { key: 'lyrics' as const, label: '歌词', Icon: ScrollText },
                 { key: 'queue' as const, label: '队列', Icon: ListMusic },
+                { key: 'comments' as const, label: '评论', Icon: MessageCircle },
               ]).map(({ key, label, Icon }) => {
                 const active = tab === key;
                 return (
@@ -326,7 +328,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
                     key={key}
                     type="button"
                     onClick={() => setTab(key)}
-                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-[13px] font-medium transition ${
+                    className={`flex flex-1 items-center justify-center gap-1 rounded-full py-2 text-[12px] font-medium transition ${
                       active
                         ? (isDaylight ? 'bg-white text-black shadow-sm' : 'bg-white/18 text-white shadow-sm')
                         : 'opacity-50 hover:opacity-80'
@@ -340,7 +342,9 @@ const SidePanel: React.FC<SidePanelProps> = ({
             </div>
 
             <div className={`min-h-0 flex-1 overflow-hidden border-t ${isDaylight ? 'border-black/10' : 'border-white/10'}`}>
-              {tab === 'lyrics' ? (
+              {tab === 'comments' ? (
+                <SongComments active={showExpanded && tab === 'comments'} track={track} isDaylight={isDaylight} />
+              ) : tab === 'lyrics' ? (
                 <div className="flex h-full min-h-0 flex-col">
                   {track ? (
                     <div className="relative flex shrink-0 items-center justify-between gap-2 px-4 pb-1 pt-2.5">

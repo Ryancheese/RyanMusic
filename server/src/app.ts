@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 import { NeteaseAccount } from './accounts/netease.ts';
 import { QqAccount } from './accounts/qq.ts';
 import { FileCache } from './cache.ts';
+import { loadSongComments } from './comments.ts';
 import { NETEASE_UA, UA, VERSION, apiSecret, randomCnIp, type MusicSource } from './config.ts';
 import { LyricsService } from './lyrics.ts';
 import { NeteaseService } from './netease.ts';
@@ -267,6 +268,15 @@ export function createApp(options: AppOptions) {
           }
           const qualities = await netease.probePlayQualities(songid, cookie);
           return jsonResponse({ qualities }, 200);
+        }
+        if (action === 'netease_comments') {
+          const result = await loadSongComments(
+            netease,
+            cache,
+            post,
+            neteaseAccount.sessionCookie() || '',
+          );
+          return jsonResponse(result.data, result.code, result.error);
         }
         const result = await neteaseAccount.handle(action, post);
         return jsonResponse(result.data, result.code, result.error);
