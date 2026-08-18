@@ -1,7 +1,12 @@
 import { motionValue, type MotionValue } from 'framer-motion';
-import type { AudioBands, Theme, ThemeTokens, VisualizerMode } from '../types';
+import type { AudioBands, Theme, ThemeTokens, VisualizerBackgroundMode, VisualizerMode } from '../types';
+import type { VisualizerBackgroundConfig } from '../components/visualizer/backgrounds/definition';
+import {
+  hasVisualizerBackgroundMode,
+} from '../components/visualizer/backgrounds/registry';
 
 export const VISUALIZER_MODE_KEY = 'ryanmusic-visualizer-mode';
+export const VISUALIZER_BG_KEY = 'ryanmusic-visualizer-bg-v1';
 
 export function createAudioBands(): AudioBands {
   return {
@@ -35,6 +40,43 @@ export function readVisualizerMode(): VisualizerMode {
 
 export function writeVisualizerMode(mode: VisualizerMode) {
   localStorage.setItem(VISUALIZER_MODE_KEY, mode);
+}
+
+export function defaultBackgroundConfig(lightweight = false): VisualizerBackgroundConfig {
+  return {
+    mode: 'common',
+    common: {
+      useCoverColorBg: true,
+      disableGeometricBackground: lightweight,
+      opacity: 0.75,
+      disableVignette: false,
+    },
+  };
+}
+
+export function readBackgroundConfig(lightweight = false): VisualizerBackgroundConfig {
+  const fallback = defaultBackgroundConfig(lightweight);
+  try {
+    const parsed = JSON.parse(localStorage.getItem(VISUALIZER_BG_KEY) || '{}') as VisualizerBackgroundConfig;
+    const mode = hasVisualizerBackgroundMode(parsed.mode)
+      ? parsed.mode
+      : fallback.mode;
+    return {
+      ...fallback,
+      ...parsed,
+      mode,
+      common: {
+        ...fallback.common,
+        ...parsed.common,
+      },
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+export function writeBackgroundConfig(config: VisualizerBackgroundConfig) {
+  localStorage.setItem(VISUALIZER_BG_KEY, JSON.stringify(config));
 }
 
 let analyserBuffer: Uint8Array | null = null;

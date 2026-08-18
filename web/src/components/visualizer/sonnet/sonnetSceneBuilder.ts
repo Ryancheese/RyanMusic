@@ -135,7 +135,7 @@ export const buildSonnetScene = (
         });
         nameText.alpha = 0.2;
         nameText.rotation = -Math.PI / 2;
-        nameText.position.set(20, height - 20);
+        nameText.position.set(16, height - 12);
         nameText.anchor.set(0, 1);
         if (showOuterMetadata) sceneBackgroundLayer.addChild(nameText);
     }

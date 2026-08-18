@@ -9,7 +9,7 @@ export default defineVisualizer({
     mode: 'tilt',
     order: 40,
     labelKey: 'ui.visualizerTilt',
-    labelFallback: 'Tilt',
+    labelFallback: '斜行',
     previewSeed: 'tilt',
     previewStartOffset: 0,
     tuningKind: 'tilt',

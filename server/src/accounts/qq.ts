@@ -86,6 +86,10 @@ export class QqAccount {
         return this.playlists();
       case 'qq_likelist':
         return this.likelist();
+      case 'qq_like':
+        return this.likeSong(post);
+      case 'qq_like_check':
+        return this.likeCheck(post);
       case 'qq_playlist_detail':
         return this.playlistDetail(post.id || '');
       default:
@@ -514,6 +518,91 @@ export class QqAccount {
     const auth = this.read();
     if (!auth) return fail(401, '请先登录 QQ 音乐');
     return ok({ playlists: await this.fetchPlaylists(auth.uin, auth.cookie) });
+  }
+
+  private async likeSong(post: Record<string, string>) {
+    const auth = this.read();
+    if (!auth) return fail(401, '请先登录 QQ 音乐');
+    const songId = Number(String(post.id || '').replace(/\D/g, ''));
+    if (!songId) return fail(400, '歌曲 ID 无效');
+    const like = post.like !== '0' && post.like !== 'false';
+    const map = cookieToMap(auth.cookie);
+    const pSkey = map.p_skey || map.pskey || map.skey || '';
+    const gtk = getGtk(pSkey || map.qqmusic_key || '');
+    const method = like ? 'AddSonglist' : 'DelSonglist';
+    const payload = {
+      comm: {
+        g_tk: gtk,
+        uin: Number(auth.uin) || auth.uin,
+        format: 'json',
+        platform: 'yqq.json',
+        ct: 24,
+        cv: 0,
+      },
+      req_1: {
+        module: 'music.musicasset.PlaylistDetailWrite',
+        method,
+        param: {
+          dirId: 201,
+          v_songInfo: [{ songId, songType: 0 }],
+        },
+      },
+    };
+    const res = await request('POST', 'https://u.y.qq.com/cgi-bin/musicu.fcg', {
+      headers: {
+        Referer: 'https://y.qq.com/',
+        Origin: 'https://y.qq.com',
+        Cookie: auth.cookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = res.json?.req_1;
+    const code = Number(data?.code ?? res.json?.code ?? -1);
+    if (!res.ok || code !== 0) {
+      // 旧接口兜底：加入「我喜欢」dirid=201
+      if (like) {
+        const form = new URLSearchParams({
+          loginUin: auth.uin,
+          hostUin: '0',
+          format: 'json',
+          inCharset: 'utf8',
+          outCharset: 'utf-8',
+          notice: '0',
+          platform: 'yqq.json',
+          needNewCode: '0',
+          uin: auth.uin,
+          dirid: '201',
+          idlist: String(songId),
+          source: '103',
+          g_tk: String(gtk),
+        });
+        const legacy = await this.qqPost(
+          'https://c.y.qq.com/splcloud/fcgi-bin/fcg_music_add2songdir.fcg',
+          form.toString(),
+          auth.cookie,
+        );
+        const legacyCode = Number(legacy.json?.code ?? -1);
+        if (legacyCode === 0 || legacyCode === 1000) {
+          return ok({ liked: true, id: String(songId) });
+        }
+        return fail(502, String(legacy.json?.msg || data?.msg || '添加到我喜欢失败'));
+      }
+      return fail(502, String(data?.msg || res.error || '取消喜欢失败'));
+    }
+    return ok({ liked: like, id: String(songId) });
+  }
+
+  private async likeCheck(post: Record<string, string>) {
+    const auth = this.read();
+    if (!auth) return fail(401, '请先登录 QQ 音乐');
+    const songId = String(post.id || '').replace(/\D/g, '');
+    if (!songId) return fail(400, '歌曲 ID 无效');
+    const list = await this.fetchPlaylists(auth.uin, auth.cookie);
+    const liked = list.find((pl) => Number(pl.dirid) === 201);
+    if (!liked) return ok({ liked: false, id: songId });
+    const tracks = await this.playlistTracks(liked.id, auth.cookie);
+    return ok({ liked: tracks.some((t) => String(t.songid) === songId), id: songId });
   }
 
   private async likelist() {

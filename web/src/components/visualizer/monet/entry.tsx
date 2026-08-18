@@ -10,7 +10,7 @@ export default defineVisualizer({
     mode: 'monet',
     order: 45,
     labelKey: 'ui.visualizerMonet',
-    labelFallback: 'Monet',
+    labelFallback: '侧栏',
     previewSeed: 'monet',
     previewStartOffset: 0,
     tuningKind: 'monet',

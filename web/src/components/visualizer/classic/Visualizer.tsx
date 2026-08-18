@@ -11,6 +11,8 @@ import { buildPostLyricLayoutUnits, buildDisplayWordsFromLayoutUnits } from '../
 import { buildWordGraphemeTimings } from '../../../utils/lyrics/graphemeTiming';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { resolveWordColor } from '../wordColoring';
+import InterludeDots from '../../InterludeDots';
+import { isInterludeLine } from '../../../utils/lyrics/parserCore';
 
 // This mode is the most straightforward lyric pipeline in the folder.
 // First we ask runtime which line is active right now, then read renderHints from that line,
@@ -340,6 +342,19 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
         return buildDisplayWordsFromLayoutUnits(layoutUnits);
     }, [activeLine, resolvedClassicTuning.useLegacyLayout]);
 
+    const isActiveInterlude = Boolean(activeLine && isInterludeLine(activeLine));
+    const [interludeDotIndex, setInterludeDotIndex] = useState(0);
+
+    useMotionValueEvent(currentTime, 'change', (time) => {
+        if (!activeLine || !isInterludeLine(activeLine)) return;
+        const words = activeLine.words;
+        let idx = -1;
+        for (let i = 0; i < words.length; i += 1) {
+            if (time >= words[i].startTime) idx = i;
+        }
+        setInterludeDotIndex((prev) => (prev === idx ? prev : Math.max(0, idx)));
+    });
+
     const mainFontSize = `clamp(${(2.25 * lyricsFontScale).toFixed(3)}rem, ${(6 * lyricsFontScale).toFixed(3)}vw, ${(4.5 * lyricsFontScale).toFixed(3)}rem)`;
     const emptyFontSize = `clamp(${(1.5 * lyricsFontScale).toFixed(3)}rem, ${(3.5 * lyricsFontScale).toFixed(3)}vw, ${(2.25 * lyricsFontScale).toFixed(3)}rem)`;
     const translationFontSize = `clamp(${(1.125 * lyricsFontScale).toFixed(3)}rem, ${(2.6 * lyricsFontScale).toFixed(3)}vw, ${(1.25 * lyricsFontScale).toFixed(3)}rem)`;
@@ -365,7 +380,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
             ? ['items-center']
             : ['items-start', 'items-center', 'items-end'];
 
-        const isInterlude = activeLine.fullText === "......";
+        const isInterlude = isInterludeLine(activeLine);
 
         const lineConfig: LineLayoutConfig = {
             justifyContent: isInterlude ? 'justify-center' : justifyOptions[Math.floor(seed % justifyOptions.length)], // deterministic random
@@ -681,30 +696,46 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                             className={`flex flex-wrap w-full max-w-6xl content-center ${lineConfig.justifyContent} ${lineConfig.alignItems}`}
                             style={{ perspective: `${lineConfig.perspective}px`, minHeight: '300px' }}
                         >
-                            {displayWords.map((word, idx) => {
-                                const config = wordConfigs[idx] || { id: `fallback-${idx}`, x: 0, y: 0, rotate: 0, scale: 1, marginRight: '0.5rem', alignSelf: 'auto', passedRotate: 0 };
-
-                                const activeColor = resolveWordColor(word.text, theme.wordColors, theme.accentColor);
-
-                                return (
-                                    <Word
-                                        key={`${word.text}-${idx}-${activeLine.startTime}`}
-                                        word={word}
-                                        config={config}
-                                        currentTime={currentTime}
-                                        theme={theme}
-                                        isChaotic={theme.animationIntensity === 'chaotic'}
-                                        layoutVariants={layoutVariants}
-                                        bodyVariants={bodyVariants}
-                                        glowVariants={glowVariants}
-                                        baseColor={theme.primaryColor}
-                                        activeColor={activeColor}
-                                        renderProfile={activeWordRenderProfile!}
-                                        isChorus={activeLine.isChorus}
-                                        fontSize={mainFontSize}
+                            {isActiveInterlude ? (
+                                <div
+                                    className="flex w-full items-center justify-center"
+                                    style={{ perspective: 'none', transformStyle: 'flat' }}
+                                >
+                                    <InterludeDots
+                                        count={Math.max(displayWords.length, 6)}
+                                        activeIndex={interludeDotIndex}
+                                        size={Math.max(12, Math.round(20 * lyricsFontScale))}
+                                        gap={Math.max(14, Math.round(18 * lyricsFontScale))}
+                                        color={theme.primaryColor}
+                                        activeColor={theme.accentColor}
                                     />
-                                );
-                            })}
+                                </div>
+                            ) : (
+                                displayWords.map((word, idx) => {
+                                    const config = wordConfigs[idx] || { id: `fallback-${idx}`, x: 0, y: 0, rotate: 0, scale: 1, marginRight: '0.5rem', alignSelf: 'auto', passedRotate: 0 };
+
+                                    const activeColor = resolveWordColor(word.text, theme.wordColors, theme.accentColor);
+
+                                    return (
+                                        <Word
+                                            key={`${word.text}-${idx}-${activeLine.startTime}`}
+                                            word={word}
+                                            config={config}
+                                            currentTime={currentTime}
+                                            theme={theme}
+                                            isChaotic={theme.animationIntensity === 'chaotic'}
+                                            layoutVariants={layoutVariants}
+                                            bodyVariants={bodyVariants}
+                                            glowVariants={glowVariants}
+                                            baseColor={theme.primaryColor}
+                                            activeColor={activeColor}
+                                            renderProfile={activeWordRenderProfile!}
+                                            isChorus={activeLine.isChorus}
+                                            fontSize={mainFontSize}
+                                        />
+                                    );
+                                })
+                            )}
                         </motion.div>
                     )}
 

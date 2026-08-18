@@ -9,7 +9,7 @@ export default defineVisualizer({
     mode: 'classic',
     order: 10,
     labelKey: 'ui.visualizerClassic',
-    labelFallback: 'Luminous',
+    labelFallback: '散字',
     previewSeed: 'classic',
     previewStartOffset: 0,
     tuningKind: 'classic',

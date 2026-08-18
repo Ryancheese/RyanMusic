@@ -166,6 +166,32 @@ export function fetchQqLikelist() {
   return postAction<CloudPlaylistDetail>('qq_likelist');
 }
 
+export function toggleNeteaseLike(songid: string, like: boolean) {
+  return postAction<{ liked: boolean; id: string }>('netease_like', {
+    id: String(songid),
+    like: like ? '1' : '0',
+  });
+}
+
+export function checkNeteaseLike(songid: string) {
+  return postAction<{ liked: boolean; id: string }>('netease_like_check', {
+    id: String(songid),
+  });
+}
+
+export function toggleQqLike(songid: string, like: boolean) {
+  return postAction<{ liked: boolean; id: string }>('qq_like', {
+    id: String(songid),
+    like: like ? '1' : '0',
+  });
+}
+
+export function checkQqLike(songid: string) {
+  return postAction<{ liked: boolean; id: string }>('qq_like_check', {
+    id: String(songid),
+  });
+}
+
 export async function fetchTrackLyrics(type: MusicSource, songid: string): Promise<Pick<Track, 'lrc' | 'yrc' | 'tlyric'> | null> {
   const result = await postAction<Pick<Track, 'lrc' | 'yrc' | 'tlyric'>>('lyrics', {
     type,
@@ -190,4 +216,16 @@ export function nativeSave(payload: { url?: string; text?: string; filename: str
   } catch {
     return false;
   }
+}
+
+
+export interface PlayQuality {
+  level: string;
+  label: string;
+  br?: number;
+  size?: number;
+}
+
+export async function fetchNeteaseQualities(songid: string) {
+  return postAction<{ qualities: PlayQuality[] }>('netease_qualities', { id: songid });
 }

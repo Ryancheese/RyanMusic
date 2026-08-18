@@ -4,6 +4,8 @@ export type MusicSource = 'netease' | 'qq';
 
 export type HomeTab = 'netease' | 'qq';
 
+export type LibraryLayoutMode = 'honeycomb' | 'square' | 'list';
+
 export type LoopMode = 'off' | 'all' | 'one';
 
 export type PlayerStatus = 'idle' | 'loading' | 'playing' | 'paused';

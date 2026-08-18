@@ -70,6 +70,10 @@ export class NeteaseAccount {
         return this.playlists();
       case 'netease_likelist':
         return this.likelist(post);
+      case 'netease_like':
+        return this.likeSong(post);
+      case 'netease_like_check':
+        return this.likeCheck(post);
       case 'netease_playlist_detail':
         return this.playlistDetail(post);
       case 'netease_songs_by_ids':
@@ -226,6 +230,41 @@ export class NeteaseAccount {
       trackIds: ids.map(String),
       tracks,
     };
+  }
+
+  private async likeSong(post: Record<string, string>) {
+    const auth = this.requireAuth();
+    if (!auth) return fail(401, '请先登录网易云');
+    const id = String(post.id || '').replace(/\D/g, '');
+    if (!id) return fail(400, '歌曲 ID 无效');
+    const like = post.like !== '0' && post.like !== 'false';
+    const res = await weapiRequest(
+      `/weapi/radio/like?alg=itembased&trackId=${id}&like=${like}&time=25`,
+      {
+        trackId: id,
+        like,
+        csrf_token: cookieCsrf(auth.cookie) || auth.csrf || '',
+      },
+      auth.cookie,
+    );
+    const code = Number(res.json?.code ?? 0);
+    if (code !== 200) {
+      return fail(502, String(res.json?.message || res.error || '喜欢操作失败'), {
+        liked: like,
+        code,
+      });
+    }
+    return ok({ liked: like, id });
+  }
+
+  private async likeCheck(post: Record<string, string>) {
+    const auth = this.requireAuth();
+    if (!auth) return fail(401, '请先登录网易云');
+    const id = Number(String(post.id || '').replace(/\D/g, ''));
+    if (!id) return fail(400, '歌曲 ID 无效');
+    const res = await neteaseApi('/api/song/like/get', { uid: auth.uid }, auth.cookie, 'POST');
+    const ids = Array.isArray(res.json?.ids) ? res.json.ids.map(Number) : [];
+    return ok({ liked: ids.includes(id), id: String(id) });
   }
 
   private async likelist(post: Record<string, string>) {

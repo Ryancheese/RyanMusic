@@ -10,19 +10,16 @@ import { resolveSonnetCameraTrackingGlyphs } from './sonnetCameraTracking';
 import { createSonnetGuide, type SonnetGuideView } from './sonnetGuides';
 import { buildSonnetFrameDecor, resolveSonnetFrameDecorSpec, type SonnetFrameDecorView } from './sonnetFrameDecor';
 import type { SonnetSemanticSegment } from './types';
-import {
-    isSonnetEmphasisRole,
-    type SonnetSegmentRole,
-    type SonnetTypographyPlacement,
-} from './sonnetTypographyLayout';
+import { isSonnetEmphasisRole, type SonnetSegmentRole, type SonnetTypographyPlacement } from './sonnetTypographyLayout';
 import { resolveSonnetRoleFontWeight } from './sonnetTypographyRoles';
+import { isInterludeDotChar } from '../../../utils/lyrics/parserCore';
 
 // src/components/visualizer/sonnet/sonnetTextViewBuilder.ts
 // Creates parser-timed core/halo glyph pairs and their semantic guide view.
 type PixiModule = typeof import('pixi.js');
 
 export interface GlyphGhostView {
-    node: import('pixi.js').Text;
+    node: import('pixi.js').Container;
     // Full-spread offset in wrapper-local px and the layer's peak alpha, both
     // precomputed so the runtime only scales by the envelope.
     dirX: number;
@@ -32,9 +29,9 @@ export interface GlyphGhostView {
 
 export interface GlyphView {
     display: import('pixi.js').Container;
-    halo: import('pixi.js').Text | null;
-    caCyan?: import('pixi.js').Text;
-    caRed?: import('pixi.js').Text;
+    halo: import('pixi.js').Container | null;
+    caCyan?: import('pixi.js').Container;
+    caRed?: import('pixi.js').Container;
     caOffset?: number;
     ghosts?: GlyphGhostView[];
     ghostDuration?: number;
@@ -102,7 +99,7 @@ export const buildSonnetTextView = (
     pixi: PixiModule,
     options: SonnetTextViewOptions,
 ): SegmentView => {
-    const { Text, TextStyle } = pixi;
+    const { Text, TextStyle, Graphics } = pixi;
     const { segment, placement: originalPlacement } = options;
     const placement = { ...originalPlacement };
 
@@ -239,9 +236,26 @@ export const buildSonnetTextView = (
             endTime: options.shotEndTime,
         },
     ).map(glyph => {
-        const display = new Text({ text: glyph.char, style });
-        display.anchor.set(0.5);
-        if (isDecoration) display.alpha = 0.2;
+        const isDotGlyph = isInterludeDotChar(glyph.char);
+        const dotRadius = Math.max(2.5, fontSize * 0.16);
+
+        const makeDotGraphic = (fillColor: string, alpha = 1) => {
+            const graphic = new Graphics();
+            graphic.circle(0, 0, dotRadius).fill({ color: fillColor, alpha });
+            return graphic;
+        };
+
+        const display = isDotGlyph
+            ? makeDotGraphic(bodyColor)
+            : (() => {
+                const textNode = new Text({ text: glyph.char, style });
+                textNode.anchor.set(0.5);
+                if (isDecoration) textNode.alpha = 0.2;
+                return textNode;
+            })();
+        if (isDotGlyph && isDecoration) {
+            display.alpha = 0.2;
+        }
 
         const wrapper = new pixi.Container();
         wrapper.rotation = placement.rotation;
@@ -249,8 +263,8 @@ export const buildSonnetTextView = (
         wrapper.alpha = 0;
 
         // Chromatic Aberration (Dispersion) Effect
-        let caCyanNode: import('pixi.js').Text | undefined;
-        let caRedNode: import('pixi.js').Text | undefined;
+        let caCyanNode: import('pixi.js').Container | undefined;
+        let caRedNode: import('pixi.js').Container | undefined;
         let caOffsetValue: number | undefined;
 
         if (!isDecoration) {
@@ -258,21 +272,31 @@ export const buildSonnetTextView = (
             const offset = fontSize * (isHero ? 0.025 : 0.010);
             caOffsetValue = offset;
 
-            const caCyan = new Text({ text: glyph.char, style });
-            caCyan.tint = 0x00ffff;
-            caCyan.blendMode = 'screen';
-            caCyan.anchor.set(0.5);
-            caCyan.alpha = isHero ? 0.8 : 0.5;
+            if (isDotGlyph) {
+                const caCyan = makeDotGraphic('#00ffff', isHero ? 0.8 : 0.5);
+                caCyan.blendMode = 'screen';
+                const caRed = makeDotGraphic('#ff0044', isHero ? 0.8 : 0.5);
+                caRed.blendMode = 'screen';
+                wrapper.addChild(caCyan, caRed);
+                caCyanNode = caCyan;
+                caRedNode = caRed;
+            } else {
+                const caCyan = new Text({ text: glyph.char, style });
+                caCyan.tint = 0x00ffff;
+                caCyan.blendMode = 'screen';
+                caCyan.anchor.set(0.5);
+                caCyan.alpha = isHero ? 0.8 : 0.5;
 
-            const caRed = new Text({ text: glyph.char, style });
-            caRed.tint = 0xff0044;
-            caRed.blendMode = 'screen';
-            caRed.anchor.set(0.5);
-            caRed.alpha = isHero ? 0.8 : 0.5;
+                const caRed = new Text({ text: glyph.char, style });
+                caRed.tint = 0xff0044;
+                caRed.blendMode = 'screen';
+                caRed.anchor.set(0.5);
+                caRed.alpha = isHero ? 0.8 : 0.5;
 
-            wrapper.addChild(caCyan, caRed);
-            caCyanNode = caCyan;
-            caRedNode = caRed;
+                wrapper.addChild(caCyan, caRed);
+                caCyanNode = caCyan;
+                caRedNode = caRed;
+            }
         }
 
         wrapper.addChild(display);
@@ -285,8 +309,12 @@ export const buildSonnetTextView = (
             ghosts = [];
             const side = normalOffsetSeed % 2 === 0 ? 1 : -1;
             for (let layer = 1; layer <= 2; layer++) {
-                const ghost = new Text({ text: glyph.char, style: ghostStyle });
-                ghost.anchor.set(0.5);
+                const ghost = isDotGlyph
+                    ? makeDotGraphic(bodyColor)
+                    : new Text({ text: glyph.char, style: ghostStyle });
+                if (!isDotGlyph && 'anchor' in ghost) {
+                    (ghost as import('pixi.js').Text).anchor.set(0.5);
+                }
                 ghost.alpha = 0;
                 ghost.visible = false;
                 wrapper.addChildAt(ghost, 0);

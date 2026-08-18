@@ -124,6 +124,67 @@ export const resizeHexGridCoords = (
   return prefix;
 };
 
+/** 正方形螺旋坐标（无六边形错位） */
+export const getSquareAtIndex = (index: number): { x: number; y: number } => {
+  if (index <= 0) return { x: 0, y: 0 };
+  let x = 0;
+  let y = 0;
+  let dx = 0;
+  let dy = -1;
+  for (let step = 0; step < index; step += 1) {
+    if (x === y || (x < 0 && x === -y) || (x > 0 && x === 1 - y)) {
+      const turn = dx;
+      dx = -dy;
+      dy = turn;
+    }
+    x += dx;
+    y += dy;
+  }
+  return { x, y };
+};
+
+export const resizeSquareGridCoords = (
+  previous: readonly HexGridCoord[],
+  count: number,
+  spacingX: number,
+  spacingY: number,
+): HexGridCoord[] => {
+  const safeCount = Math.max(0, count);
+  const spacingMatches = previous.length === 0 || previous.every((coord) => (
+    coord.baseX === coord.cube.x * spacingX
+    && coord.baseY === coord.cube.y * spacingY
+  ));
+  const prefix = spacingMatches ? previous.slice(0, safeCount) : [];
+
+  for (let index = prefix.length; index < safeCount; index++) {
+    const cell = getSquareAtIndex(index);
+    prefix.push({
+      index,
+      cube: { x: cell.x, y: cell.y, z: 0 },
+      baseX: cell.x * spacingX,
+      baseY: cell.y * spacingY,
+    });
+  }
+  return prefix;
+};
+
+export const resolveVisibleDistanceIndexes = (
+  coords: HexGridCoord[],
+  worldX: number,
+  worldY: number,
+  pixelRadius: number,
+): number[] => {
+  const radiusSq = pixelRadius * pixelRadius;
+  const indexes: number[] = [];
+  for (const coord of coords) {
+    const dx = coord.baseX - worldX;
+    const dy = coord.baseY - worldY;
+    if (dx * dx + dy * dy <= radiusSq) indexes.push(coord.index);
+  }
+  indexes.sort((a, b) => a - b);
+  return indexes;
+};
+
 export const resolveVisibleHexIndexes = (
   center: CubeCoord,
   ringRadius: number,

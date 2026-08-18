@@ -4,22 +4,32 @@ interface RyanLoaderProps {
   size?: number;
   label?: string;
   className?: string;
+  /** circular = 圆形点阵；hex = 旧六边形 */
+  variant?: 'circular' | 'hex';
 }
 
-/** Folia 风格六边形脉动加载 */
-const RyanLoader: React.FC<RyanLoaderProps> = ({ size = 48, label, className = '' }) => {
-  const hex = Math.max(10, Math.round(size * 0.28));
+/** Folia 风格加载指示 */
+const RyanLoader: React.FC<RyanLoaderProps> = ({
+  size = 48,
+  label,
+  className = '',
+  variant = 'circular',
+}) => {
+  const dot = Math.max(6, Math.round(size * 0.22));
   return (
     <div className={`flex flex-col items-center justify-center gap-3 ${className}`} role="status" aria-live="polite">
-      <div className="ryan-loader" style={{ width: size, height: size }}>
+      <div className="ryan-loader" style={{ width: size, height: size }} data-variant={variant}>
         {[0, 1, 2].map((index) => (
           <span
             key={index}
-            className="ryan-loader-hex"
+            className={variant === 'hex' ? 'ryan-loader-hex' : 'ryan-loader-dot'}
             style={{
-              width: hex,
-              height: hex,
-              animationDelay: `${index * 0.18}s`,
+              width: dot,
+              height: dot,
+              minWidth: dot,
+              minHeight: dot,
+              borderRadius: variant === 'hex' ? undefined : 9999,
+              animationDelay: `${index * 0.16}s`,
             }}
           />
         ))}

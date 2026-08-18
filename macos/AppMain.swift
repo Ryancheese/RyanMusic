@@ -8,7 +8,7 @@ import WebKit
 final class TitlebarDragOverlay: NSView {
     var bandHeight: CGFloat = 52
     var passthroughLeading: CGFloat = 88
-    var passthroughTrailing: CGFloat = 280
+    var passthroughTrailing: CGFloat = 420
 
     override var isOpaque: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -44,7 +44,10 @@ final class TitlebarDragOverlay: NSView {
     }
 }
 
-final class RyanWebView: WKWebView {}
+final class RyanWebView: WKWebView {
+    /// 桌面壳不需要系统安全区，避免舞台底边被 inset 裁出一条空带
+    override var safeAreaInsets: NSEdgeInsets { NSEdgeInsetsZero }
+}
 
 /// 铺满窗口，避免系统把底部安全区留成白边
 final class FullBleedView: NSView {
@@ -183,6 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         config.userContentController.add(self, name: "ryanUpdate")
         config.userContentController.add(self, name: "ryanWindowDrag")
         config.userContentController.add(self, name: "ryanWindowZoom")
+        config.userContentController.add(self, name: "ryanChrome")
         // 标记桌面壳 + 空白处拖拽 / 双击缩放
         // 媒体控制走网页 Media Session，避免与原生 Now Playing 叠成两条
         let platformJS = """
@@ -245,6 +249,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    private func applyThemeChrome(daylight: Bool) {
+        guard let window else { return }
+        let color = daylight
+            ? NSColor(srgbRed: 0.961, green: 0.961, blue: 0.957, alpha: 1) // #f5f5f4
+            : NSColor(srgbRed: 0.035, green: 0.035, blue: 0.043, alpha: 1)
+        window.backgroundColor = color
+        if #available(macOS 12.0, *) {
+            webView?.underPageBackgroundColor = color
+        }
+        if let container = window.contentView {
+            container.wantsLayer = true
+            container.layer?.backgroundColor = color.cgColor
+        }
+    }
+
     private func applyWindowChrome() {
         guard let window else { return }
         if !window.styleMask.contains(.fullSizeContentView) {
@@ -256,13 +275,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isOpaque = true
-        window.backgroundColor = NSColor(srgbRed: 0.02, green: 0.02, blue: 0.027, alpha: 1)
+        // 与网页主题底色接近，避免舞台未铺满时露原生边；网页会按日夜主题再同步
+        window.backgroundColor = NSColor(srgbRed: 0.035, green: 0.035, blue: 0.043, alpha: 1)
         if #available(macOS 11.0, *) {
             window.titlebarSeparatorStyle = .none
         }
         webView?.setValue(false, forKey: "drawsBackground")
         if #available(macOS 12.0, *) {
             webView?.underPageBackgroundColor = window.backgroundColor
+        }
+        // 关掉可能残留的内容 inset，避免底边被垫高一截
+        if let scrollView = webView?.enclosingScrollView {
+            scrollView.automaticallyAdjustsContentInsets = false
+            scrollView.contentInsets = NSEdgeInsetsZero
+            scrollView.scrollerInsets = NSEdgeInsetsZero
         }
         if let container = window.contentView {
             container.wantsLayer = true
@@ -325,6 +351,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     // MARK: - JS → Native 另存为
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "ryanChrome" {
+            let daylight = (message.body as? [String: Any])?["daylight"] as? Bool ?? false
+            DispatchQueue.main.async { [weak self] in
+                self?.applyThemeChrome(daylight: daylight)
+            }
+            return
+        }
+
         if message.name == "ryanWindowZoom" {
             DispatchQueue.main.async { [weak self] in
                 self?.window?.performZoom(nil)

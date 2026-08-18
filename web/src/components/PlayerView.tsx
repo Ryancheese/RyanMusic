@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { MotionValue } from 'framer-motion';
 import { ListMusic } from 'lucide-react';
 import type { AudioBands, ThemeTokens, Track, VisualizerMode } from '../types';
+import type { VisualizerBackgroundConfig } from './visualizer/backgrounds/definition';
 import { findLatestActiveLineIndex, trackToVisualizerLines } from '../lib/lyrics';
-import { prefersLightweightVisualizer } from '../lib/media';
 import { coverRefreshUrl } from '../api';
 import { toFoliaTheme } from '../lib/visualizer';
 import VisualizerRenderer from './visualizer/VisualizerRenderer';
@@ -16,13 +16,16 @@ interface PlayerViewProps {
   theme: ThemeTokens;
   accent?: string | null;
   visualizerMode: VisualizerMode;
+  background: VisualizerBackgroundConfig;
   onVisualizerModeChange: (mode: VisualizerMode) => void;
   audioPower: MotionValue<number>;
   audioBands: AudioBands;
   paused?: boolean;
+  buffering?: boolean;
   isPanelOpen?: boolean;
   onToggleChrome: () => void;
   onOpenPanel?: () => void;
+  onBack?: () => void;
   onLyricLineSeek?: (time: number) => void;
 }
 
@@ -34,19 +37,21 @@ const PlayerView: React.FC<PlayerViewProps> = ({
   theme,
   accent,
   visualizerMode,
-  onVisualizerModeChange,
+  background,
   audioPower,
   audioBands,
   paused = false,
+  buffering: _buffering = false,
   isPanelOpen = false,
   onToggleChrome,
   onOpenPanel,
+  onBack: _onBack,
   onLyricLineSeek,
 }) => {
   const lines = useMemo(() => trackToVisualizerLines(track), [track]);
   const foliaTheme = useMemo(() => toFoliaTheme(theme, accent), [accent, theme]);
-  const lightweight = useMemo(() => prefersLightweightVisualizer(), []);
   const [lineIndex, setLineIndex] = useState(-1);
+  const coverUrl = track ? (track.pic || coverRefreshUrl(track.type, track.songid)) : undefined;
 
   useEffect(() => {
     let frame = 0;
@@ -60,37 +65,33 @@ const PlayerView: React.FC<PlayerViewProps> = ({
   }, [currentTime, lines]);
 
   return (
-    <div className="absolute inset-0 z-20 overflow-hidden" onClick={onToggleChrome}>
-      {track && lines.length > 0 ? (
-        <VisualizerRenderer
-          mode={visualizerMode}
-          currentTime={currentTime}
-          currentLineIndex={lineIndex}
-          lines={lines}
-          theme={foliaTheme}
-          isDaylight={isDaylight}
-          audioPower={audioPower}
-          audioBands={audioBands}
-          showText
-          songTitle={track.title}
-          songArtist={track.author}
-          coverUrl={track.pic || coverRefreshUrl(track.type, track.songid)}
-          seed={track.songid}
-          paused={paused}
-          isPanelOpen={isPanelOpen}
-          isPlayerChromeHidden={chromeHidden}
-          onLyricLineSeek={onLyricLineSeek}
-          background={{
-            mode: 'common',
-            common: {
-              useCoverColorBg: true,
-              disableGeometricBackground: lightweight,
-            },
-          }}
-        />
+    <div className="absolute inset-0 z-20 h-full w-full overflow-hidden" onClick={onToggleChrome}>
+      {track ? (
+        <div className="absolute inset-0 h-full w-full">
+          <VisualizerRenderer
+            mode={visualizerMode}
+            currentTime={currentTime}
+            currentLineIndex={lineIndex}
+            lines={lines}
+            theme={foliaTheme}
+            isDaylight={isDaylight}
+            audioPower={audioPower}
+            audioBands={audioBands}
+            showText
+            songTitle={track.title}
+            songArtist={track.author}
+            coverUrl={coverUrl}
+            seed={track.songid}
+            paused={paused}
+            isPanelOpen={isPanelOpen}
+            isPlayerChromeHidden={chromeHidden}
+            onLyricLineSeek={onLyricLineSeek}
+            background={background}
+          />
+        </div>
       ) : (
         <div className="flex h-full items-center justify-center text-sm opacity-40">
-          {track ? '暂无歌词' : '选择一首歌开始播放'}
+          选择一首歌开始播放
         </div>
       )}
 

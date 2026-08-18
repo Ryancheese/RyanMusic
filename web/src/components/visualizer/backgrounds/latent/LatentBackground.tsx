@@ -308,7 +308,13 @@ const LatentBackground: React.FC<LatentBackgroundProps> = ({
                             : resolveLatentShaderSpeed(tuning.ditheringSpeed, tuning.ditheringAudioSpeed, 0, paused)}
                         minPixelRatio={1}
                         maxPixelCount={MAX_SHADER_PIXELS}
-                        style={{ width: '100%', height: '100%' }}
+                        style={{
+                            position: 'absolute',
+                            inset: 0,
+                            width: '100%',
+                            height: '100%',
+                            display: 'block',
+                        }}
                     />
                 </div>
             )}

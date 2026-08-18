@@ -10,7 +10,7 @@ export default defineVisualizer({
     mode: 'sonnet',
     order: 70,
     labelKey: 'ui.visualizerSonnet',
-    labelFallback: '商籁',
+    labelFallback: '海报',
     previewSeed: 'sonnet',
     previewStartOffset: 0,
     tuningKind: 'sonnet',

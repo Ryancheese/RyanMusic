@@ -141,13 +141,14 @@ export function createApp(options: AppOptions) {
 
     if (get === 'url') {
       const useAuth = Boolean(c.req.query('auth'));
+      const level = String(c.req.query('level') || '').trim();
       const neteaseCookie = useAuth ? neteaseAccount.sessionCookie() || '' : '';
       let play =
         type === 'qq'
           ? await qq.resolvePlayUrl(id)
-          : await netease.resolvePlayUrl(id, neteaseCookie);
+          : await netease.resolvePlayUrl(id, neteaseCookie, level);
       if (!play && useAuth && type === 'netease') {
-        play = await netease.resolvePlayUrl(id, '');
+        play = await netease.resolvePlayUrl(id, '', level);
       }
       if (!play) return c.text('无法获取播放地址', 502);
       let name = c.req.query('name') || 'RyanMusic';
@@ -208,6 +209,15 @@ export function createApp(options: AppOptions) {
       }
       const action = (post.action || '').trim();
       if (action.startsWith('netease_')) {
+        if (action === 'netease_qualities') {
+          const songid = String(post.id || post.songid || '').trim();
+          const cookie = neteaseAccount.sessionCookie() || '';
+          if (!songid || !cookie) {
+            return jsonResponse({ qualities: [] }, 200);
+          }
+          const qualities = await netease.probePlayQualities(songid, cookie);
+          return jsonResponse({ qualities }, 200);
+        }
         const result = await neteaseAccount.handle(action, post);
         return jsonResponse(result.data, result.code, result.error);
       }

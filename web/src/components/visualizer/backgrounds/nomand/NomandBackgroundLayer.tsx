@@ -55,7 +55,13 @@ const NomandBackgroundLayer: React.FC<NomandBackgroundLayerProps> = ({
                 fit="cover"
                 minPixelRatio={1}
                 maxPixelCount={1920 * 1080}
-                style={{ width: '100%', height: '100%' }}
+                style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    display: 'block',
+                }}
             />
             {tuning.overlayEnabled && tuning.overlayOpacity > 0 && (
                 <div

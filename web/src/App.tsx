@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type Track, type VisualizerMode } from './types';
-import { buildDownloadUrl, canNativeSave, fetchNeteaseStatus, fetchQqStatus, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus } from './api';
+import { buildDownloadUrl, canNativeSave, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type PlayQuality } from './api';
 import { extractAccentFromImage } from './lib/color';
-import { isMobileViewport, isWindowsApp } from './lib/media';
-import { createAudioBands, pulseAudioBands, readVisualizerMode, writeVisualizerMode } from './lib/visualizer';
+import { isMobileViewport, isWindowsApp, prefersLightweightVisualizer } from './lib/media';
+import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig, writeVisualizerMode } from './lib/visualizer';
 import { useLibraryStore } from './store/libraryStore';
 import { useCloudStore } from './store/cloudStore';
 import { usePlayerStore } from './store/playerStore';
@@ -17,8 +17,15 @@ import SidePanel from './components/SidePanel';
 import AccountModal from './components/AccountModal';
 import LegalModal from './components/LegalModal';
 import UpdateModal from './components/UpdateModal';
+import WhatsNewModal from './components/WhatsNewModal';
 import { parseLegalTab, type LegalTab } from './legal';
 import { checkAppUpdate, installAppUpdate, type AppUpdateInfo } from './lib/update';
+import {
+  APP_VERSION,
+  WHATS_NEW_NOTES,
+  markWhatsNewSeen,
+  shouldShowWhatsNew,
+} from './whatsNew';
 
 const THEME_KEY = 'ryanmusic-theme';
 
@@ -34,6 +41,10 @@ const App: React.FC = () => {
   const [view, setView] = useState<AppView>('home');
   const [isDaylight, setIsDaylight] = useState(readTheme);
   const [visualizerMode, setVisualizerMode] = useState<VisualizerMode>(readVisualizerMode);
+  const [backgroundConfig, setBackgroundConfig] = useState(() => readBackgroundConfig(prefersLightweightVisualizer()));
+  const [buffering, setBuffering] = useState(false);
+  const [audioQuality, setAudioQuality] = useState('');
+  const [qualityOptions, setQualityOptions] = useState<PlayQuality[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Track[]>([]);
@@ -50,6 +61,7 @@ const App: React.FC = () => {
   const [legalOpen, setLegalOpen] = useState(false);
   const [legalTab, setLegalTab] = useState<LegalTab>('help');
   const [updateOpen, setUpdateOpen] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [updateBusy, setUpdateBusy] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [netease, setNetease] = useState<AccountStatus | null>(null);
@@ -73,6 +85,8 @@ const App: React.FC = () => {
 
   const homeTab = useLibraryStore((state) => state.homeTab);
   const setHomeTab = useLibraryStore((state) => state.setHomeTab);
+  const layoutMode = useLibraryStore((state) => state.layoutMode);
+  const setLayoutMode = useLibraryStore((state) => state.setLayoutMode);
 
   const neteasePlaylists = useCloudStore((state) => state.neteasePlaylists);
   const qqPlaylists = useCloudStore((state) => state.qqPlaylists);
@@ -101,8 +115,12 @@ const App: React.FC = () => {
   const mediaUrl = useMemo(() => {
     if (!track?.url) return '';
     if (!authedPlay) return track.url;
-    return `${track.url}${track.url.includes('?') ? '&' : '?'}auth=1`;
-  }, [authedPlay, track?.url]);
+    const params = new URLSearchParams();
+    params.set('auth', '1');
+    if (track.type === 'netease' && audioQuality) params.set('level', audioQuality);
+    const join = track.url.includes('?') ? '&' : '?';
+    return `${track.url}${join}${params.toString()}`;
+  }, [audioQuality, authedPlay, track?.type, track?.url]);
   const theme = isDaylight ? DAYLIGHT_THEME : MIDNIGHT_THEME;
   const resolveAccent = useThemeAccentStore((state) => state.resolveAccent);
   const presetId = useThemeAccentStore((state) => state.presetId);
@@ -116,7 +134,12 @@ const App: React.FC = () => {
     document.documentElement.style.setProperty('--bg-color', theme.backgroundColor);
     document.documentElement.style.backgroundColor = theme.backgroundColor;
     document.body.style.backgroundColor = theme.backgroundColor;
-  }, [theme.backgroundColor]);
+    try {
+      window.webkit?.messageHandlers?.ryanChrome?.postMessage({ daylight: isDaylight });
+    } catch {
+      // non-mac / no bridge
+    }
+  }, [isDaylight, theme.backgroundColor]);
 
   const appStyle = useMemo(
     () =>
@@ -130,6 +153,40 @@ const App: React.FC = () => {
       }) as React.CSSProperties,
     [theme, userAccent],
   );
+
+
+  useEffect(() => {
+    let cancelled = false;
+    setQualityOptions([]);
+    if (!track || track.type !== 'netease' || !netease?.loggedIn || authFallback) {
+      setAudioQuality('');
+      return;
+    }
+    void fetchNeteaseQualities(track.songid).then((res) => {
+      if (cancelled) return;
+      const list = res.data?.qualities || [];
+      setQualityOptions(list);
+      // 不自动切到最高档：先按无 level（约 320k）出声，用户点选音质才换源
+      setAudioQuality((prev) => {
+        if (prev && list.some((item) => item.level === prev)) return prev;
+        return '';
+      });
+    }).catch(() => {
+      if (!cancelled) {
+        setQualityOptions([]);
+        setAudioQuality('');
+      }
+    });
+    return () => { cancelled = true; };
+  }, [authFallback, netease?.loggedIn, track?.songid, track?.type]);
+
+
+  const goHome = useCallback(() => {
+    setStyleOpen(false);
+    setPanelOpen(false);
+    setChromeHidden(false);
+    setView('home');
+  }, []);
 
   const seek = useCallback((time: number) => {
     const audio = audioRef.current;
@@ -237,11 +294,19 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      if (shouldShowWhatsNew(APP_VERSION)) {
+        setWhatsNewOpen(true);
+      }
       void checkAppUpdate().then((info) => {
         if (info.ok && info.hasUpdate) setUpdateInfo(info);
       }).catch(() => undefined);
-    }, 4000);
+    }, 1200);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  const closeWhatsNew = useCallback(() => {
+    markWhatsNewSeen(APP_VERSION);
+    setWhatsNewOpen(false);
   }, []);
 
   const runSearch = useCallback(
@@ -408,6 +473,8 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!track) return;
+    // 搜索结果常已带歌词，起播时跳过，避免和官链抢带宽
+    if (track.lrc || track.yrc) return;
     const type = track.type;
     const id = track.songid;
     let alive = true;
@@ -418,7 +485,7 @@ const App: React.FC = () => {
     return () => {
       alive = false;
     };
-  }, [netease?.loggedIn, patchCurrentLyrics, qq?.loggedIn, track?.songid, track?.type]);
+  }, [netease?.loggedIn, patchCurrentLyrics, qq?.loggedIn, track?.lrc, track?.songid, track?.type, track?.yrc]);
 
   useEffect(() => {
     if (!track?.pic) {
@@ -464,13 +531,47 @@ const App: React.FC = () => {
       } else if (event.key === 'ArrowLeft') {
         seek(Math.max(0, currentTime.get() - 5));
       } else if (event.key === 'Escape') {
-        if (searchOpen) setSearchOpen(false);
-        else setView('home');
+        if (searchOpen) {
+          setSearchOpen(false);
+          return;
+        }
+        if (styleOpen) {
+          setStyleOpen(false);
+          return;
+        }
+        if (panelOpen && view === 'player') {
+          setPanelOpen(false);
+          return;
+        }
+        const playlistOpen = homeTab === 'qq' ? qqOpen : neteaseOpen;
+        if (view === 'home' && playlistOpen) {
+          if (homeTab === 'qq') closeQqPlaylist();
+          else closeNeteasePlaylist();
+          return;
+        }
+        if (view === 'player') {
+          goHome();
+        }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [currentTime, duration, searchOpen, seek, togglePlay]);
+  }, [
+    closeNeteasePlaylist,
+    closeQqPlaylist,
+    currentTime,
+    duration,
+    goHome,
+    homeTab,
+    neteaseOpen,
+    panelOpen,
+    qqOpen,
+    searchOpen,
+    seek,
+    styleOpen,
+    togglePlay,
+    view,
+  ]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -530,14 +631,23 @@ const App: React.FC = () => {
 
   return (
     <div className="fixed inset-0 flex h-full w-full flex-col overflow-hidden font-sans transition-colors duration-500" style={appStyle}>
+      <div className="ryan-accent-wash" aria-hidden />
       <audio
         ref={audioRef}
         preload="metadata"
-        onPlay={() => setStatus('playing')}
+        onPlay={() => {
+          setBuffering(false);
+          setStatus('playing');
+        }}
         onPause={() => setStatus('paused')}
+        onWaiting={() => setBuffering(true)}
+        onStalled={() => setBuffering(true)}
+        onPlaying={() => setBuffering(false)}
+        onCanPlay={() => setBuffering(false)}
         onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
         onEnded={() => playNext(true)}
         onError={() => {
+          setBuffering(false);
           if (authedPlay) setAuthFallback(true);
         }}
       />
@@ -547,6 +657,7 @@ const App: React.FC = () => {
           theme={theme}
           isDaylight={isDaylight}
           homeTab={homeTab}
+          layoutMode={layoutMode}
           neteasePlaylists={neteasePlaylists}
           qqPlaylists={qqPlaylists}
           neteaseOpen={neteaseOpen}
@@ -565,6 +676,7 @@ const App: React.FC = () => {
             if (submit && query.trim()) void runSearch(query);
           }}
           onHomeTabChange={setHomeTab}
+          onLayoutModeChange={setLayoutMode}
           onSelectEntry={(entry, queueEntries) => {
             void playLibraryEntry(entry, queueEntries);
             setView('player');
@@ -601,6 +713,7 @@ const App: React.FC = () => {
           theme={theme}
           accent={accent || userAccent}
           visualizerMode={visualizerMode}
+          background={backgroundConfig}
           onVisualizerModeChange={(mode) => {
             setVisualizerMode(mode);
             writeVisualizerMode(mode);
@@ -608,6 +721,8 @@ const App: React.FC = () => {
           audioPower={audioPower}
           audioBands={audioBands}
           paused={status !== 'playing'}
+          buffering={buffering || status === 'loading'}
+          onBack={goHome}
           isPanelOpen={panelOpen}
           onOpenPanel={() => {
             setPanelOpen(true);
@@ -657,9 +772,9 @@ const App: React.FC = () => {
         }}
       />
 
-      {view === 'player' && !chromeHidden && (
+      {view === 'player' && (
         <SidePanel
-          open={panelOpen}
+          open={panelOpen && !chromeHidden}
           isDaylight={isDaylight}
           theme={theme}
           track={track}
@@ -667,20 +782,27 @@ const App: React.FC = () => {
           index={index}
           currentTime={currentTime}
           visualizerMode={visualizerMode}
+          background={backgroundConfig}
           styleOpen={styleOpen}
+          buffering={buffering || status === 'loading'}
           onStyleOpenChange={setStyleOpen}
           onVisualizerModeChange={(mode) => {
             setVisualizerMode(mode);
             writeVisualizerMode(mode);
           }}
+          onBackgroundChange={(config) => {
+            setBackgroundConfig(config);
+            writeBackgroundConfig(config);
+          }}
           onClose={() => setPanelOpen(false)}
-          onHome={() => setView('home')}
+          onHome={goHome}
           onDownloadSong={downloadSong}
           onDownloadLrc={downloadLrc}
           onPlayIndex={playIndex}
-          onPrev={playPrev}
-          onNext={() => playNext(false)}
           onLyricLineSeek={seek}
+          qualityOptions={authedPlay && track?.type === 'netease' ? qualityOptions : []}
+          audioQuality={audioQuality}
+          onAudioQualityChange={setAudioQuality}
         />
       )}
 
@@ -719,6 +841,15 @@ const App: React.FC = () => {
         onTabChange={openLegal}
       />
 
+      <WhatsNewModal
+        open={whatsNewOpen}
+        isDaylight={isDaylight}
+        theme={theme}
+        version={APP_VERSION}
+        notes={WHATS_NEW_NOTES}
+        onClose={closeWhatsNew}
+      />
+
       <UpdateModal
         open={updateOpen}
         isDaylight={isDaylight}
@@ -739,6 +870,7 @@ const App: React.FC = () => {
         canPrev={Boolean(track)}
         canNext={Boolean(track) && (index + 1 < queue.length || loopMode === 'all')}
         isDaylight={isDaylight}
+        buffering={buffering || status === 'loading'}
         isHidden={view === 'player' && chromeHidden}
         onSeek={seek}
         onTogglePlay={togglePlay}

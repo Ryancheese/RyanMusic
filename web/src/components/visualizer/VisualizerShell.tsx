@@ -1,7 +1,5 @@
-import React, { forwardRef, useEffect, useRef, useState } from 'react';
-import { motion, MotionValue } from 'framer-motion';
-import { useTranslation } from 'react-i18next';
-import { ChevronLeft } from 'lucide-react';
+import React, { forwardRef, useEffect, useRef } from 'react';
+import { MotionValue } from 'framer-motion';
 import { AudioBands, Theme } from '../../types';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../utils/fontStacks';
 import { type VisualizerSharedProps } from './definition';
@@ -9,7 +7,7 @@ import VisualizerBackgroundRenderer from './backgrounds/VisualizerBackgroundRend
 import { getSizedCoverUrl } from '../../utils/coverUrl';
 
 // Shared outer shell for all visualizers.
-// This is where we keep background layering, font injection, and the hover-only back button
+// This is where we keep background layering and font injection
 // so each renderer can stay focused on lyric timing/layout instead of rebuilding the same frame.
 type VisualizerShellSharedProps = Pick<
     VisualizerSharedProps,
@@ -21,9 +19,7 @@ type VisualizerShellSharedProps = Pick<
     | 'staticMode'
     | 'backgroundStaticMode'
     | 'paused'
-    | 'onBack'
     | 'isPanelOpen'
-    | 'alwaysShowBackButton'
     | 'onPlayerPanelGuideHotspotChange'
 >;
 
@@ -55,8 +51,6 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     children,
     className = '',
 }, ref) => {
-    const { t } = useTranslation();
-    const [showBackButton, setShowBackButton] = useState(false);
     const playerPanelGuideHotspotRef = useRef(false);
     const touchGuideHideTimeoutRef = useRef<number | null>(null);
     const resolvedCoverUrl = getSizedCoverUrl(sharedProps?.coverUrl, 1024) || undefined;
@@ -65,10 +59,8 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     const resolvedStaticMode = sharedProps?.staticMode ?? false;
     const resolvedBackgroundStaticMode = sharedProps?.backgroundStaticMode ?? false;
     const resolvedPaused = sharedProps?.paused ?? false;
-    const resolvedOnBack = sharedProps?.onBack;
     const resolvedIsPanelOpen = sharedProps?.isPanelOpen ?? false;
     const onPlayerPanelGuideHotspotChange = sharedProps?.onPlayerPanelGuideHotspotChange;
-    const isBackButtonVisible = sharedProps?.alwaysShowBackButton || showBackButton;
 
     const updatePlayerPanelGuideHotspot = (isActive: boolean) => {
         if (playerPanelGuideHotspotRef.current === isActive) {
@@ -118,27 +110,19 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     return (
         <div
             ref={ref}
-            className={`w-full h-full flex flex-col items-center justify-center overflow-hidden relative ${fontClassName} transition-colors duration-1000 ${className}`.trim()}
+            className={`absolute inset-0 flex h-full min-h-full w-full flex-col items-center justify-center overflow-hidden ${fontClassName} transition-colors duration-1000 ${className}`.trim()}
             style={{
-                backgroundColor: 'transparent',
+                backgroundColor: theme.backgroundColor,
                 fontFamily: resolveThemeFontStack(theme),
                 fontWeight: resolveThemeFontWeight(theme, 400),
                 opacity: resolvedVisualizerOpacity,
+                // 避免子层（shader/canvas）偶发矮一截时露出窗口原生底色
+                minHeight: '100%',
             }}
             onMouseMove={(event) => {
-                // Back button is intentionally hidden most of the time.
-                // Only reveal it near the top-left hot area so it does not pollute the visual field.
-                const nearBackArea = event.clientX <= PLAYER_CHROME_HOTSPOT_SIZE && event.clientY <= PLAYER_CHROME_HOTSPOT_SIZE;
-                if (nearBackArea !== showBackButton) {
-                    setShowBackButton(nearBackArea);
-                }
-
                 updatePlayerPanelGuideHotspot(!resolvedIsPanelOpen && isNearPlayerPanelHotspot(event.clientX, event.clientY));
             }}
             onMouseLeave={() => {
-                if (showBackButton) {
-                    setShowBackButton(false);
-                }
                 updatePlayerPanelGuideHotspot(false);
             }}
             onPointerDown={(event) => {
@@ -153,28 +137,6 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
                 updatePlayerPanelGuideHotspot(false);
             }}
         >
-            {resolvedOnBack && (
-                <motion.button
-                    type="button"
-                    aria-label={t('ui.backToHome')}
-                    initial={false}
-                    animate={{
-                        opacity: isBackButtonVisible ? 1 : 0,
-                        scale: isBackButtonVisible ? 1 : 0.92,
-                        x: isBackButtonVisible ? 0 : -6,
-                    }}
-                    transition={{ duration: 0.2, ease: 'easeOut' }}
-                    onClick={(event) => {
-                        event.stopPropagation();
-                        resolvedOnBack();
-                    }}
-                    className="absolute top-6 left-6 z-30 h-10 w-10 rounded-full flex items-center justify-center transition-colors backdrop-blur-md bg-black/20 hover:bg-white/10 text-white/60 pointer-events-auto"
-                    style={{ pointerEvents: isBackButtonVisible ? 'auto' : 'none' }}
-                >
-                    <ChevronLeft size={20} />
-                </motion.button>
-            )}
-
             <VisualizerBackgroundRenderer
                 config={sharedProps?.background}
                 theme={theme}

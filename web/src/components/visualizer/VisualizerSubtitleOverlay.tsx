@@ -115,7 +115,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                     animate={{
                         opacity: resolvedOpacity,
                         y: 0,
-                        bottom: isPlayerChromeHidden ? 32 : 112,
+                        bottom: isPlayerChromeHidden ? 12 : 112,
                     }}
                     exit={{ opacity: 0, y: 20 }}
                     transition={{

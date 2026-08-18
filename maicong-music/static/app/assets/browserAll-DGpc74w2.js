@@ -1,0 +1,1 @@
+import{e as i}from"./createSonnetPixiRuntime-ClUlVZlP.js";import{AccessibilitySystem as t,Container as e,accessibilityTarget as m,DOMPipe as r,EventSystem as a,FederatedContainer as n}from"./index-CMV9-opZ.js";import"./webworkerAll-BtsyYZsH.js";import"./index-DEIyfXez.js";i.add(t);i.mixin(e,m);i.add(r);i.add(a);i.mixin(e,n);

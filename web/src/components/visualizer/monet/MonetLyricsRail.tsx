@@ -4,6 +4,8 @@ import type { Theme, AudioBands, Line } from '../../../types';
 import { resolveThemeFontWeight } from '../../../utils/fontStacks';
 import type { GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
+import InterludeDots from '../../InterludeDots';
+import { isInterludeLine } from '../../../utils/lyrics/parserCore';
 import { colorWithAlpha, mixColors } from '../colorMix';
 import {
     buildWordColorRangesFromMatchers,
@@ -396,6 +398,21 @@ const MonetTimedTokenSpan: React.FC<{
     const resolvedAccentColor = isChorus && chorusAccentColor
         ? mixColors(accentColor, chorusAccentColor, 0.48)
         : accentColor;
+
+    if (isInterludeLine(entry.line)) {
+        return (
+            <span className="flex w-full min-w-0 items-center justify-start py-1">
+                <InterludeDots
+                    count={6}
+                    size={Math.max(5, Math.round(fontPx * 0.22))}
+                    gap={Math.max(8, Math.round(fontPx * 0.35))}
+                    color={entry.tone.baseColor}
+                    activeColor={resolvedAccentColor}
+                    activeIndex={entry.status === 'active' ? 5 : undefined}
+                />
+            </span>
+        );
+    }
 
     return (
         <span className="block w-full min-w-0 max-w-full whitespace-pre-wrap break-words">

@@ -13,6 +13,8 @@ import { getRecentCompletedLine, getUpcomingLines } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import { resolveWordColor } from '../wordColoring';
+import { drawCanvasInterludeDots } from '../interludeCanvas';
+import { isInterludeLine } from '../../../utils/lyrics/parserCore';
 
 // This mode is basically "turn the whole lyric into an article, then move a camera through it".
 // So the pipeline is much bigger than the others: prebuild the article layout, split it into blocks/render lines/graphemes,
@@ -1631,6 +1633,22 @@ const createStaticBlockSnapshot = (
     context.shadowBlur = shadowBlur;
     context.shadowColor = shadowColor;
 
+    if (isInterludeLine(block.line)) {
+        drawCanvasInterludeDots(
+            context,
+            block.width / 2 + padding,
+            block.height / 2 + padding,
+            {
+                radius: Math.max(3, block.fontPx * 0.12),
+                gap: Math.max(8, block.fontPx * 0.38),
+                color: fillStyle,
+            },
+        );
+        context.shadowBlur = 0;
+        context.shadowColor = 'transparent';
+        return { canvas, padding };
+    }
+
     for (const renderLine of block.renderLines) {
         context.fillText(
             renderLine.text,
@@ -2564,6 +2582,42 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
                     0.45,
                     1.45,
                 );
+
+                if (isInterludeLine(block.line)) {
+                    const centerX = block.x + block.width / 2;
+                    const centerY = block.y + block.height / 2;
+                    const radius = Math.max(4, block.fontPx * 0.14);
+                    const gap = Math.max(10, block.fontPx * 0.42);
+                    const isActive = time >= block.line.startTime && time <= linePassCutoffTime;
+                    const isPassed = time > linePassCutoffTime;
+                    const progress = clamp(
+                        (time - block.line.startTime) / Math.max(lineDuration, 0.001),
+                        0,
+                        1,
+                    );
+                    const activeIndex = isActive ? Math.min(5, Math.floor(progress * 6)) : undefined;
+                    const fillColor = isActive
+                        ? colorWithAlpha(theme.primaryColor, activeOpacity)
+                        : isPassed
+                            ? colorWithAlpha(theme.primaryColor, passedOpacity)
+                            : colorWithAlpha(theme.primaryColor, waitingOpacity);
+
+                    context.save();
+                    if (isActive) {
+                        context.shadowBlur = (8 + block.fontPx * 0.35) * glowIntensity;
+                        context.shadowColor = colorWithAlpha(theme.accentColor, 0.35 * glowIntensity);
+                    }
+                    drawCanvasInterludeDots(context, centerX, centerY, {
+                        radius,
+                        gap,
+                        color: fillColor,
+                        activeIndex,
+                        activeColor: theme.accentColor,
+                    });
+                    context.restore();
+                    continue;
+                }
+
                 const staticState = time < block.line.startTime
                     ? 'waiting'
                     : time >= lineEndTime + colorTrailDuration

@@ -11,6 +11,8 @@ import { type VisualizerSharedProps } from '../definition';
 import { useVisualizerRuntime } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
+import InterludeDots from '../../InterludeDots';
+import { isInterludeLine } from '../../../utils/lyrics/parserCore';
 
 const CHAR_REF_LENGTH = 20;
 const LOG_OFFSET = 4;
@@ -644,7 +646,17 @@ const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> 
                             exit={{ opacity: 0, transition: { duration: 0.45, ease: 'easeInOut' } }}
                             className="flex flex-col items-center justify-center gap-y-3 sm:gap-y-4"
                         >
-                            {layout.segments.map((segment, si) => (
+                            {isInterludeLine(activeLine) ? (
+                                <InterludeDots
+                                    count={6}
+                                    activeIndex={5}
+                                    size={Math.max(12, Math.round(18 * lyricsFontScale))}
+                                    gap={Math.max(14, Math.round(16 * lyricsFontScale))}
+                                    color={theme.primaryColor}
+                                    activeColor={theme.accentColor}
+                                />
+                            ) : (
+                                layout.segments.map((segment, si) => (
                                 <TiltLine
                                     key={`seg-${si}-${segment.text}`}
                                     segment={segment}
@@ -658,7 +670,8 @@ const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> 
                                     segmentEndTime={segmentTimings?.[si]?.end ?? 0}
                                     activeLine={activeLine}
                                 />
-                            ))}
+                                ))
+                            )}
                         </motion.div>
                     ) : showText && !activeLine ? (
                         <motion.div

@@ -15,11 +15,63 @@ import {
 
 const NETEASE_KEY = 'ryanmusic-netease-cloud-v1';
 const QQ_KEY = 'ryanmusic-qq-cloud-v1';
+const TRACK_CACHE_KEY = 'ryanmusic-playlist-tracks-v1';
+const TRACK_CACHE_LIMIT = 24;
 
 interface CloudMeta {
   playlists: CloudPlaylist[];
   nickname?: string;
   syncedAt?: number;
+}
+
+interface PlaylistTrackCacheEntry {
+  tracks: LibraryEntry[];
+  name?: string;
+  cover?: string;
+  savedAt: number;
+}
+
+interface PlaylistTrackCacheStore {
+  netease: Record<string, PlaylistTrackCacheEntry>;
+  qq: Record<string, PlaylistTrackCacheEntry>;
+}
+
+function readTrackCache(): PlaylistTrackCacheStore {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TRACK_CACHE_KEY) || 'null') as PlaylistTrackCacheStore | null;
+    return {
+      netease: parsed?.netease && typeof parsed.netease === 'object' ? parsed.netease : {},
+      qq: parsed?.qq && typeof parsed.qq === 'object' ? parsed.qq : {},
+    };
+  } catch {
+    return { netease: {}, qq: {} };
+  }
+}
+
+function writeTrackCache(store: PlaylistTrackCacheStore) {
+  localStorage.setItem(TRACK_CACHE_KEY, JSON.stringify(store));
+}
+
+function trimTrackCache(bucket: Record<string, PlaylistTrackCacheEntry>): Record<string, PlaylistTrackCacheEntry> {
+  const entries = Object.entries(bucket).sort((a, b) => b[1].savedAt - a[1].savedAt);
+  return Object.fromEntries(entries.slice(0, TRACK_CACHE_LIMIT));
+}
+
+function putTrackCache(
+  provider: 'netease' | 'qq',
+  playlistId: string,
+  entry: PlaylistTrackCacheEntry,
+) {
+  const store = readTrackCache();
+  store[provider] = trimTrackCache({
+    ...store[provider],
+    [playlistId]: entry,
+  });
+  writeTrackCache(store);
+}
+
+function getTrackCache(provider: 'netease' | 'qq', playlistId: string): PlaylistTrackCacheEntry | null {
+  return readTrackCache()[provider][playlistId] || null;
 }
 
 interface CloudState {
@@ -224,11 +276,25 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     set({ qqPlaylists: playlists });
   },
   openNeteasePlaylist: async (playlist) => {
-    set({ neteaseLoading: true, neteaseError: '', neteaseOpen: playlist, neteaseTracks: [] });
+    const cached = getTrackCache('netease', playlist.id);
+    set({
+      neteaseLoading: !cached,
+      neteaseError: '',
+      neteaseOpen: cached
+        ? { ...playlist, name: cached.name || playlist.name, cover: cached.cover || playlist.cover }
+        : playlist,
+      neteaseTracks: cached?.tracks || [],
+    });
     try {
       const result = await collectNeteaseTracks(playlist);
       const playlists = patchPlaylistCover(get().neteasePlaylists, playlist.id, result.cover);
       writeMeta(NETEASE_KEY, { playlists, syncedAt: Date.now() });
+      putTrackCache('netease', playlist.id, {
+        tracks: result.tracks,
+        name: result.name,
+        cover: result.cover || playlist.cover,
+        savedAt: Date.now(),
+      });
       set({
         neteaseLoading: false,
         neteasePlaylists: playlists,
@@ -239,16 +305,32 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     } catch (error) {
       set({
         neteaseLoading: false,
-        neteaseError: error instanceof Error ? error.message : '加载歌单失败',
+        neteaseError: cached?.tracks.length
+          ? ''
+          : (error instanceof Error ? error.message : '加载歌单失败'),
       });
     }
   },
   openQqPlaylist: async (playlist) => {
-    set({ qqLoading: true, qqError: '', qqOpen: playlist, qqTracks: [] });
+    const cached = getTrackCache('qq', playlist.id);
+    set({
+      qqLoading: !cached,
+      qqError: '',
+      qqOpen: cached
+        ? { ...playlist, name: cached.name || playlist.name, cover: cached.cover || playlist.cover }
+        : playlist,
+      qqTracks: cached?.tracks || [],
+    });
     try {
       const result = await collectQqTracks(playlist);
       const playlists = patchPlaylistCover(get().qqPlaylists, playlist.id, result.cover);
       writeMeta(QQ_KEY, { playlists, syncedAt: Date.now() });
+      putTrackCache('qq', playlist.id, {
+        tracks: result.tracks,
+        name: result.name,
+        cover: result.cover || playlist.cover,
+        savedAt: Date.now(),
+      });
       set({
         qqLoading: false,
         qqPlaylists: playlists,
@@ -259,15 +341,20 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     } catch (error) {
       set({
         qqLoading: false,
-        qqError: error instanceof Error ? error.message : '加载歌单失败',
+        qqError: cached?.tracks.length
+          ? ''
+          : (error instanceof Error ? error.message : '加载歌单失败'),
       });
     }
   },
-  closeNeteasePlaylist: () => set({ neteaseOpen: null, neteaseTracks: [], neteaseError: '' }),
-  closeQqPlaylist: () => set({ qqOpen: null, qqTracks: [], qqError: '' }),
+  closeNeteasePlaylist: () => set({ neteaseOpen: null, neteaseError: '', neteaseLoading: false }),
+  closeQqPlaylist: () => set({ qqOpen: null, qqError: '', qqLoading: false }),
   clearProvider: (provider) => {
     if (provider === 'netease') {
       localStorage.removeItem(NETEASE_KEY);
+      const cache = readTrackCache();
+      cache.netease = {};
+      writeTrackCache(cache);
       set({
         neteasePlaylists: [],
         neteaseOpen: null,
@@ -279,6 +366,9 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       return;
     }
     localStorage.removeItem(QQ_KEY);
+    const cache = readTrackCache();
+    cache.qq = {};
+    writeTrackCache(cache);
     set({
       qqPlaylists: [],
       qqOpen: null,

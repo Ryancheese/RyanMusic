@@ -15,6 +15,8 @@ import { buildPendoloTextLayout } from './pendoloTextLayout';
 import { resolvePendoloChorusPresentation, resolvePendoloMotionProfile } from './pendoloMotionProfile';
 import { resolvePendoloFallbackAnchorIndex } from './pendoloTimeline';
 import PendoloRotatingLine from './PendoloRotatingLine';
+import InterludeDots from '../../InterludeDots';
+import { isInterludeLine } from '../../../utils/lyrics/parserCore';
 
 const PENDOLO_SCROLL_IDLE_RESET_MS = 2500;
 const PENDOLO_SCROLL_STEP_PX = 90;
@@ -557,7 +559,16 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                                 />
                                             )}
                                             <div>
-                                                {isFocal ? (
+                                                {isInterludeLine(item.line) ? (
+                                                    <InterludeDots
+                                                        count={6}
+                                                        activeIndex={isFocal ? 5 : undefined}
+                                                        size={Math.max(8, Math.round(fontPx * 0.28))}
+                                                        gap={Math.max(10, Math.round(fontPx * 0.4))}
+                                                        color={colorWithAlpha(primaryTextColor, isFocal ? 1 : 0.75)}
+                                                        activeColor={accentTextColor}
+                                                    />
+                                                ) : isFocal ? (
                                                     <PendoloActiveLyricSweep
                                                         line={item.line}
                                                         currentTime={currentTime}

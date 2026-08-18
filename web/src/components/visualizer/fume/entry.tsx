@@ -10,7 +10,7 @@ export default defineVisualizer({
     mode: 'fume',
     order: 40,
     labelKey: 'ui.visualizerFume',
-    labelFallback: 'Fume',
+    labelFallback: '长卷',
     previewSeed: 'fume',
     previewStartOffset: 18.4,
     tuningKind: 'fume',

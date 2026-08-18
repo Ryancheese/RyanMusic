@@ -11,6 +11,8 @@ import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import { resolveWordColor } from '../wordColoring';
 import { resolveThemeFontWeight } from '../../../utils/fontStacks';
+import InterludeDots from '../../InterludeDots';
+import { isInterludeLine } from '../../../utils/lyrics/parserCore';
 
 // This one is still word-driven, but unlike Classic it needs to pre-build a column/chunk structure first.
 // The flow is basically: ask runtime for the active line, optionally preheat the upcoming line,
@@ -727,6 +729,18 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
     });
     const activeLineRenderProfile = activeLine ? resolvePartitaLineRenderProfile(activeLine) : null;
     const activeLineContainerMotion = getPartitaLineContainerMotion(activeLineRenderProfile);
+    const isActiveInterlude = Boolean(activeLine && isInterludeLine(activeLine));
+    const [interludeDotIndex, setInterludeDotIndex] = useState(0);
+
+    useMotionValueEvent(currentTime, 'change', (time) => {
+        if (!activeLine || !isInterludeLine(activeLine)) return;
+        const words = activeLine.words;
+        let idx = -1;
+        for (let i = 0; i < words.length; i += 1) {
+            if (time >= words[i].startTime) idx = i;
+        }
+        setInterludeDotIndex((prev) => (prev === idx ? prev : Math.max(0, idx)));
+    });
 
     const sequentialLayout = useMemo(() => {
         if (!activeLine) {
@@ -960,12 +974,24 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
                             exit={activeLineContainerMotion.exit}
                             className="flex flex-row-reverse items-stretch justify-center w-full max-w-5xl"
                             style={{
-                                perspective: `${sequentialLayout.lineConfig.perspective}px`,
+                                perspective: isActiveInterlude ? 'none' : `${sequentialLayout.lineConfig.perspective}px`,
                                 gap: sequentialLayout.lineConfig.columnGap,
                                 minHeight: '320px',
                             }}
                         >
-                            {sequentialLayout.columns.map((column) => {
+                            {isActiveInterlude ? (
+                                <div className="flex w-full items-center justify-center" style={{ transformStyle: 'flat' }}>
+                                    <InterludeDots
+                                        count={Math.max(activeLine.words.length, 6)}
+                                        activeIndex={interludeDotIndex}
+                                        size={Math.max(12, Math.round(20 * lyricsFontScale))}
+                                        gap={Math.max(14, Math.round(18 * lyricsFontScale))}
+                                        color={theme.primaryColor}
+                                        activeColor={theme.accentColor}
+                                    />
+                                </div>
+                            ) : (
+                                sequentialLayout.columns.map((column) => {
                                 return (
                                     <div
                                         key={column.id}
@@ -994,7 +1020,8 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
                                         </div>
                                     </div>
                                 );
-                            })}
+                                })
+                            )}
                         </motion.div>
                     )}
 

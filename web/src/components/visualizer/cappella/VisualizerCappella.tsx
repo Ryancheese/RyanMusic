@@ -11,6 +11,7 @@ import { shouldPreheatLine, useVisualizerRuntime, type VisualizerPreheatWindow }
 import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
+import InterludeDots from '../../InterludeDots';
 import { builtinAvatarImages, type CappellaAvatarImage, resolveCappellaAvatarUrl } from './avatarImages';
 import { createCappellaAgentSenderResolver, type CappellaMessageSender } from './cappellaMessageSenders';
 import { builtinEmoImages } from './emoImages';
@@ -1045,6 +1046,18 @@ const CappellaText: React.FC<{
 
     if (message.kind === 'emo') {
         return null;
+    }
+
+    if (message.line.fullText === INTERLUDE_TEXT) {
+        return (
+            <InterludeDots
+                count={6}
+                size={5}
+                gap={6}
+                color="currentColor"
+                activeIndex={5}
+            />
+        );
     }
 
     return <>{message.line.fullText}</>;

@@ -10,7 +10,7 @@ export default defineVisualizer({
     mode: 'pendolo',
     order: 48,
     labelKey: 'ui.visualizerPendolo',
-    labelFallback: 'Pendolo',
+    labelFallback: '钟摆',
     previewSeed: 'pendolo',
     previewStartOffset: 0,
     tuningKind: 'pendolo',

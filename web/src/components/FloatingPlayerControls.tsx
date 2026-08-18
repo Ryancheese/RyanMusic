@@ -22,6 +22,7 @@ interface FloatingPlayerControlsProps {
   canPrev: boolean;
   canNext: boolean;
   isDaylight: boolean;
+  buffering?: boolean;
   isHidden?: boolean;
   onSeek: (time: number) => void;
   onTogglePlay: () => void;
@@ -41,6 +42,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   canPrev,
   canNext,
   isDaylight,
+  buffering = false,
   isHidden = false,
   onSeek,
   onTogglePlay,
@@ -57,6 +59,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const showExpanded =
     isHovered
     || coarsePointer
+    || buffering
     || (canAutoExpand && status !== 'playing' && currentView !== 'home');
   const trackColor = isDaylight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.1)';
   const primaryColor = 'var(--text-primary)';
@@ -122,18 +125,36 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
         }}
         style={{ paddingBottom: 32, marginBottom: -32 }}
       >
-        <motion.div
-          layout
-          transition={{ layout: CONTROL_LAYOUT_SPRING }}
-          onClick={() => {
-            if (currentView === 'home') onNavigateToPlayer();
-          }}
-          className={`relative cursor-pointer overflow-hidden rounded-full border-0 outline-none ring-0 transition-[background-color] duration-300 ${
-            showExpanded ? 'w-full p-3' : 'w-[92%] px-4 py-2 md:w-[60%]'
-          }`}
-          style={glassStyle}
-        >
-          <motion.div layout transition={{ layout: CONTROL_LAYOUT_SPRING }} className="w-full">
+        <div className="relative w-full">
+          {currentView === 'home' && isHovered && !coarsePointer ? (
+            <div
+              className="pointer-events-none absolute -top-9 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full px-3 py-1 text-[11px] shadow-lg"
+              style={{
+                backgroundColor: isDaylight
+                  ? 'color-mix(in srgb, var(--bg-color) 88%, transparent)'
+                  : 'color-mix(in srgb, var(--bg-color) 70%, transparent)',
+                color: primaryColor,
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+              }}
+            >
+              点击可以返回歌词舞台
+            </div>
+          ) : null}
+          <motion.div
+            layout
+            transition={{ layout: CONTROL_LAYOUT_SPRING }}
+            onClick={() => {
+              if (currentView === 'home') onNavigateToPlayer();
+            }}
+            title={currentView === 'home' ? '点击可以返回歌词舞台' : undefined}
+            aria-label={currentView === 'home' ? '点击可以返回歌词舞台' : undefined}
+            className={`relative cursor-pointer overflow-hidden rounded-full border-0 outline-none ring-0 transition-[background-color] duration-300 ${
+              showExpanded ? 'w-full p-3' : 'w-[92%] px-4 py-2 md:w-[60%]'
+            }`}
+            style={{ ...glassStyle, margin: showExpanded ? undefined : '0 auto' }}
+          >
+            <motion.div layout transition={{ layout: CONTROL_LAYOUT_SPRING }} className="w-full">
             {showExpanded ? (
               <div className="flex w-full items-center gap-2 sm:gap-3">
                 <button
@@ -148,7 +169,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                   }`}
                   style={{ backgroundColor: primaryColor, color: 'var(--bg-color)' }}
                 >
-                  {status === 'loading' ? (
+                  {buffering || status === 'loading' ? (
                     <RyanLoader size={22} />
                   ) : status === 'playing' ? (
                     <Pause size={20} fill="currentColor" />
@@ -229,7 +250,8 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
               </div>
             )}
           </motion.div>
-        </motion.div>
+          </motion.div>
+        </div>
       </div>
     </motion.div>
   );

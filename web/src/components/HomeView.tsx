@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, CircleHelp, Cloud, Music2, Palette, RefreshCw, Search, SunMoon, UserRound } from 'lucide-react';
+import { ArrowLeft, CircleHelp, Cloud, Hexagon, LayoutGrid, List, Music2, Palette, RefreshCw, Search, SunMoon, UserRound } from 'lucide-react';
 import { AlbumWaterfall, type AlbumWaterfallItem } from './AlbumWaterfall';
 import ThemeAccentPicker from './ThemeAccentPicker';
-import type { HomeTab, ThemeTokens } from '../types';
+import type { HomeTab, LibraryLayoutMode, ThemeTokens } from '../types';
 import { coverRefreshUrl } from '../api';
 import type { CloudPlaylist } from '../api';
 import type { LibraryEntry } from '../store/libraryStore';
@@ -14,6 +14,7 @@ interface HomeViewProps {
   theme: ThemeTokens;
   isDaylight: boolean;
   homeTab: HomeTab;
+  layoutMode: LibraryLayoutMode;
   neteasePlaylists: CloudPlaylist[];
   qqPlaylists: CloudPlaylist[];
   neteaseOpen: CloudPlaylist | null;
@@ -29,6 +30,7 @@ interface HomeViewProps {
   onSearchQueryChange: (query: string) => void;
   onOpenSearch: (submit?: boolean) => void;
   onHomeTabChange: (tab: HomeTab) => void;
+  onLayoutModeChange: (mode: LibraryLayoutMode) => void;
   onSelectEntry: (entry: LibraryEntry, queue: LibraryEntry[]) => void;
   onOpenPlaylist: (playlist: CloudPlaylist) => void;
   onBackPlaylist: () => void;
@@ -45,6 +47,12 @@ const TABS: { id: HomeTab; label: string; icon: React.ReactNode }[] = [
   { id: 'qq', label: 'QQ', icon: <Music2 size={14} /> },
 ];
 
+const LAYOUT_MODES: { id: LibraryLayoutMode; label: string; icon: React.ReactNode }[] = [
+  { id: 'honeycomb', label: '蜂窝', icon: <Hexagon size={13} /> },
+  { id: 'square', label: '方形', icon: <LayoutGrid size={13} /> },
+  { id: 'list', label: '列表', icon: <List size={13} /> },
+];
+
 function httpsUrl(url?: string) {
   if (!url) return undefined;
   return url.replace(/^http:\/\//i, 'https://');
@@ -54,6 +62,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   theme,
   isDaylight,
   homeTab,
+  layoutMode,
   neteasePlaylists,
   qqPlaylists,
   neteaseOpen,
@@ -69,6 +78,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   onSearchQueryChange,
   onOpenSearch,
   onHomeTabChange,
+  onLayoutModeChange,
   onSelectEntry,
   onOpenPlaylist,
   onBackPlaylist,
@@ -147,16 +157,18 @@ const HomeView: React.FC<HomeViewProps> = ({
       <button
         type="button"
         onClick={onOpenAccount}
-        className={`rounded-full px-2.5 py-2 text-xs ${isDaylight ? 'bg-black/5' : 'bg-white/10'}`}
-        title="登录网易云 / QQ"
+        className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-2 text-xs ${isDaylight ? 'bg-black/5' : 'bg-white/10'}`}
+        title={netease?.loggedIn || qq?.loggedIn ? "账号与同步" : "登录网易云 / QQ"}
       >
-        <span className="flex items-center gap-1.5">
-          <UserRound size={16} />
-          <span className="hidden sm:inline">
-            {netease?.loggedIn || qq?.loggedIn
-              ? [netease?.loggedIn ? '网易' : '', qq?.loggedIn ? 'QQ' : ''].filter(Boolean).join(' / ')
-              : '登录'}
-          </span>
+        <UserRound size={16} className="shrink-0" />
+        <span className="hidden sm:inline">
+          {netease?.loggedIn && qq?.loggedIn
+            ? '已登录'
+            : netease?.loggedIn
+              ? '网易云'
+              : qq?.loggedIn
+                ? 'QQ'
+                : '登录'}
         </span>
       </button>
       <button
@@ -231,14 +243,14 @@ const HomeView: React.FC<HomeViewProps> = ({
                 value={searchQuery}
                 onChange={(event) => onSearchQueryChange(event.target.value)}
                 onFocus={() => onOpenSearch(false)}
-                placeholder="搜索网易云 / QQ"
+                placeholder="搜索歌曲"
                 className={`w-full rounded-full border border-white/10 py-2.5 pr-4 pl-10 text-base outline-none md:py-2 md:text-sm ${inputBg}`}
               />
             </form>
             <div className="hidden items-center gap-2 md:flex">{themeButtons}</div>
           </div>
         </div>
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {openPlaylist ? (
             <button
               type="button"
@@ -256,10 +268,34 @@ const HomeView: React.FC<HomeViewProps> = ({
                 ? `${cloudPlaylists.length} 个歌单`
                 : '未登录'}
           </span>
+          <div className={`ml-auto inline-flex items-center gap-0.5 rounded-full p-0.5 ${isDaylight ? 'bg-black/5' : 'bg-white/8'}`}>
+            {LAYOUT_MODES.map((mode) => {
+              const active = layoutMode === mode.id;
+              return (
+                <button
+                  key={mode.id}
+                  type="button"
+                  title={mode.label}
+                  aria-label={mode.label}
+                  aria-pressed={active}
+                  onClick={() => onLayoutModeChange(mode.id)}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] transition ${
+                    active
+                      ? (isDaylight ? 'bg-white text-black shadow-sm' : 'bg-white/18 text-white')
+                      : 'opacity-55 hover:opacity-90'
+                  }`}
+                >
+                  {mode.icon}
+                  <span className="hidden sm:inline">{mode.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       <AlbumWaterfall
+        key={layoutMode}
         items={items}
         onSelect={(item, index) => {
           if (showingPlaylists) {
@@ -275,6 +311,7 @@ const HomeView: React.FC<HomeViewProps> = ({
         isLoading={cloudSyncing || cloudLoading}
         emptyMessage={emptyCopy}
         hasFloatingPlayer={hasCurrentTrack}
+        layoutMode={layoutMode}
       />
 
       <ThemeAccentPicker

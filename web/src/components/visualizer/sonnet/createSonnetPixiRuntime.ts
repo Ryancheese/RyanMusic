@@ -90,11 +90,12 @@ export class SonnetPixiRuntime {
     static async create(options: SonnetRuntimeOptions) {
         const pixi = await import('pixi.js');
         const app = new pixi.Application();
-        const width = Math.max(options.host.clientWidth, 320);
-        const height = Math.max(options.host.clientHeight, 240);
+        const width = Math.max(Math.round(options.host.clientWidth), 320);
+        const height = Math.max(Math.round(options.host.clientHeight), 240);
         await app.init({
             width,
             height,
+            // 必须透明：舞台背景（Nomand/封面等）在 Shell 下层，不透明会整层盖住封面
             backgroundAlpha: 0,
             antialias: true,
             autoDensity: true,
@@ -115,7 +116,7 @@ export class SonnetPixiRuntime {
             throw new DOMException('Sonnet runtime creation was cancelled', 'AbortError');
         }
         options.host.appendChild(app.canvas);
-        app.canvas.style.cssText = 'width:100%;height:100%;display:block';
+        app.canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
         await runtime.preloadIcons();
         if (options.signal?.aborted) {
             runtime.destroy();
@@ -139,12 +140,14 @@ export class SonnetPixiRuntime {
 
     private resizeToHost() {
         if (this.destroyed) return false;
-        const width = Math.max(this.options.host.clientWidth, 320);
-        const height = Math.max(this.options.host.clientHeight, 240);
+        // 取整避免 DPR/子像素导致画布比宿主矮一截、底边露黑
+        const width = Math.max(Math.round(this.options.host.clientWidth), 320);
+        const height = Math.max(Math.round(this.options.host.clientHeight), 240);
         if (width === this.lastWidth && height === this.lastHeight) return false;
         this.lastWidth = width;
         this.lastHeight = height;
         this.app.renderer.resize(width, height);
+        this.app.canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
         this.clearScenes();
         this.drawCredits(width, height);
         this.drawOverlay(width, height);
@@ -223,21 +226,23 @@ export class SonnetPixiRuntime {
         if (this.options.tuning.showOnlyText || this.options.tuning.outerFrameMode === 'none') return;
         const g = new this.pixi.Graphics();
 
-        const paddingX = Math.max(30, width * 0.05);
-        const paddingY = Math.max(30, height * 0.05);
+        const paddingX = Math.max(24, width * 0.04);
+        // 底边贴紧窗口，避免 HUD 悬空留下一条「空带」
+        const paddingTop = Math.max(24, height * 0.04);
+        const paddingBottom = Math.max(10, height * 0.012);
 
         const primary = this.pixi.Color.shared.setValue(this.options.theme.primaryColor).toNumber();
         const alpha = 0.5;
 
         // Asymmetrical, partial perimeter (Not enclosing the whole screen)
         // 1. Top-Left cluster
-        g.rect(paddingX, paddingY, 30, 4).fill({ color: primary, alpha: 0.8 }); // Thick bar
-        g.moveTo(paddingX, paddingY + 16).lineTo(paddingX, paddingY + 120).stroke({ color: primary, width: 1, alpha }); // Dropping line
+        g.rect(paddingX, paddingTop, 30, 4).fill({ color: primary, alpha: 0.8 }); // Thick bar
+        g.moveTo(paddingX, paddingTop + 16).lineTo(paddingX, paddingTop + 120).stroke({ color: primary, width: 1, alpha }); // Dropping line
 
         // 2. Bottom-Right cluster
-        g.rect(width - paddingX - 4, height - paddingY - 16, 4, 16).fill({ color: primary, alpha: 0.8 }); // Thick vertical bar
-        g.moveTo(width - paddingX - 160, height - paddingY).lineTo(width - paddingX - 20, height - paddingY).stroke({ color: primary, width: 1, alpha }); // Horizontal line
-        g.moveTo(width - paddingX, height - paddingY - 180).lineTo(width - paddingX, height - paddingY - 30).stroke({ color: primary, width: 1, alpha }); // Rising line
+        g.rect(width - paddingX - 4, height - paddingBottom - 16, 4, 16).fill({ color: primary, alpha: 0.8 }); // Thick vertical bar
+        g.moveTo(width - paddingX - 160, height - paddingBottom).lineTo(width - paddingX - 20, height - paddingBottom).stroke({ color: primary, width: 1, alpha }); // Horizontal line
+        g.moveTo(width - paddingX, height - paddingBottom - 180).lineTo(width - paddingX, height - paddingBottom - 30).stroke({ color: primary, width: 1, alpha }); // Rising line
 
         // 3. Floating accents
         const drawCross = (cx: number, cy: number, size: number) => {
@@ -245,10 +250,10 @@ export class SonnetPixiRuntime {
             g.moveTo(cx, cy - size).lineTo(cx, cy + size).stroke({ color: primary, width: 1, alpha: 0.8 });
         };
         // Top-Right cross
-        drawCross(width - paddingX, paddingY + 20, 6);
+        drawCross(width - paddingX, paddingTop + 20, 6);
 
         // Bottom-Left diamond
-        g.moveTo(paddingX, height - paddingY - 4).lineTo(paddingX + 4, height - paddingY).lineTo(paddingX, height - paddingY + 4).lineTo(paddingX - 4, height - paddingY).fill({ color: primary, alpha: 0.7 });
+        g.moveTo(paddingX, height - paddingBottom - 4).lineTo(paddingX + 4, height - paddingBottom).lineTo(paddingX, height - paddingBottom + 4).lineTo(paddingX - 4, height - paddingBottom).fill({ color: primary, alpha: 0.7 });
 
         // Typographic star ✦
         const starStyle = new this.pixi.TextStyle({
@@ -258,7 +263,7 @@ export class SonnetPixiRuntime {
         });
         const starText = new this.pixi.Text({ text: '✦', style: starStyle });
         starText.alpha = 0.6;
-        starText.position.set(width - paddingX - 10, height - paddingY);
+        starText.position.set(width - paddingX - 10, height - paddingBottom);
         starText.anchor.set(1, 0.5);
 
         this.overlayContainer.addChild(g, starText);

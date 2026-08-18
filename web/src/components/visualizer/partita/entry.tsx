@@ -9,7 +9,7 @@ export default defineVisualizer({
     mode: 'partita',
     order: 30,
     labelKey: 'ui.visualizerPartita',
-    labelFallback: '云阶',
+    labelFallback: '竖阶',
     previewSeed: 'partita',
     previewStartOffset: 0,
     tuningKind: 'partita',

@@ -10,7 +10,7 @@ export default defineVisualizer({
     mode: 'diorama',
     order: 60,
     labelKey: 'ui.visualizerDiorama',
-    labelFallback: '镜台',
+    labelFallback: '景深',
     previewSeed: 'diorama',
     previewStartOffset: 0,
     tuningKind: 'diorama',

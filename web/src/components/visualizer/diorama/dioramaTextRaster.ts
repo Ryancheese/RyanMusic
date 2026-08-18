@@ -104,11 +104,15 @@ export interface DioramaUnitRaster {
 export const rasterDioramaUnit = (text: string, fontSpec: string): DioramaUnitRaster => {
     const em = DIORAMA_RASTER_FONT_PX;
     const pad = Math.ceil(em * GLOW_PAD_EM);
-    const advancePx = Math.max(1, Math.ceil(measureDioramaText(text, fontSpec)));
+    const isDotGlyph = /^[.\u00B7\u2022\u3002]$/.test(text);
+    const advancePx = isDotGlyph
+        ? Math.max(1, Math.ceil(em * 0.55))
+        : Math.max(1, Math.ceil(measureDioramaText(text, fontSpec)));
     const canvasWidthPx = advancePx + pad * 2;
     const canvasHeightPx = Math.ceil(em * LINE_BAND_EM) + pad * 2;
     const drawX = pad;
     const drawY = canvasHeightPx / 2;
+    const dotRadius = Math.max(4, em * 0.12);
 
     const draw = (paint: (ctx: CanvasRenderingContext2D) => void): THREE.CanvasTexture => {
         const canvas = document.createElement('canvas');
@@ -124,10 +128,38 @@ export const rasterDioramaUnit = (text: string, fontSpec: string): DioramaUnitRa
 
     const baseTexture = draw((ctx) => {
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(text, drawX, drawY);
+        if (isDotGlyph) {
+            ctx.beginPath();
+            ctx.arc(drawX + advancePx / 2, drawY, dotRadius, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            ctx.fillText(text, drawX, drawY);
+        }
     });
     const glowTexture = draw((ctx) => {
-        drawGlowGlyph(ctx, text, drawX, drawY, em * GLOW_BLUR_EM);
+        if (isDotGlyph) {
+            const OFFSCREEN = 10000;
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = '#ffffff';
+            const haloPass = (passBlur: number, alpha: number) => {
+                ctx.shadowColor = `rgba(255,255,255,${alpha})`;
+                ctx.shadowBlur = passBlur;
+                ctx.shadowOffsetX = OFFSCREEN;
+                ctx.shadowOffsetY = 0;
+                ctx.beginPath();
+                ctx.arc(drawX + advancePx / 2 - OFFSCREEN, drawY, dotRadius, 0, Math.PI * 2);
+                ctx.fill();
+            };
+            const blur = em * GLOW_BLUR_EM;
+            haloPass(blur, 0.95);
+            haloPass(blur, 0.85);
+            haloPass(blur * 2, 0.55);
+            haloPass(blur * 2.9, 0.3);
+            ctx.restore();
+        } else {
+            drawGlowGlyph(ctx, text, drawX, drawY, em * GLOW_BLUR_EM);
+        }
     });
 
     return { baseTexture, glowTexture, canvasWidthPx, canvasHeightPx, advancePx };
@@ -144,11 +176,14 @@ export interface DioramaLineRaster {
 
 /** Rasterise a whole (neighbour) line as one plain white texture - no glow, small pad. */
 export const rasterDioramaLine = (text: string, fontStack: string, fontWeight = DEFAULT_FONT_WEIGHT): DioramaLineRaster => {
+    const isInterlude = text === '......' || /^[.\u00B7\u2022\u3002\s]+$/.test(text.trim());
     let fontPx = DIORAMA_RASTER_FONT_PX;
     let fontSpec = buildDioramaFontSpec(fontStack, fontWeight);
-    let advancePx = Math.max(1, Math.ceil(measureDioramaText(text, fontSpec)));
+    let advancePx = isInterlude
+        ? Math.max(1, Math.ceil(fontPx * 3.2))
+        : Math.max(1, Math.ceil(measureDioramaText(text, fontSpec)));
     const pad = Math.ceil(fontPx * PLAIN_PAD_EM);
-    if (advancePx + pad * 2 > MAX_CANVAS_PX) {
+    if (!isInterlude && advancePx + pad * 2 > MAX_CANVAS_PX) {
         const shrink = (MAX_CANVAS_PX - pad * 2) / advancePx;
         fontPx = Math.max(24, Math.floor(fontPx * shrink));
         fontSpec = `${fontWeight} ${fontPx}px ${fontStack}`;
@@ -165,7 +200,22 @@ export const rasterDioramaLine = (text: string, fontStack: string, fontWeight = 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(text, pad, canvasHeightPx / 2);
+    if (isInterlude) {
+        const count = 6;
+        const radius = Math.max(4, fontPx * 0.12);
+        const gap = Math.max(8, fontPx * 0.38);
+        const totalWidth = count * radius * 2 + (count - 1) * gap;
+        let x = pad + (advancePx - totalWidth) / 2 + radius;
+        const y = canvasHeightPx / 2;
+        for (let i = 0; i < count; i += 1) {
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fill();
+            x += radius * 2 + gap;
+        }
+    } else {
+        ctx.fillText(text, pad, canvasHeightPx / 2);
+    }
 
     return { texture: makeTexture(canvas), canvasWidthPx, canvasHeightPx, advancePx, fontPx };
 };

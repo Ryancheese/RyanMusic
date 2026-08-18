@@ -108,6 +108,9 @@ const buildTimedWords = (text: string, startTime: number, endTime: number): Word
  return words;
 };
 
+/** macOS 中文字体下 "." 常渲成方块/菱形/叶形，应用 CSS/Canvas/Graphics 正圆替代 */
+export const isInterludeDotChar = (char: string): boolean => /^[.\u00B7\u2022\u3002]$/.test(char);
+
 export const isInterludeLine = (line: Pick<Line, 'fullText'>): boolean => line.fullText === INTERLUDE_FULL_TEXT;
 
 export const attachInterludes = (lines: Line[]): Line[] => {

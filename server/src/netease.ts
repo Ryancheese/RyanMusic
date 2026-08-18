@@ -95,13 +95,26 @@ export class NeteaseService {
     return res.json;
   }
 
-  async resolvePlayUrl(songid: string, cookie = ''): Promise<string | null> {
-    const cacheKey = cookie ? 'netease_play_auth' : 'netease_play';
+  static readonly QUALITY_LEVELS: Array<{ level: string; label: string; encodeType: string }> = [
+    { level: 'jymaster', label: '超清母带', encodeType: 'flac' },
+    { level: 'sky', label: '沉浸环绕', encodeType: 'flac' },
+    { level: 'jyeffect', label: '高清环绕声', encodeType: 'flac' },
+    { level: 'hires', label: 'Hi-Res', encodeType: 'flac' },
+    { level: 'lossless', label: '无损', encodeType: 'flac' },
+    { level: 'exhigh', label: '极高', encodeType: 'mp3' },
+    { level: 'higher', label: '较高', encodeType: 'mp3' },
+    { level: 'standard', label: '标准', encodeType: 'mp3' },
+  ];
+
+  async resolvePlayUrl(songid: string, cookie = '', level = ''): Promise<string | null> {
+    const cacheKey = cookie
+      ? `netease_play_auth_${level || 'auto'}`
+      : 'netease_play';
     const cached = this.cache.getTtl(cacheKey, songid);
     if (cached) return cached;
 
     if (cookie) {
-      const authUrl = await this.cookiePlayUrl(songid, cookie);
+      const authUrl = await this.cookiePlayUrl(songid, cookie, level);
       if (authUrl) {
         this.cache.setTtl(cacheKey, songid, authUrl, 600);
         return authUrl;
@@ -119,31 +132,53 @@ export class NeteaseService {
     return null;
   }
 
-  async cookiePlayUrl(songid: string, cookie: string): Promise<string | null> {
+  async probePlayQualities(songid: string, cookie: string): Promise<Array<{
+    level: string;
+    label: string;
+    br?: number;
+    size?: number;
+  }>> {
+    const id = Number(songid);
+    if (!id || !cookie) return [];
+    const hits = await Promise.all(
+      NeteaseService.QUALITY_LEVELS.map(async (item) => {
+        const hit = await this.fetchPlayUrlForLevel(id, cookie, item.level, item.encodeType);
+        if (!hit) return null;
+        return {
+          level: item.level,
+          label: item.label,
+          br: hit.br,
+          size: hit.size,
+        };
+      }),
+    );
+    return hits.filter((item): item is NonNullable<typeof item> => Boolean(item));
+  }
+
+  async cookiePlayUrl(songid: string, cookie: string, preferredLevel = ''): Promise<string | null> {
     const id = Number(songid);
     if (!id || !cookie) return null;
-    // Folia: /song/url/v1?level=exhigh&randomCNIP=true&https=true, encodeType=flac。
-    // standard 对会员曲常返回空链接。
-    const levels = ['exhigh', 'higher', 'standard'];
-    const encodeTypes = ['flac', 'mp3'];
-    for (const level of levels) {
-      for (const encodeType of encodeTypes) {
-        const res = await eapiRequest(
-          '/api/song/enhance/player/url/v1',
-          { ids: `[${id}]`, level, encodeType },
-          cookie,
-        );
-        const item = res.json?.data?.[0];
-        const url = item?.url as string | undefined;
-        if (item?.freeTrialInfo) continue;
-        if (url && !isBadMediaUrl(url) && !/\/404/i.test(url)) {
-          return httpsNeteaseUrl(url);
-        }
+    const preferred = NeteaseService.QUALITY_LEVELS.find((item) => item.level === preferredLevel);
+    // 未指定档位时只试 320k 附近，避免登录态串行探测母带拖慢首包
+    const ordered = preferred
+      ? [preferred]
+      : NeteaseService.QUALITY_LEVELS.filter((item) =>
+        ['exhigh', 'higher', 'standard'].includes(item.level)
+      );
+
+    for (const item of ordered) {
+      const hit = await this.fetchPlayUrlForLevel(id, cookie, item.level, item.encodeType);
+      if (hit?.url) return hit.url;
+    }
+    if (preferred) {
+      for (const item of NeteaseService.QUALITY_LEVELS.filter((item) => item.level !== preferred.level)) {
+        const hit = await this.fetchPlayUrlForLevel(id, cookie, item.level, item.encodeType);
+        if (hit?.url) return hit.url;
       }
     }
     const weapi = await weapiRequest(
       '/weapi/song/enhance/player/url/v1',
-      { ids: `[${id}]`, level: 'exhigh', encodeType: 'flac' },
+      { ids: `[${id}]`, level: preferredLevel || 'exhigh', encodeType: preferredLevel ? 'flac' : 'mp3' },
       cookie,
     );
     const item = weapi.json?.data?.[0];
@@ -152,6 +187,28 @@ export class NeteaseService {
       return httpsNeteaseUrl(url);
     }
     return null;
+  }
+
+  private async fetchPlayUrlForLevel(
+    id: number,
+    cookie: string,
+    level: string,
+    encodeType: string,
+  ): Promise<{ url: string; br?: number; size?: number } | null> {
+    const res = await eapiRequest(
+      '/api/song/enhance/player/url/v1',
+      { ids: `[${id}]`, level, encodeType },
+      cookie,
+    );
+    const item = res.json?.data?.[0];
+    const url = item?.url as string | undefined;
+    if (item?.freeTrialInfo) return null;
+    if (!url || isBadMediaUrl(url) || /\/404/i.test(url)) return null;
+    return {
+      url: httpsNeteaseUrl(url),
+      br: typeof item?.br === 'number' ? item.br : undefined,
+      size: typeof item?.size === 'number' ? item.size : undefined,
+    };
   }
 
   private async officialPlayUrl(songid: string): Promise<string | null> {

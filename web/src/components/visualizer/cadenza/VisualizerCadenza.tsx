@@ -1599,36 +1599,68 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
                     overlay.appendChild(overlayWord.outer);
                 }
 
-                overlayWord.outer.style.transform = `translate3d(${overlayAnchorX}px, ${overlayAnchorY}px, 0) rotate(${animatedState.rotation}deg) scale(${animatedState.scale})`;
-                overlayWord.outer.style.transformOrigin = '0 0';
-                overlayWord.inner.style.font = preparedState.font;
-                overlayWord.inner.style.transform = `translate3d(${overlayOffsetX}px, ${overlayOffsetY}px, 0)`;
-                overlayWord.body.textContent = placement.text;
-                overlayWord.body.style.color = textColor;
-                overlayWord.body.style.opacity = animatedState.bodyAlpha.toString();
-                overlayWord.body.style.filter = animatedState.blur > 0.05 ? `blur(${animatedState.blur.toFixed(2)}px)` : 'none';
+                if (placement.isInterlude) {
+                    // 正圆 CSS 点：不套用随机旋转，避免在透视下看起来像椭圆
+                    const dotSize = Math.max(8, Math.round(preparedState.fontPx * 0.28));
+                    overlayWord.outer.style.transform = `translate3d(${overlayAnchorX}px, ${overlayAnchorY}px, 0) scale(${animatedState.scale})`;
+                    overlayWord.inner.style.transform = `translate3d(${-dotSize / 2}px, ${-dotSize / 2}px, 0)`;
+                    let dot = overlayWord.body.firstElementChild as HTMLSpanElement | null;
+                    if (!dot || dot.dataset.interludeDot !== '1') {
+                        overlayWord.body.replaceChildren();
+                        dot = document.createElement('span');
+                        dot.dataset.interludeDot = '1';
+                        dot.style.display = 'block';
+                        dot.style.boxSizing = 'border-box';
+                        dot.style.aspectRatio = '1 / 1';
+                        dot.style.borderRadius = '50%';
+                        overlayWord.body.appendChild(dot);
+                        overlayWord.body.style.color = 'transparent';
+                        overlayWord.glow.replaceChildren();
+                        overlayWord.glyphSpans = [];
+                        overlayWord.glyphSignature = '';
+                    }
+                    dot.style.width = `${dotSize}px`;
+                    dot.style.height = `${dotSize}px`;
+                    dot.style.minWidth = `${dotSize}px`;
+                    dot.style.minHeight = `${dotSize}px`;
+                    dot.style.backgroundColor = textColor;
+                    dot.style.opacity = animatedState.bodyAlpha.toString();
+                    dot.style.filter = animatedState.blur > 0.05 ? `blur(${animatedState.blur.toFixed(2)}px)` : 'none';
+                } else {
+                    overlayWord.outer.style.transform = `translate3d(${overlayAnchorX}px, ${overlayAnchorY}px, 0) rotate(${animatedState.rotation}deg) scale(${animatedState.scale})`;
+                    overlayWord.outer.style.transformOrigin = '0 0';
+                    overlayWord.inner.style.font = preparedState.font;
+                    overlayWord.inner.style.transform = `translate3d(${overlayOffsetX}px, ${overlayOffsetY}px, 0)`;
+                    if (overlayWord.body.firstElementChild instanceof HTMLElement && overlayWord.body.firstElementChild.dataset.interludeDot === '1') {
+                        overlayWord.body.replaceChildren();
+                    }
+                    overlayWord.body.textContent = placement.text;
+                    overlayWord.body.style.color = textColor;
+                    overlayWord.body.style.opacity = animatedState.bodyAlpha.toString();
+                    overlayWord.body.style.filter = animatedState.blur > 0.05 ? `blur(${animatedState.blur.toFixed(2)}px)` : 'none';
 
-                const glowTexts = shouldSplitGlow ? glyphs : [placement.text];
-                syncOverlayGlyphSpans(overlayWord, glowTexts);
+                    const glowTexts = shouldSplitGlow ? glyphs : [placement.text];
+                    syncOverlayGlyphSpans(overlayWord, glowTexts);
 
-                if (shouldSplitGlow) {
-                    overlayWord.glyphSpans.forEach((glyphSpan, glyphIndex) => {
-                        const absoluteIndex = placement.fragmentStartInWord + glyphIndex;
-                        const intensity = getClassicCharGlow(
-                            time,
-                            placement.word,
-                            absoluteIndex,
-                            Math.max(placement.wordGraphemeCount, glyphs.length),
-                            placement.wordGraphemeTimings,
-                        ) * clamp(animatedState.glowAlpha, 0, 1) * Math.max(tuning.glowIntensity, 0);
+                    if (shouldSplitGlow) {
+                        overlayWord.glyphSpans.forEach((glyphSpan, glyphIndex) => {
+                            const absoluteIndex = placement.fragmentStartInWord + glyphIndex;
+                            const intensity = getClassicCharGlow(
+                                time,
+                                placement.word,
+                                absoluteIndex,
+                                Math.max(placement.wordGraphemeCount, glyphs.length),
+                                placement.wordGraphemeTimings,
+                            ) * clamp(animatedState.glowAlpha, 0, 1) * Math.max(tuning.glowIntensity, 0);
 
-                        glyphSpan.style.textShadow = buildDomTextShadow(placement.color, intensity, blurScale);
-                    });
-                } else if (overlayWord.glyphSpans[0]) {
-                    const intensity = getClassicGlowEnvelope(time, lineTiming, placement.word)
-                        * clamp(animatedState.glowAlpha, 0, 1)
-                        * Math.max(tuning.glowIntensity, 0);
-                    overlayWord.glyphSpans[0].style.textShadow = buildDomTextShadow(placement.color, intensity, blurScale);
+                            glyphSpan.style.textShadow = buildDomTextShadow(placement.color, intensity, blurScale);
+                        });
+                    } else if (overlayWord.glyphSpans[0]) {
+                        const intensity = getClassicGlowEnvelope(time, lineTiming, placement.word)
+                            * clamp(animatedState.glowAlpha, 0, 1)
+                            * Math.max(tuning.glowIntensity, 0);
+                        overlayWord.glyphSpans[0].style.textShadow = buildDomTextShadow(placement.color, intensity, blurScale);
+                    }
                 }
 
             });

@@ -12,6 +12,7 @@ import { colorWithAlpha, mixColors } from '../colorMix';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import { buildWordColorRanges } from '../wordColoring';
+import { isInterludeDotChar } from '../../../utils/lyrics/parserCore';
 
 // src/components/visualizer/claddagh/VisualizerCladdagh.tsx
 
@@ -119,6 +120,7 @@ const claddaghSpacingCache = new Map<string, number[]>();
 
 const getFallbackGraphemeWidth = (char: string, fontPx: number): number => {
     if (/^\s+$/.test(char)) return fontPx * 0.36;
+    if (isInterludeDotChar(char)) return fontPx * 0.55;
     if (isCJKChar(char)) return fontPx;
     return fontPx * 0.62;
 };
@@ -713,7 +715,22 @@ const RingLine: React.FC<RingLineProps> = ({
                         color: baseColor,
                     }}
                 >
-                    {item.char}
+                    {isInterludeDotChar(item.char) ? (
+                        <span
+                            aria-hidden
+                            style={{
+                                display: 'block',
+                                boxSizing: 'border-box',
+                                width: Math.max(4, baseFontSize * 0.22),
+                                height: Math.max(4, baseFontSize * 0.22),
+                                borderRadius: '50%',
+                                backgroundColor: 'currentColor',
+                                aspectRatio: '1 / 1',
+                            }}
+                        />
+                    ) : (
+                        item.char
+                    )}
                 </span>
             ))}
         </div>

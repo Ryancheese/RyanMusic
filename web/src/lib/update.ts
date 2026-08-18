@@ -1,4 +1,5 @@
 import { isMacosApp } from './media';
+import { APP_VERSION, compareSemver } from '../whatsNew';
 
 const RELEASES_URL = 'https://github.com/Ryancheese/RyanMusic/releases/latest';
 const GITHUB_LATEST = 'https://api.github.com/repos/Ryancheese/RyanMusic/releases/latest';
@@ -47,9 +48,12 @@ export async function checkAppUpdate(): Promise<AppUpdateInfo> {
     if (!res.ok) throw new Error('无法读取 GitHub Releases');
     const json = await res.json() as { tag_name?: string; body?: string; html_url?: string };
     const latest = String(json.tag_name || '').replace(/^v/i, '');
+    const current = APP_VERSION;
+    const hasUpdate = Boolean(latest) && compareSemver(current, latest) < 0;
     return {
       ok: true,
-      hasUpdate: Boolean(latest),
+      hasUpdate,
+      current,
       latest,
       notes: String(json.body || ''),
       url: json.html_url || RELEASES_URL,
@@ -58,6 +62,7 @@ export async function checkAppUpdate(): Promise<AppUpdateInfo> {
     return {
       ok: false,
       hasUpdate: false,
+      current: APP_VERSION,
       url: RELEASES_URL,
       error: error instanceof Error ? error.message : '检查更新失败',
     };

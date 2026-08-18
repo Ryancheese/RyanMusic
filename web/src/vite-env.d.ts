@@ -10,6 +10,9 @@ interface Window {
       ryanUpdate?: {
         postMessage: (payload: { action: 'check' | 'install' }) => void;
       };
+      ryanChrome?: {
+        postMessage: (payload: { daylight: boolean }) => void;
+      };
     };
   };
 }
