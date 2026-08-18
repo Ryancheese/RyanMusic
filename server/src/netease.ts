@@ -134,8 +134,14 @@ export class NeteaseService {
       }
     }
 
-    let url = await this.bootstrapPlayUrl(songid);
-    if (url && !isBadMediaUrl(url) && !/\/404/.test(url)) {
+    // Folia 网关（music.90svip.cn）在部分机房会 520，不能再把它当唯一私链。
+    // 与 Meting、匿名官链并行，谁先给出可播地址就用谁。
+    const url = await firstTruthy([
+      () => this.publicPlayUrl(songid),
+      () => this.bootstrapPlayUrl(songid),
+      () => this.metingPlayUrl(songid),
+    ]);
+    if (url && /^https?:\/\//i.test(url) && !/\/404/i.test(url)) {
       const safeUrl = httpsNeteaseUrl(url);
       this.cache.setTtl('netease_play_v4', songid, safeUrl, 600);
       return safeUrl;
@@ -243,6 +249,13 @@ export class NeteaseService {
     );
   }
 
+  private async publicPlayUrl(songid: string): Promise<string | null> {
+    const id = Number(songid);
+    if (!id) return null;
+    const hit = await this.fetchPlayUrlForLevel(id, '', 'exhigh', 'mp3');
+    return hit?.url || null;
+  }
+
   private async bootstrapPlayUrl(songid: string): Promise<string | null> {
     const base = bootstrapBase();
     if (!base) return null;
@@ -252,14 +265,18 @@ export class NeteaseService {
         Referer: `${base}/`,
       },
       body: { input: songid, filter: 'id', type: 'netease', page: 1 },
+      timeoutMs: 6000,
     });
     const apiPath = res.json?.data?.[0]?.url as string | undefined;
     if (!apiPath) return null;
     const api = `${base}/${apiPath.replace(/^\//, '')}`;
     let loc = await followLocation(api, `${base}/`);
     if (!loc) return null;
+    if (isBadMediaUrl(loc) || /\/404/i.test(loc)) return null;
     if (/(126\.net|163\.com|music\.163)/i.test(loc)) return loc;
-    return (await followLocation(loc, `${base}/`)) || loc;
+    const nested = await followLocation(loc, `${base}/`);
+    if (nested && !isBadMediaUrl(nested) && !/\/404/i.test(nested)) return nested;
+    return loc;
   }
 
   private async metingPlayUrl(songid: string): Promise<string | null> {
@@ -269,9 +286,12 @@ export class NeteaseService {
     ];
     for (const endpoint of endpoints) {
       const loc = await followLocation(endpoint, 'https://api.injahow.cn/');
-      if (loc && !isBadMediaUrl(loc) && /(126\.net|163\.com|music\.163)/i.test(loc)) return loc;
+      if (loc && /(126\.net|163\.com|music\.163)/i.test(loc) && !/\/404/i.test(loc)) {
+        return loc;
+      }
+      if (!loc) return endpoint;
     }
-    return null;
+    return endpoints[0] || null;
   }
 
   async resolvePicUrl(songid: string): Promise<string | null> {

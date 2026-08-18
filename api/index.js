@@ -184,13 +184,13 @@ async function requestBuffer(url, options = {}) {
     return null;
   }
 }
-async function followLocation(url, referer) {
+async function followLocation(url, referer, timeoutMs = 8e3) {
   try {
     const res = await fetch(url, {
       method: "GET",
       redirect: "manual",
       headers: { "User-Agent": UA, Referer: referer },
-      signal: AbortSignal.timeout(2e4)
+      signal: AbortSignal.timeout(timeoutMs)
     });
     const loc = res.headers.get("location");
     if (loc) return new URL(loc, url).toString();
@@ -4097,8 +4097,12 @@ var NeteaseService = class _NeteaseService {
         return authUrl;
       }
     }
-    let url = await this.bootstrapPlayUrl(songid);
-    if (url && !isBadMediaUrl(url) && !/\/404/.test(url)) {
+    const url = await firstTruthy([
+      () => this.publicPlayUrl(songid),
+      () => this.bootstrapPlayUrl(songid),
+      () => this.metingPlayUrl(songid)
+    ]);
+    if (url && /^https?:\/\//i.test(url) && !/\/404/i.test(url)) {
       const safeUrl = httpsNeteaseUrl(url);
       this.cache.setTtl("netease_play_v4", songid, safeUrl, 600);
       return safeUrl;
@@ -4185,6 +4189,12 @@ var NeteaseService = class _NeteaseService {
       privilege && (privilege.resConsumable || privilege.userConsumable) && time > 0
     );
   }
+  async publicPlayUrl(songid) {
+    const id = Number(songid);
+    if (!id) return null;
+    const hit = await this.fetchPlayUrlForLevel(id, "", "exhigh", "mp3");
+    return hit?.url || null;
+  }
   async bootstrapPlayUrl(songid) {
     const base = bootstrapBase();
     if (!base) return null;
@@ -4193,15 +4203,19 @@ var NeteaseService = class _NeteaseService {
         "X-Requested-With": "XMLHttpRequest",
         Referer: `${base}/`
       },
-      body: { input: songid, filter: "id", type: "netease", page: 1 }
+      body: { input: songid, filter: "id", type: "netease", page: 1 },
+      timeoutMs: 6e3
     });
     const apiPath = res.json?.data?.[0]?.url;
     if (!apiPath) return null;
     const api = `${base}/${apiPath.replace(/^\//, "")}`;
     let loc = await followLocation(api, `${base}/`);
     if (!loc) return null;
+    if (isBadMediaUrl(loc) || /\/404/i.test(loc)) return null;
     if (/(126\.net|163\.com|music\.163)/i.test(loc)) return loc;
-    return await followLocation(loc, `${base}/`) || loc;
+    const nested = await followLocation(loc, `${base}/`);
+    if (nested && !isBadMediaUrl(nested) && !/\/404/i.test(nested)) return nested;
+    return loc;
   }
   async metingPlayUrl(songid) {
     const endpoints = [
@@ -4210,9 +4224,12 @@ var NeteaseService = class _NeteaseService {
     ];
     for (const endpoint of endpoints) {
       const loc = await followLocation(endpoint, "https://api.injahow.cn/");
-      if (loc && !isBadMediaUrl(loc) && /(126\.net|163\.com|music\.163)/i.test(loc)) return loc;
+      if (loc && /(126\.net|163\.com|music\.163)/i.test(loc) && !/\/404/i.test(loc)) {
+        return loc;
+      }
+      if (!loc) return endpoint;
     }
-    return null;
+    return endpoints[0] || null;
   }
   async resolvePicUrl(songid) {
     const encoded = encodeLinuxData({
@@ -4463,9 +4480,10 @@ var QqService = class {
     }
     const url = await firstTruthy([
       () => this.pyqPlayUrl(songmid),
-      () => this.bootstrapPlayUrl(songmid)
+      () => this.bootstrapPlayUrl(songmid),
+      () => this.metingPlayUrl(songmid)
     ]);
-    if (url && !isBadMediaUrl(url)) {
+    if (url && /^https?:\/\//i.test(url) && !/\/404/i.test(url)) {
       this.cache.setTtl("qq_play", songmid, url, 1800);
       return url;
     }
@@ -4524,7 +4542,8 @@ var QqService = class {
     if (!base) return null;
     const res = await request("POST", `${base}/`, {
       headers: { "X-Requested-With": "XMLHttpRequest", Referer: `${base}/` },
-      body: { input: songmid, filter: "id", type: "qq", page: 1 }
+      body: { input: songmid, filter: "id", type: "qq", page: 1 },
+      timeoutMs: 6e3
     });
     const apiPath = res.json?.data?.[0]?.url;
     if (!apiPath) return null;
@@ -4559,12 +4578,24 @@ var QqService = class {
     if (/stream\.qqmusic\.qq\.com|aqqmusic\.tc\.qq\.com/i.test(loc)) return loc;
     return await followLocation(loc, "https://y.qq.com/") || loc;
   }
+  async metingPlayUrl(songmid) {
+    const endpoints = [
+      `https://api.injahow.cn/meting/?server=tencent&type=url&id=${encodeURIComponent(songmid)}`,
+      `https://api.injahow.cn/meting/?type=url&id=${encodeURIComponent(songmid)}`
+    ];
+    for (const endpoint of endpoints) {
+      const loc = await followLocation(endpoint, "https://api.injahow.cn/");
+      if (loc && /qqmusic|tc\.qq\.com/i.test(loc) && !/\/404/i.test(loc)) return loc;
+    }
+    return null;
+  }
   async bootstrapPlayUrl(songmid) {
     const base = bootstrapBase();
     if (!base) return null;
     const res = await request("POST", `${base}/`, {
       headers: { "X-Requested-With": "XMLHttpRequest", Referer: `${base}/` },
-      body: { input: songmid, filter: "id", type: "qq", page: 1 }
+      body: { input: songmid, filter: "id", type: "qq", page: 1 },
+      timeoutMs: 6e3
     });
     const apiPath = res.json?.data?.[0]?.url;
     if (!apiPath) return null;

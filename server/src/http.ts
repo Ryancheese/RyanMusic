@@ -167,13 +167,13 @@ export async function requestBuffer(
   }
 }
 
-export async function followLocation(url: string, referer: string): Promise<string | null> {
+export async function followLocation(url: string, referer: string, timeoutMs = 8000): Promise<string | null> {
   try {
     const res = await fetch(url, {
       method: 'GET',
       redirect: 'manual',
       headers: { 'User-Agent': UA, Referer: referer },
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const loc = res.headers.get('location');
     if (loc) return new URL(loc, url).toString();

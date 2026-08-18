@@ -164,8 +164,9 @@ export class QqService {
     const url = await firstTruthy([
       () => this.pyqPlayUrl(songmid),
       () => this.bootstrapPlayUrl(songmid),
+      () => this.metingPlayUrl(songmid),
     ]);
-    if (url && !isBadMediaUrl(url)) {
+    if (url && /^https?:\/\//i.test(url) && !/\/404/i.test(url)) {
       this.cache.setTtl('qq_play', songmid, url, 1800);
       return url;
     }
@@ -230,6 +231,7 @@ export class QqService {
     const res = await request('POST', `${base}/`, {
       headers: { 'X-Requested-With': 'XMLHttpRequest', Referer: `${base}/` },
       body: { input: songmid, filter: 'id', type: 'qq', page: 1 },
+      timeoutMs: 6000,
     });
     const apiPath = res.json?.data?.[0]?.url as string | undefined;
     if (!apiPath) return null;
@@ -266,12 +268,25 @@ export class QqService {
     return (await followLocation(loc, 'https://y.qq.com/')) || loc;
   }
 
+  private async metingPlayUrl(songmid: string): Promise<string | null> {
+    const endpoints = [
+      `https://api.injahow.cn/meting/?server=tencent&type=url&id=${encodeURIComponent(songmid)}`,
+      `https://api.injahow.cn/meting/?type=url&id=${encodeURIComponent(songmid)}`,
+    ];
+    for (const endpoint of endpoints) {
+      const loc = await followLocation(endpoint, 'https://api.injahow.cn/');
+      if (loc && /qqmusic|tc\.qq\.com/i.test(loc) && !/\/404/i.test(loc)) return loc;
+    }
+    return null;
+  }
+
   private async bootstrapPlayUrl(songmid: string): Promise<string | null> {
     const base = bootstrapBase();
     if (!base) return null;
     const res = await request('POST', `${base}/`, {
       headers: { 'X-Requested-With': 'XMLHttpRequest', Referer: `${base}/` },
       body: { input: songmid, filter: 'id', type: 'qq', page: 1 },
+      timeoutMs: 6000,
     });
     const apiPath = res.json?.data?.[0]?.url as string | undefined;
     if (!apiPath) return null;

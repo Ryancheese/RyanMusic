@@ -55,4 +55,9 @@ test('trial media urls are rejected', () => {
   assert.equal(isBadMediaUrl('https://m801.music.126.net/freeTrial/foo.mp3'), true);
   assert.equal(isBadMediaUrl('https://music.163.com/404'), true);
   assert.equal(isBadMediaUrl('https://m801.music.126.net/full.mp3'), false);
+  assert.equal(
+    isTrialMediaUrl('https://m702.music.126.net/20260818190500/hash/jd-musicrep-ts/song.mp3?vuutv=abc+def'),
+    false,
+  );
+  assert.equal(isBadMediaUrl('https://api.injahow.cn/meting/?server=netease&type=url&id=1'), false);
 });
