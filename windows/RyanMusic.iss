@@ -2,7 +2,7 @@
 ; 由 windows/build-app.ps1 调用 ISCC 编译
 
 #ifndef AppVersion
-  #define AppVersion "1.8.46"
+  #define AppVersion "1.8.56"
 #endif
 
 #ifndef DistDir
