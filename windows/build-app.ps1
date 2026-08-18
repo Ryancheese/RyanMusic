@@ -7,6 +7,8 @@
 
 param(
   [switch]$BundlePhp,
+  [switch]$BundleNode,
+  [switch]$NoBundleNode,
   [switch]$SkipInstaller,
   [switch]$AlsoZip,
   # 兼容旧参数：跳过压缩包（现默认就不打 zip）
@@ -28,6 +30,10 @@ $Csproj = Join-Path $WinDir "RyanMusic.csproj"
 $PhpZipUrl = "https://windows.php.net/downloads/releases/latest/php-8.3-nts-Win32-vs16-x64-latest.zip"
 # 固定版本，避免 download.php 跳转到 HTML 页面
 $InnoSetupVersion = "6.7.3"
+$NodeBundleVersion = if ($env:NODE_BUNDLE_VERSION) { $env:NODE_BUNDLE_VERSION } else { "22.18.0" }
+# 默认内嵌 Node；可用 -NoBundleNode 跳过
+$ShouldBundleNode = -not $NoBundleNode.IsPresent
+if ($BundleNode.IsPresent) { $ShouldBundleNode = $true }
 $InnoSetupUrl = "https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-$InnoSetupVersion.exe"
 
 # 刷新 PATH，避免刚装完 SDK 找不到
@@ -76,6 +82,47 @@ max_execution_time=60
 display_errors=0
 "@
   Set-Content -Path $iniPath -Value $ini -Encoding ASCII
+}
+
+function Install-BundledNode([string]$TargetNodeDir) {
+  Write-Host "==> 下载便携 Node $NodeBundleVersion"
+  $name = "node-v$NodeBundleVersion-win-x64"
+  $url = "https://nodejs.org/dist/v$NodeBundleVersion/$name.zip"
+  $cacheDir = Join-Path $Root "dist\.cache"
+  New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+  $zipFile = Join-Path $cacheDir "$name.zip"
+  try {
+    if (-not (Test-Path $zipFile) -or ((Get-Item $zipFile).Length -lt 1MB)) {
+      Write-Host "    $url"
+      & curl.exe -fL --retry 3 --retry-all-errors --max-time 600 -o $zipFile $url
+      if ($LASTEXITCODE -ne 0 -or -not (Test-Path $zipFile) -or ((Get-Item $zipFile).Length -lt 1MB)) {
+        throw "便携 Node 下载失败：$url"
+      }
+    } else {
+      Write-Host "    复用缓存：$zipFile"
+    }
+
+    $extractDir = Join-Path $cacheDir $name
+    if (Test-Path $extractDir) {
+      Remove-Item -Recurse -Force $extractDir
+    }
+    Expand-Archive -Path $zipFile -DestinationPath $cacheDir -Force
+
+    $nodeExe = Get-ChildItem -Path $extractDir -Filter "node.exe" -Recurse -ErrorAction SilentlyContinue |
+      Select-Object -First 1
+    if (-not $nodeExe) {
+      throw "Node zip 中未找到 node.exe"
+    }
+
+    if (Test-Path $TargetNodeDir) {
+      Remove-Item -Recurse -Force $TargetNodeDir
+    }
+    New-Item -ItemType Directory -Path $TargetNodeDir | Out-Null
+    Copy-Item -Path $nodeExe.FullName -Destination (Join-Path $TargetNodeDir "node.exe") -Force
+    Write-Host "    已安装：$(Join-Path $TargetNodeDir 'node.exe')"
+  } catch {
+    throw
+  }
 }
 
 function Install-BundledPhp([string]$TargetPhpDir) {
@@ -368,6 +415,10 @@ if (Test-Path $icoSrc) {
 # 安装包不需要调试符号与 XML 文档
 Get-ChildItem -Path $DistDir -Include *.pdb,*.xml -Recurse -ErrorAction SilentlyContinue |
   Remove-Item -Force -ErrorAction SilentlyContinue
+
+if ($ShouldBundleNode) {
+  Install-BundledNode (Join-Path $DistDir "node")
+}
 
 if ($BundlePhp) {
   Install-BundledPhp (Join-Path $DistDir "php")

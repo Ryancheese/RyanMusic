@@ -86,10 +86,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         do {
             port = try Self.pickPort(startingAt: 18765)
-            if let node = Self.findNode(), let serverJs = Self.serverJs() {
+            let node = Self.findNode()
+            let serverJs = Self.serverJs()
+            if let node, let serverJs {
                 try startNode(nodePath: node, serverJs: serverJs, webRoot: webRoot, port: port)
+            } else if serverJs == nil {
+                Self.alert("安装包缺少 server.mjs。\n请重新下载完整安装包，或从源码重新打包。")
+                NSApp.terminate(nil)
+                return
             } else {
-                Self.alert("未找到 Node.js。\n请安装 Node 22+ 后重试，或使用已内嵌 server.mjs 的安装包。")
+                Self.alert("未找到 Node.js。\n请安装 Node 22+，或使用已内嵌 Node 的安装包（推荐从 GitHub Releases 下载）。")
                 NSApp.terminate(nil)
                 return
             }
@@ -687,12 +693,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     static func findNode() -> String? {
+        let home = NSHomeDirectory() as NSString
         let bundle = Bundle.main.bundlePath as NSString
-        let bundled = bundle.appendingPathComponent("Contents/Resources/node/bin/node")
-        if FileManager.default.isExecutableFile(atPath: bundled) {
-            return bundled
-        }
-        for path in ["/opt/homebrew/bin/node", "/usr/local/bin/node"] where FileManager.default.isExecutableFile(atPath: path) {
+        let candidates = [
+            bundle.appendingPathComponent("Contents/Resources/node/bin/node"),
+            "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
+            home.appendingPathComponent(".local/share/fnm/aliases/default/bin/node"),
+            home.appendingPathComponent(".fnm/aliases/default/bin/node"),
+            home.appendingPathComponent(".nvm/current/bin/node"),
+            home.appendingPathComponent(".volta/bin/node"),
+        ]
+        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
             return path
         }
         let process = Process()

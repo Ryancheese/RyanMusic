@@ -279,10 +279,20 @@ public sealed class MainForm : Form
             {
                 StartNode(node, serverJs, webRoot, _port);
             }
+            else if (serverJs == null)
+            {
+                MessageBox.Show(
+                    "安装包缺少 server.mjs。\n请重新下载完整安装包，或从源码重新打包。",
+                    "RyanMusic",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+                Close();
+                return;
+            }
             else
             {
                 MessageBox.Show(
-                    "未找到 Node.js。\n请安装 Node 22+ 后重试，或使用已内嵌 server.mjs 的安装包。",
+                    "未找到 Node.js。\n请安装 Node 22+，或使用已内嵌 Node 的安装包（推荐从 GitHub Releases 下载）。",
                     "RyanMusic",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);

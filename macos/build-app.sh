@@ -16,21 +16,26 @@ SRC_MUSIC="$ROOT/maicong-music"
 SRC_SWIFT="$ROOT/macos/AppMain.swift"
 
 BUNDLE_PHP=0
+BUNDLE_NODE=1
 MAKE_DMG=0
+# 与官方 Node LTS 对齐；安装包内嵌后用户无需系统安装 Node
+NODE_BUNDLE_VERSION="${NODE_BUNDLE_VERSION:-22.18.0}"
 ARCH_NAME="$(uname -m)"
 case "$ARCH_NAME" in
-  arm64|aarch64) ARCH_LABEL="arm64" ;;
-  x86_64) ARCH_LABEL="x64" ;;
-  *) ARCH_LABEL="$ARCH_NAME" ;;
+  arm64|aarch64) ARCH_LABEL="arm64"; NODE_DIST_ARCH="arm64" ;;
+  x86_64) ARCH_LABEL="x64"; NODE_DIST_ARCH="x64" ;;
+  *) ARCH_LABEL="$ARCH_NAME"; NODE_DIST_ARCH="$ARCH_NAME" ;;
 esac
 DMG_PATH="$DIST_DIR/${APP_NAME}-mac-${ARCH_LABEL}.dmg"
 
 for arg in "$@"; do
   case "$arg" in
     --bundle-php) BUNDLE_PHP=1 ;;
+    --bundle-node) BUNDLE_NODE=1 ;;
+    --no-bundle-node) BUNDLE_NODE=0 ;;
     --dmg) MAKE_DMG=1 ;;
     -h|--help)
-      echo "Usage: $0 [--bundle-php] [--dmg]"
+      echo "Usage: $0 [--bundle-php] [--bundle-node|--no-bundle-node] [--dmg]"
       exit 0
       ;;
   esac
@@ -185,6 +190,47 @@ resign_php_bundle() {
     [[ -e "$f" ]] || continue
     codesign --force --sign - "$f" >/dev/null 2>&1 || true
   done
+}
+
+bundle_official_node() {
+  local dest_root="$1"
+  local ver="$NODE_BUNDLE_VERSION"
+  local arch="$NODE_DIST_ARCH"
+  local name="node-v${ver}-darwin-${arch}"
+  local url="https://nodejs.org/dist/v${ver}/${name}.tar.gz"
+  local cache_dir="$ROOT/dist/.cache"
+  local tarball="$cache_dir/${name}.tar.gz"
+  local extract_dir="$cache_dir/${name}"
+  local node_bin
+
+  mkdir -p "$cache_dir"
+  if [[ ! -f "$tarball" ]]; then
+    echo "==> download Node ${ver} (${arch})"
+    curl -fL --retry 3 --retry-all-errors -o "$tarball" "$url"
+  else
+    echo "==> reuse cached Node ${ver} (${arch})"
+  fi
+
+  rm -rf "$extract_dir"
+  mkdir -p "$extract_dir"
+  tar -xzf "$tarball" -C "$cache_dir"
+  node_bin="$extract_dir/bin/node"
+  if [[ ! -x "$node_bin" ]]; then
+    echo "error: Node binary missing in $tarball" >&2
+    exit 1
+  fi
+
+  mkdir -p "$dest_root/bin"
+  rm -rf "$dest_root/bin/node"
+  cp -f "$node_bin" "$dest_root/bin/node"
+  chmod +x "$dest_root/bin/node"
+  codesign --force --sign - "$dest_root/bin/node" >/dev/null 2>&1 || true
+
+  if ! "$dest_root/bin/node" -v >/dev/null 2>&1; then
+    echo "warn: bundled node -v failed" >&2
+  else
+    echo "    bundled Node OK: $("$dest_root/bin/node" -v)"
+  fi
 }
 
 bundle_homebrew_php() {
@@ -383,6 +429,10 @@ echo "==> build Node backend"
   npm run build
 )
 cp -f "$ROOT/server/dist/server.mjs" "$RESOURCES_DIR/server.mjs"
+
+if [[ "$BUNDLE_NODE" -eq 1 ]]; then
+  bundle_official_node "$RESOURCES_DIR/node"
+fi
 
 if [[ "$BUNDLE_PHP" -eq 1 ]]; then
   bundle_homebrew_php "$RESOURCES_DIR/php"
