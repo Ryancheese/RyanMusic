@@ -263,32 +263,10 @@ public sealed class MainForm : Form
     {
         try
         {
-            var php = FindPhp();
-            if (php == null)
-            {
-                MessageBox.Show(
-                    "未找到可用的 PHP（需启用 curl）。\n请重装 RyanMusic，或安装 PHP 并启用 curl 扩展。",
-                    "RyanMusic",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-                Close();
-                return;
-            }
-
-            if (!PhpHasCurl(php))
-            {
-                MessageBox.Show(
-                    "当前 PHP 未启用 Curl 模块，无法启动。\n\n已检测到：\n" + php +
-                    "\n\n请使用安装包自带 PHP，或在 php.ini 中启用 extension=curl 后重试。",
-                    "RyanMusic",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-                Close();
-                return;
-            }
-
             var webRoot = ResolveWebRoot();
-            if (!Directory.Exists(webRoot) || !File.Exists(Path.Combine(webRoot, "index.php")))
+            if (!Directory.Exists(webRoot) ||
+                (!File.Exists(Path.Combine(webRoot, "index.php")) &&
+                 !Directory.Exists(Path.Combine(webRoot, "static"))))
             {
                 MessageBox.Show($"找不到站点目录：\n{webRoot}", "RyanMusic", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 Close();
@@ -296,7 +274,40 @@ public sealed class MainForm : Form
             }
 
             _port = PickPort(18765);
-            StartPhp(php, webRoot, _port);
+            var node = FindNode();
+            var serverJs = ResolveServerJs();
+            if (node != null && serverJs != null)
+            {
+                StartNode(node, serverJs, webRoot, _port);
+            }
+            else
+            {
+                var php = FindPhp();
+                if (php == null)
+                {
+                    MessageBox.Show(
+                        "未找到 Node.js 或 PHP。\n请安装 Node 22+，或使用仍内嵌 PHP 的安装包。",
+                        "RyanMusic",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    Close();
+                    return;
+                }
+
+                if (!PhpHasCurl(php))
+                {
+                    MessageBox.Show(
+                        "当前 PHP 未启用 Curl 模块，无法启动。\n\n已检测到：\n" + php +
+                        "\n\n请使用安装包自带 PHP，或在 php.ini 中启用 extension=curl 后重试。",
+                        "RyanMusic",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    Close();
+                    return;
+                }
+
+                StartPhp(php, webRoot, _port);
+            }
 
             // Program Files 下默认 UserData 无写权限 → E_ACCESSDENIED
             var options = new CoreWebView2EnvironmentOptions
@@ -688,6 +699,118 @@ public sealed class MainForm : Form
         if (!_phpProcess.Start())
         {
             throw new InvalidOperationException("无法启动 PHP 进程");
+        }
+        _phpProcess.BeginOutputReadLine();
+        _phpProcess.BeginErrorReadLine();
+    }
+
+    private static string? ResolveServerJs()
+    {
+        var baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var candidates = new[]
+        {
+            Path.Combine(baseDir, "server.mjs"),
+            Path.Combine(baseDir, "server", "dist", "server.mjs"),
+            Path.GetFullPath(Path.Combine(baseDir, "..", "server", "dist", "server.mjs")),
+            Path.GetFullPath(Path.Combine(baseDir, "..", "..", "server", "dist", "server.mjs")),
+            Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "server", "dist", "server.mjs")),
+        };
+        foreach (var c in candidates)
+        {
+            if (File.Exists(c))
+            {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    private static string? FindNode()
+    {
+        var candidates = new List<string>();
+        void AddCandidate(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            var full = Path.GetFullPath(path);
+            if (File.Exists(full) &&
+                !candidates.Exists(x => string.Equals(x, full, StringComparison.OrdinalIgnoreCase)))
+            {
+                candidates.Add(full);
+            }
+        }
+
+        AddCandidate(Path.Combine(AppContext.BaseDirectory, "node", "node.exe"));
+        var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
+        foreach (var dir in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            AddCandidate(Path.Combine(dir.Trim('"'), "node.exe"));
+        }
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "where.exe",
+                Arguments = "node",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var p = Process.Start(psi);
+            var output = p?.StandardOutput.ReadToEnd() ?? "";
+            p?.WaitForExit(3000);
+            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (line.EndsWith("node.exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    AddCandidate(line);
+                }
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return candidates.Count > 0 ? candidates[0] : null;
+    }
+
+    private void StartNode(string nodePath, string serverJs, string webRoot, int port)
+    {
+        _logPath = Path.Combine(ResolveDataDir(), "ryanmusic-server.log");
+        try
+        {
+            File.WriteAllText(
+                _logPath,
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] RyanMusic Node log\r\nnode={nodePath}\r\nserver={serverJs}\r\nroot={webRoot}\r\nport={port}\r\nlan={FormatLanUrl(port)}\r\n\r\n");
+        }
+        catch
+        {
+            // ignore
+        }
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = nodePath,
+            Arguments =
+                $"\"{serverJs}\" --listen 0.0.0.0 --port {port} --web-root \"{webRoot}\" --cache-dir \"{ResolveDataDir("cache")}\"",
+            WorkingDirectory = webRoot,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        psi.Environment["RYANMUSIC_CACHE_DIR"] = ResolveDataDir("cache");
+        _phpProcess = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        _phpProcess.OutputDataReceived += (_, e) => AppendLog(e.Data);
+        _phpProcess.ErrorDataReceived += (_, e) => AppendLog(e.Data);
+        if (!_phpProcess.Start())
+        {
+            throw new InvalidOperationException("无法启动 Node 服务");
         }
         _phpProcess.BeginOutputReadLine();
         _phpProcess.BeginErrorReadLine();

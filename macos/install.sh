@@ -45,25 +45,50 @@ find_php() {
   return 1
 }
 
-ensure_php() {
-  if find_php >/dev/null; then
-    green "已检测到 PHP：$(find_php)"
+find_node() {
+  local candidates=(/opt/homebrew/bin/node /usr/local/bin/node)
+  local c
+  for c in "${candidates[@]}"; do
+    if [[ -x "$c" ]]; then
+      echo "$c"
+      return 0
+    fi
+  done
+  if command -v node >/dev/null 2>&1; then
+    command -v node
+    return 0
+  fi
+  return 1
+}
+
+ensure_node() {
+  if find_node >/dev/null; then
+    green "已检测到 Node：$(find_node) ($("$(find_node)" -v))"
     return 0
   fi
 
-  yellow "未检测到 PHP，尝试通过 Homebrew 安装…"
+  yellow "未检测到 Node.js，尝试通过 Homebrew 安装…"
   if ! command -v brew >/dev/null 2>&1; then
     red "未安装 Homebrew。请先安装：https://brew.sh"
-    red "或手动执行：brew install php"
+    red "或手动执行：brew install node"
     exit 1
   fi
 
-  brew install php
-  if ! find_php >/dev/null; then
-    red "PHP 安装后仍不可用，请检查 PATH 后重试。"
+  brew install node
+  hash -r 2>/dev/null || true
+  if ! find_node >/dev/null; then
+    red "Node 安装后仍不可用，请检查 PATH 后重试。"
     exit 1
   fi
-  green "PHP 安装完成：$(find_php)"
+  green "Node 安装完成：$(find_node)"
+}
+
+note_php_fallback() {
+  if find_php >/dev/null; then
+    green "已检测到 PHP（Node 不可用时的回退）：$(find_php)"
+  else
+    yellow "未检测到 PHP。桌面端将使用 Node 后端。"
+  fi
 }
 
 ensure_swiftc() {
@@ -134,7 +159,8 @@ build_and_install() {
 
 main() {
   require_macos
-  ensure_php
+  ensure_node
+  note_php_fallback
   ensure_swiftc
 
   local root

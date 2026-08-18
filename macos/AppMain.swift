@@ -69,12 +69,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         // 纯代码启动的 NSApp 默认无 Edit 菜单；缺少 paste: 时 Cmd+V 无法进入 WKWebView
         installMainMenu()
 
-        guard let php = Self.findPHP() else {
-            Self.alert("未找到 PHP。\n请使用官方 DMG（已内嵌 PHP），或执行：brew install php")
-            NSApp.terminate(nil)
-            return
-        }
-
         let webRoot = Self.webRoot()
         guard FileManager.default.fileExists(atPath: webRoot) else {
             Self.alert("找不到站点目录：\n\(webRoot)")
@@ -84,7 +78,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         do {
             port = try Self.pickPort(startingAt: 18765)
-            try startPHP(phpPath: php, webRoot: webRoot, port: port)
+            if let node = Self.findNode(), let serverJs = Self.serverJs() {
+                try startNode(nodePath: node, serverJs: serverJs, webRoot: webRoot, port: port)
+            } else if let php = Self.findPHP() {
+                try startPHP(phpPath: php, webRoot: webRoot, port: port)
+            } else {
+                Self.alert("未找到 Node.js 或 PHP。\n请安装 Node 22+，或使用仍内嵌 PHP 的 DMG。")
+                NSApp.terminate(nil)
+                return
+            }
         } catch {
             Self.alert("启动服务失败：\(error.localizedDescription)")
             NSApp.terminate(nil)
@@ -530,6 +532,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         phpProcess = process
     }
 
+    private func startNode(nodePath: String, serverJs: String, webRoot: String, port: Int) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: nodePath)
+        let cacheDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("RyanMusic/cache").path
+            ?? (NSTemporaryDirectory() + "RyanMusicCache")
+        try FileManager.default.createDirectory(atPath: cacheDir, withIntermediateDirectories: true)
+        process.arguments = [
+            serverJs,
+            "--listen", "0.0.0.0",
+            "--port", String(port),
+            "--web-root", webRoot,
+            "--cache-dir", cacheDir,
+        ]
+        var env = ProcessInfo.processInfo.environment
+        for key in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"] {
+            env.removeValue(forKey: key)
+        }
+        env["NO_PROXY"] = "*"
+        env["no_proxy"] = "*"
+        env["RYANMUSIC_CACHE_DIR"] = cacheDir
+        process.environment = env
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        phpProcess = process
+    }
+
     private func stopPHP() {
         guard let process = phpProcess, process.isRunning else { return }
         process.terminate()
@@ -583,6 +613,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     static func webRoot() -> String {
         let bundle = Bundle.main.bundlePath
         return (bundle as NSString).appendingPathComponent("Contents/Resources/maicong-music")
+    }
+
+    static func serverJs() -> String? {
+        let bundle = Bundle.main.bundlePath as NSString
+        let candidates = [
+            bundle.appendingPathComponent("Contents/Resources/server.mjs"),
+            bundle.appendingPathComponent("Contents/Resources/server/dist/server.mjs"),
+        ]
+        return candidates.first { FileManager.default.isReadableFile(atPath: $0) }
+    }
+
+    static func findNode() -> String? {
+        let bundle = Bundle.main.bundlePath as NSString
+        let bundled = bundle.appendingPathComponent("Contents/Resources/node/bin/node")
+        if FileManager.default.isExecutableFile(atPath: bundled) {
+            return bundled
+        }
+        for path in ["/opt/homebrew/bin/node", "/usr/local/bin/node"] where FileManager.default.isExecutableFile(atPath: path) {
+            return path
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = ["node"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let path = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !path.isEmpty, FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        } catch {
+            return nil
+        }
+        return nil
     }
 
     static func findPHP() -> String? {

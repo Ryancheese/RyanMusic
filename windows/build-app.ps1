@@ -339,6 +339,26 @@ if ($LASTEXITCODE -ge 8) {
 }
 New-Item -ItemType Directory -Force -Path (Join-Path $MusicDst "core\cache") | Out-Null
 
+Write-Host "==> 构建 Node 后端"
+$ServerDir = Join-Path $Root "server"
+if (-not (Test-Path (Join-Path $ServerDir "package.json"))) {
+  Write-Error "找不到 $ServerDir"
+}
+Push-Location $ServerDir
+try {
+  if (Test-Path "package-lock.json") { npm ci } else { npm install }
+  if ($LASTEXITCODE -ne 0) { throw "npm ci 失败" }
+  npm run build
+  if ($LASTEXITCODE -ne 0) { throw "server build 失败" }
+} finally {
+  Pop-Location
+}
+$serverJs = Join-Path $ServerDir "dist\server.mjs"
+if (-not (Test-Path $serverJs)) {
+  Write-Error "未生成 $serverJs"
+}
+Copy-Item $serverJs (Join-Path $DistDir "server.mjs") -Force
+
 # 复制图标到输出目录（备用）
 $icoSrc = Join-Path $WinDir "AppIcon.ico"
 if (Test-Path $icoSrc) {
@@ -359,7 +379,7 @@ RyanMusic Windows
 =================
 
 安装版：双击 RyanMusic-Setup-x64.exe，按向导完成安装。
-本目录为安装包内容（已内嵌 PHP），也可直接运行 RyanMusic.exe。
+本目录为安装包内容（已内嵌 Node 后端；若无 Node 则回退 PHP），也可直接运行 RyanMusic.exe。
 
 系统要求：
 - Windows 10/11 x64

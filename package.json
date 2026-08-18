@@ -1,0 +1,8 @@
+{
+  "name": "ryanmusic",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "hono": "^4.7.11"
+  }
+}

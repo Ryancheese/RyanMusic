@@ -1,0 +1,21 @@
+{
+  "name": "ryanmusic-server",
+  "private": true,
+  "version": "1.8.55",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts --",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --packages=bundle --outfile=dist/server.mjs",
+    "start": "node dist/server.mjs",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "hono": "^4.7.11"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "esbuild": "^0.25.5",
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.2"
+  }
+}

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
-const phpOrigin = process.env.VITE_PHP_ORIGIN || 'http://127.0.0.1:8088';
+const phpOrigin = process.env.VITE_API_ORIGIN || process.env.VITE_PHP_ORIGIN || 'http://127.0.0.1:8088';
 
 function copyManifestPlugin() {
   return {
@@ -62,7 +62,7 @@ function proxyPhpPlugin() {
         );
         proxyReq.on('error', () => {
           res.statusCode = 502;
-          res.end('PHP backend unavailable. Start PHP on ' + phpOrigin);
+          res.end('API backend unavailable. Start Node on ' + phpOrigin);
         });
         req.pipe(proxyReq);
       });

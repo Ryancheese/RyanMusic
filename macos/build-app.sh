@@ -376,6 +376,14 @@ rsync -a \
 
 mkdir -p "$RESOURCES_DIR/maicong-music/core/cache"
 
+echo "==> build Node backend"
+(
+  cd "$ROOT/server"
+  if [[ -f package-lock.json ]]; then npm ci; else npm install; fi
+  npm run build
+)
+cp -f "$ROOT/server/dist/server.mjs" "$RESOURCES_DIR/server.mjs"
+
 if [[ "$BUNDLE_PHP" -eq 1 ]]; then
   bundle_homebrew_php "$RESOURCES_DIR/php"
 fi

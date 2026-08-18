@@ -8,6 +8,7 @@ web/.next/
 .vercel
 maicong-music/core/cache/
 dist/
+server/dist/
 macos/AppIcon.iconset/
 windows/bin/
 windows/obj/

@@ -1,31 +1,14 @@
 {
   "functions": {
-    "api/*.php": {
-      "runtime": "vercel-php@0.9.0",
+    "api/index.ts": {
       "memory": 1024,
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "maicong-music/**"
     }
   },
-  "routes": [
-    {
-      "src": "/static/(.*)",
-      "dest": "/maicong-music/static/$1"
-    },
-    {
-      "src": "/favicon.ico",
-      "dest": "/maicong-music/favicon.ico"
-    },
-    {
-      "src": "/help.php",
-      "dest": "/api/help.php"
-    },
-    {
-      "src": "/disclaimer.php",
-      "dest": "/api/disclaimer.php"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/api/index.php"
-    }
+  "rewrites": [
+    { "source": "/static/(.*)", "destination": "/maicong-music/static/$1" },
+    { "source": "/favicon.ico", "destination": "/maicong-music/favicon.ico" },
+    { "source": "/(.*)", "destination": "/api" }
   ]
 }

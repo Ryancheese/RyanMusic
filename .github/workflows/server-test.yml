@@ -1,0 +1,26 @@
+name: Server tests
+
+on:
+  push:
+    paths: ["server/**", "api/**"]
+  pull_request:
+    paths: ["server/**", "api/**"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Test and build
+        run: |
+          cd server
+          npm ci
+          npm test
+          npm run build
+          test -s dist/server.mjs

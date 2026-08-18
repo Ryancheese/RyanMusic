@@ -37,30 +37,65 @@ function Find-Php {
   return $null
 }
 
-function Ensure-Php {
-  $php = Find-Php
-  if (-not $php) {
-    Write-Yellow "未检测到 PHP，尝试通过 winget 安装…"
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-      Write-Red "未找到 winget。请手动安装 PHP：https://windows.php.net/download/"
-      Write-Red "或：winget install --id PHP.PHP.8.3 -e"
-      exit 1
-    }
+function Find-Node {
+  $cmd = Get-Command node -ErrorAction SilentlyContinue
+  if ($cmd) { return $cmd.Source }
+  $candidates = @(
+    (Join-Path "${env:ProgramFiles}" "nodejs\node.exe"),
+    (Join-Path "${env:ProgramFiles(x86)}" "nodejs\node.exe"),
+    (Join-Path $env:LOCALAPPDATA "Programs\nodejs\node.exe")
+  )
+  foreach ($c in $candidates) {
+    if ($c -and (Test-Path $c)) { return $c }
+  }
+  return $null
+}
 
-    winget install --id PHP.PHP.8.3 -e --accept-package-agreements --accept-source-agreements
-    Refresh-Path
-
-    $php = Find-Php
-    if (-not $php) {
-      Write-Red "PHP 安装后仍不可用，请重新打开终端后再试。"
-      exit 1
-    }
-    Write-Green "PHP 安装完成：$php"
-  } else {
-    Write-Green "已检测到 PHP：$php"
+function Ensure-Node {
+  Refresh-Path
+  $node = Find-Node
+  if ($node) {
+    Write-Green "已检测到 Node：$node ($(& $node -v))"
+    return
   }
 
-  Enable-PhpExtensions $php
+  Write-Yellow "未检测到 Node.js，尝试通过 winget 安装…"
+  if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+    Write-Red "未找到 winget。请手动安装 Node 22+：https://nodejs.org/"
+    Write-Red "或：winget install --id OpenJS.NodeJS.LTS -e"
+    exit 1
+  }
+
+  winget install --id OpenJS.NodeJS.LTS -e --accept-package-agreements --accept-source-agreements
+  Refresh-Path
+
+  $nodeCandidates = @(
+    (Join-Path "${env:ProgramFiles}" "nodejs"),
+    (Join-Path "${env:ProgramFiles(x86)}" "nodejs")
+  )
+  foreach ($dir in $nodeCandidates) {
+    if (Test-Path (Join-Path $dir "node.exe")) {
+      $env:Path = $dir + ";" + $env:Path
+      break
+    }
+  }
+
+  $node = Find-Node
+  if (-not $node) {
+    Write-Red "Node 安装后仍不可用，请重新打开终端后再试。"
+    exit 1
+  }
+  Write-Green "Node 安装完成：$node"
+}
+
+function Note-PhpFallback {
+  $php = Find-Php
+  if ($php) {
+    Write-Green "已检测到 PHP（Node 不可用时的回退）：$php"
+    Enable-PhpExtensions $php
+  } else {
+    Write-Yellow "未检测到 PHP。桌面端将使用 Node 后端。"
+  }
 }
 
 function Enable-PhpExtensions([string]$phpExe) {
@@ -126,6 +161,8 @@ function Refresh-Path {
   $extra = @(
     "${env:ProgramFiles}\dotnet",
     "${env:ProgramFiles(x86)}\dotnet",
+    "${env:ProgramFiles}\nodejs",
+    "${env:ProgramFiles(x86)}\nodejs",
     "$env:USERPROFILE\.dotnet\tools",
     "$env:LOCALAPPDATA\Microsoft\WinGet\Links"
   ) | Where-Object { $_ -and (Test-Path $_) }
@@ -305,18 +342,20 @@ function Stop-RunningApp {
     }
   }
 
-  # 结束占用安装目录的内嵌 PHP（命令行含 InstallDir）
+  # 结束占用安装目录的内嵌 Node / PHP（命令行含 InstallDir）
   try {
     $installLower = $InstallDir.ToLowerInvariant()
-    Get-CimInstance Win32_Process -Filter "Name='php.exe'" -ErrorAction SilentlyContinue | ForEach-Object {
-      $cmd = $_.CommandLine
-      if (-not $cmd) { return }
-      $cmdLower = $cmd.ToLowerInvariant()
-      if ($cmdLower.Contains($installLower) -or $cmdLower.Contains('ryanmusic\maicong-music')) {
-        try {
-          Write-Yellow "结束 PHP (PID $($_.ProcessId))"
-          Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
-        } catch { }
+    foreach ($procName in @("node.exe", "php.exe")) {
+      Get-CimInstance Win32_Process -Filter "Name='$procName'" -ErrorAction SilentlyContinue | ForEach-Object {
+        $cmd = $_.CommandLine
+        if (-not $cmd) { return }
+        $cmdLower = $cmd.ToLowerInvariant()
+        if ($cmdLower.Contains($installLower) -or $cmdLower.Contains('ryanmusic\maicong-music') -or $cmdLower.Contains('server.mjs')) {
+          try {
+            Write-Yellow "结束 $($_.Name) (PID $($_.ProcessId))"
+            Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
+          } catch { }
+        }
       }
     }
   } catch { }
@@ -348,7 +387,7 @@ function Clear-InstallDir {
   if (Test-Path (Join-Path $InstallDir "RyanMusic.exe")) {
     Write-Red "安装目录仍被占用：$InstallDir"
     Write-Red "请先完全退出 RyanMusic（任务栏/托盘也关掉），再重新运行安装命令。"
-    Write-Yellow "或任务管理器结束 RyanMusic.exe / php.exe 后重试。"
+    Write-Yellow "或任务管理器结束 RyanMusic.exe / node.exe / php.exe 后重试。"
     exit 1
   }
 }
@@ -398,7 +437,8 @@ function Build-And-Install([string]$root) {
 
 try {
   Assert-Windows
-  Ensure-Php
+  Ensure-Node
+  Note-PhpFallback
   Ensure-Dotnet
 
   $root = Resolve-RepoRoot

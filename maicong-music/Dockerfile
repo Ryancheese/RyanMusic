@@ -1,13 +1,6 @@
-FROM php:8.2-apache
-
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends libcurl4-openssl-dev libonig-dev \
-  && docker-php-ext-install curl mbstring \
-  && apt-get clean \
-  && rm -rf /var/lib/apt/lists/*
-
-RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
-
-COPY . /var/www/html/
-
-EXPOSE 80
+# 后端已迁到仓库根目录的 Node 22 镜像。
+# 请在仓库根执行：docker compose up
+# 本目录 docker-compose.yml 也会把构建上下文指向上一级 Dockerfile。
+FROM node:22-alpine
+WORKDIR /app
+CMD ["sh", "-c", "echo 'Build from repo root: docker compose up' && exit 1"]
