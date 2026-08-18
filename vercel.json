@@ -1,14 +1,31 @@
 {
   "functions": {
-    "api/index.ts": {
+    "api/index.js": {
       "memory": 1024,
       "maxDuration": 60,
-      "includeFiles": "maicong-music/**"
+      "includeFiles": "maicong-music/static/app/**"
     }
   },
   "rewrites": [
     { "source": "/static/(.*)", "destination": "/maicong-music/static/$1" },
     { "source": "/favicon.ico", "destination": "/maicong-music/favicon.ico" },
+    {
+      "source": "/",
+      "has": [{ "type": "header", "key": "x-requested-with", "value": "XMLHttpRequest" }],
+      "destination": "/api"
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "query", "key": "cover" }],
+      "destination": "/api"
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "query", "key": "download" }],
+      "destination": "/api"
+    },
+    { "source": "/api.php", "destination": "/api" },
+    { "source": "/", "destination": "/maicong-music/static/app/index.html" },
     { "source": "/(.*)", "destination": "/api" }
   ]
 }

@@ -2,6 +2,9 @@
   "name": "ryanmusic",
   "private": true,
   "type": "module",
+  "scripts": {
+    "vercel-build": "npm --prefix server ci && npm --prefix server run build:vercel"
+  },
   "dependencies": {
     "hono": "^4.7.11"
   }
