@@ -880,6 +880,17 @@ public sealed class MainForm : Form
             RedirectStandardError = true
         };
         psi.Environment["RYANMUSIC_CACHE_DIR"] = ResolveDataDir("cache");
+        foreach (var key in new[]
+        {
+            "http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+            "all_proxy", "ALL_PROXY", "socks_proxy", "SOCKS_PROXY",
+            "socks5_proxy", "SOCKS5_PROXY", "ftp_proxy", "FTP_PROXY",
+        })
+        {
+            psi.Environment.Remove(key);
+        }
+        psi.Environment["NO_PROXY"] = "*";
+        psi.Environment["no_proxy"] = "*";
         _phpProcess = new Process { StartInfo = psi, EnableRaisingEvents = true };
         _phpProcess.OutputDataReceived += (_, e) => AppendLog(e.Data);
         _phpProcess.ErrorDataReceived += (_, e) => AppendLog(e.Data);

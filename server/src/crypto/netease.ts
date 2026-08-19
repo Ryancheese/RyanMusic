@@ -1,6 +1,7 @@
 import { createCipheriv, createHash, randomInt } from 'node:crypto';
 import { NETEASE_UA, randomCnIp, withOsPcCookie } from '../config.ts';
 import { request, type HttpResult } from '../http.ts';
+import { firstTruthy } from '../util.ts';
 
 const LINUX_KEY = Buffer.from('7246674226682325323F5E6544673A51', 'hex');
 const WEAPI_PRESET = '0CoJUm6Qyw8W8jud';
@@ -92,6 +93,7 @@ export async function neteaseHttp(
   body?: Record<string, string> | string,
   cookie = '',
   extraHeaders: Record<string, string> = {},
+  timeoutMs = 3_500,
 ): Promise<HttpResult> {
   const cnIp = randomCnIp();
   const headers: Record<string, string> = {
@@ -106,6 +108,7 @@ export async function neteaseHttp(
     headers: cookieMap(headers, cookie ? withOsPcCookie(cookie) : cookie),
     body,
     redirect: 'manual',
+    timeoutMs,
   });
 }
 
@@ -154,7 +157,7 @@ export async function weapiRequest(
   const encoded = weapiEncode(data);
   const csrf = cookieCsrf(cookie);
   const url = `https://music.163.com${path}${path.includes('?') ? '&' : '?'}csrf_token=${encodeURIComponent(csrf)}`;
-  return neteaseHttp('POST', url, encoded, cookie);
+  return neteaseHttp('POST', url, encoded, cookie, {}, 3_000);
 }
 
 function eapiClientHeader(cookie: string): Record<string, string> {
@@ -187,7 +190,6 @@ export async function eapiRequest(
   const encoded = eapiEncode(apiPath, payload);
   const eapiSuffix = `/eapi/${apiPath.replace(/^\/api\//, '')}`;
   const hosts = [
-    'https://interfacepc.music.163.com',
     'https://interface.music.163.com',
     'https://music.163.com',
   ];
@@ -196,7 +198,23 @@ export async function eapiRequest(
   );
   if (cookie) cookieParts.push(withOsPcCookie(cookie));
   const cnIp = randomCnIp();
-  let last: HttpResult = {
+  const headers = {
+    'User-Agent': NETEASE_UA,
+    Referer: 'https://music.163.com/',
+    Origin: 'https://music.163.com',
+    Cookie: cookieParts.join('; '),
+    'X-Real-IP': cnIp,
+    'X-Forwarded-For': cnIp,
+  };
+  const hit = await firstTruthy(hosts.map((host) => async () => {
+    const res = await request('POST', host + eapiSuffix, {
+      headers,
+      body: encoded,
+      timeoutMs: 1_800,
+    });
+    return res.ok && res.json ? res : null;
+  }));
+  return hit || {
     ok: false,
     status: 0,
     body: '',
@@ -205,19 +223,4 @@ export async function eapiRequest(
     headers: new Headers(),
     error: 'eapi 全部失败',
   };
-  for (const host of hosts) {
-    last = await request('POST', host + eapiSuffix, {
-      headers: {
-        'User-Agent': NETEASE_UA,
-        Referer: 'https://music.163.com/',
-        Origin: 'https://music.163.com',
-        Cookie: cookieParts.join('; '),
-        'X-Real-IP': cnIp,
-        'X-Forwarded-For': cnIp,
-      },
-      body: encoded,
-    });
-    if (last.ok && last.json) return last;
-  }
-  return last;
 }

@@ -615,7 +615,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             "--cache-dir", cacheDir,
         ]
         var env = ProcessInfo.processInfo.environment
-        for key in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"] {
+        // 剥离 Clash/Surge 等注入的代理环境，避免 Node 出站被 VPN 劫持
+        let proxyEnvKeys = [
+            "http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+            "all_proxy", "ALL_PROXY", "socks_proxy", "SOCKS_PROXY",
+            "socks5_proxy", "SOCKS5_PROXY", "socks5h_proxy", "SOCKS5H_PROXY",
+            "ftp_proxy", "FTP_PROXY"
+        ]
+        for key in proxyEnvKeys {
             env.removeValue(forKey: key)
         }
         env["NO_PROXY"] = "*"

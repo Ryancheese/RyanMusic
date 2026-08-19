@@ -2,7 +2,7 @@ import { bootstrapBase, UA, type Track } from './config.ts';
 import { FileCache } from './cache.ts';
 import { followLocation, request } from './http.ts';
 import { proxyUrl } from './sign.ts';
-import { decodeEntities, firstTruthy, isBadMediaUrl, jsonpToJson, nameSearchSourcePage, sliceNameSearchSongids } from './util.ts';
+import { decodeEntities, firstTruthy, isBadMediaUrl, isQqPrivatePlayUrl, isQqTrialMediaUrl, jsonpToJson, nameSearchSourcePage, sliceNameSearchSongids } from './util.ts';
 
 export class QqService {
   private readonly playInflight = new Map<string, Promise<string | null>>();
@@ -151,25 +151,55 @@ export class QqService {
   }
 
   private async resolvePlayUrlInner(songmid: string, cookie = ''): Promise<string | null> {
-    const cacheKey = cookie ? 'qq_play_auth' : 'qq_play';
+    const cacheKey = cookie ? 'qq_play_auth_v6' : 'qq_play_v6';
     const cached = this.cache.getTtl(cacheKey, songmid);
-    if (cached) return cached;
+    if (cached && !isQqTrialMediaUrl(cached)) return cached;
+
+    // 非会员绝走私链。官方 GetVkey 对 VIP 曲会给 30 秒试听，不能抢在私链前面。
     if (cookie) {
       const official = await this.officialPlayUrl(songmid, cookie);
-      if (official) {
+      if (official && !await this.looksLikeTrialMedia(official)) {
         this.cache.setTtl(cacheKey, songmid, official, 600);
         return official;
       }
     }
+
     const url = await firstTruthy([
       () => this.pyqPlayUrl(songmid),
       () => this.bootstrapPlayUrl(songmid),
     ]);
-    if (url && !isBadMediaUrl(url)) {
-      this.cache.setTtl('qq_play', songmid, url, 1800);
+    if (url && !isBadMediaUrl(url) && !await this.looksLikeTrialMedia(url)) {
+      this.cache.setTtl('qq_play_v6', songmid, url, 1800);
       return url;
     }
     return null;
+  }
+
+  private async looksLikeTrialMedia(url: string, filename = ''): Promise<boolean> {
+    if (isQqTrialMediaUrl(url, filename)) return true;
+    if (isQqPrivatePlayUrl(url)) return false;
+    const total = await this.probeContentLength(url);
+    // 约 30 秒 96k 试听通常 < 900KB；完整 C400 四分钟也在 2MB 以上
+    return total > 0 && total < 900_000;
+  }
+
+  private async probeContentLength(url: string): Promise<number> {
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Range: 'bytes=0-0',
+          Referer: 'https://y.qq.com/',
+          'User-Agent': UA,
+        },
+        signal: AbortSignal.timeout(2_000),
+      });
+      const range = res.headers.get('content-range') || '';
+      const fromRange = range.match(/\/(\d+)\s*$/);
+      return Number(fromRange?.[1] || res.headers.get('content-length') || 0);
+    } catch {
+      return 0;
+    }
   }
 
   private async pyqPlayUrl(songmid: string): Promise<string | null> {
@@ -200,7 +230,7 @@ export class QqService {
           songmid: [songmid],
           songtype: [0],
           uin,
-          loginflag: 1,
+          loginflag: cookie ? 1 : 0,
           platform: '20',
         },
       },
@@ -212,14 +242,17 @@ export class QqService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
-      timeoutMs: 6000,
+      timeoutMs: 2_500,
     });
     const data = res.json?.req_0?.data;
-    const purl = String(data?.midurlinfo?.[0]?.purl || '');
+    const info = data?.midurlinfo?.[0] || {};
+    const purl = String(info.purl || '');
+    const filename = String(info.filename || '');
     if (!purl) return null;
     const sip = String(data?.sip?.[0] || 'https://dl.stream.qqmusic.qq.com/');
     const url = `${sip.replace(/\/$/, '')}/${purl.replace(/^\//, '')}`;
-    return isBadMediaUrl(url) ? null : url;
+    if (isBadMediaUrl(url) || isQqTrialMediaUrl(url, filename)) return null;
+    return url;
   }
 
   private async getPyqCode(songmid: string): Promise<string | null> {
@@ -260,10 +293,10 @@ export class QqService {
       code,
       cache: formatCacheStamp(),
     })}`;
-    const loc = await followLocation(play, 'https://y.qq.com/');
+    const loc = await followLocation(play, 'https://y.qq.com/', 4_500);
     if (!loc) return null;
     if (/stream\.qqmusic\.qq\.com|aqqmusic\.tc\.qq\.com/i.test(loc)) return loc;
-    return (await followLocation(loc, 'https://y.qq.com/')) || loc;
+    return (await followLocation(loc, 'https://y.qq.com/', 4_500)) || loc;
   }
 
   private async bootstrapPlayUrl(songmid: string): Promise<string | null> {

@@ -139,6 +139,20 @@ export function isBadMediaUrl(url?: string | null): boolean {
   return false;
 }
 
+/** QQ 朋友圈/私链：带 code 或 myhkw fromtag，不是官方 GetVkey 试听 */
+export function isQqPrivatePlayUrl(url: string): boolean {
+  return /fromtag=myhkw|fcg_pyq_play|[?&]code=/i.test(url);
+}
+
+/** 官方未登录/非会员对 VIP 曲返回的试听文件 */
+export function isQqTrialMediaUrl(url: string, filename = ''): boolean {
+  if (!url && !filename) return false;
+  const hay = `${url} ${filename}`;
+  if (isQqPrivatePlayUrl(url)) return false;
+  if (/(RS02|TSA|试听)/i.test(hay)) return true;
+  return false;
+}
+
 export function httpsNeteaseUrl(url: string): string {
   if (url.startsWith('http://') && /(126\.net|163\.com)/i.test(url)) {
     return `https://${url.slice(7)}`;

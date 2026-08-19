@@ -7,6 +7,7 @@ import { useLyricSettingsStore } from '../store/lyricSettingsStore';
 import { coverRefreshUrl } from '../api';
 import { toFoliaTheme } from '../lib/visualizer';
 import VisualizerRenderer from './visualizer/VisualizerRenderer';
+import CommentAtmosphereOverlay from './CommentAtmosphereOverlay';
 import RyanLoader from './RyanLoader';
 
 interface PlayerViewProps {
@@ -99,6 +100,12 @@ const PlayerView: React.FC<PlayerViewProps> = ({
             isPlayerChromeHidden={chromeHidden}
             onLyricLineSeek={onLyricLineSeek}
             background={background}
+          />
+          <CommentAtmosphereOverlay
+            track={track}
+            isDaylight={isDaylight}
+            chromeHidden={chromeHidden}
+            isPanelOpen={isPanelOpen}
           />
         </div>
       ) : (

@@ -1,13 +1,16 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValueEvent } from 'framer-motion';
 import type { Line, Word } from '../../../types';
 import { buildWordGraphemeTimings, type GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
-import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
+import { resolveThemeFontStack, resolveThemeFontWeight, resolveThemeTranslationFontStack } from '../../../utils/fontStacks';
 import { isInterludeLine } from '../../../utils/lyrics/parserCore';
+import { resolveLyricAlternateText, resolveSubtitleContentMode } from '../../../utils/lyrics/alternateText';
 import { type VisualizerSharedProps } from '../definition';
-import { mixColors } from '../colorMix';
+import { colorWithAlpha, mixColors } from '../colorMix';
 import VisualizerShell from '../VisualizerShell';
 import InterludeDots from '../../InterludeDots';
+
+const hasReadableLyricText = (text?: string | null) => !!text && /[\p{L}\p{N}]/u.test(text);
 
 interface SpotlightGlyph {
   id: string;
@@ -54,6 +57,7 @@ function resolveSpotlightTypeScale(
   railWidth: number,
   railHeight: number,
   lyricsFontScale: number,
+  subtitleFontScale: number,
 ) {
   const w = Math.max(320, railWidth || 960);
   const h = Math.max(280, railHeight || 640);
@@ -66,10 +70,13 @@ function resolveSpotlightTypeScale(
   const nearPx = Math.round(Math.max(16, activePx * 0.48));
   const farPx = Math.round(Math.max(14, activePx * 0.36));
   const titlePx = Math.round(Math.min(84, Math.max(32, activePx * 1.08)));
+  const translationPx = Math.round(
+    Math.min(30, Math.max(13, activePx * 0.34)) * subtitleFontScale,
+  );
   const lineGapPx = Math.round(Math.max(14, activePx * 0.42));
   const contentMaxWidthPx = Math.round(Math.min(w * 0.92, Math.max(420, w * 0.72)));
 
-  return { activePx, nearPx, farPx, titlePx, lineGapPx, contentMaxWidthPx };
+  return { activePx, nearPx, farPx, titlePx, translationPx, lineGapPx, contentMaxWidthPx };
 }
 
 function isBlankChar(char: string) {
@@ -351,10 +358,15 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
     currentLineIndex,
     lines,
     theme,
+    subtitleTheme,
     audioPower,
     audioBands,
     showText = true,
     lyricsFontScale = 1,
+    subtitleFontScale = 1,
+    showSubtitleTranslation = true,
+    subtitleContentMode,
+    hideTranslationSubtitle = false,
     songTitle,
     songArtist,
     onLyricLineSeek,
@@ -382,9 +394,24 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
 
   const dockPx = isPlayerChromeHidden ? 24 : DOCK_RESERVE_PX;
   const typeScale = useMemo(
-    () => resolveSpotlightTypeScale(railSize.width, railSize.height, lyricsFontScale),
-    [railSize.width, railSize.height, lyricsFontScale],
+    () => resolveSpotlightTypeScale(
+      railSize.width,
+      railSize.height,
+      lyricsFontScale,
+      subtitleFontScale,
+    ),
+    [railSize.width, railSize.height, lyricsFontScale, subtitleFontScale],
   );
+  const resolvedSubtitleMode = useMemo(
+    () => resolveSubtitleContentMode(subtitleContentMode, showSubtitleTranslation),
+    [showSubtitleTranslation, subtitleContentMode],
+  );
+
+  const resolveLineTranslation = useCallback((line: Line, isActive: boolean) => {
+    if (!isActive || hideTranslationSubtitle || isInterludeLine(line)) return null;
+    const text = resolveLyricAlternateText(line, resolvedSubtitleMode);
+    return hasReadableLyricText(text) ? text : null;
+  }, [hideTranslationSubtitle, resolvedSubtitleMode]);
 
   /** 只渲染当前句 ±2，去掉底部字幕叠层避免重复 */
   const visibleEntries = useMemo((): SpotlightVisibleEntry[] => {
@@ -433,13 +460,27 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
 
   useLayoutEffect(() => {
     measureLineHeights();
-  }, [visibleEntries, typeScale.activePx, typeScale.nearPx, typeScale.farPx, time]);
+  }, [
+    visibleEntries,
+    typeScale.activePx,
+    typeScale.nearPx,
+    typeScale.farPx,
+    typeScale.translationPx,
+    hideTranslationSubtitle,
+    resolvedSubtitleMode,
+    time,
+  ]);
 
   const positioned = useMemo(() => {
     const usable = Math.max(160, (railSize.height || 600) - dockPx);
     const focusCenterY = usable * FOCUS_CENTER_RATIO;
-    const heightOf = (index: number, isActive: boolean) =>
-      lineHeights[index] || (isActive ? typeScale.activePx * 1.35 : typeScale.nearPx * 1.35);
+    const heightOf = (index: number, isActive: boolean) => {
+      if (lineHeights[index]) return lineHeights[index];
+      const translationExtra = isActive && resolveLineTranslation(lines[index], true)
+        ? typeScale.translationPx * 1.55
+        : 0;
+      return (isActive ? typeScale.activePx * 1.35 : typeScale.nearPx * 1.35) + translationExtra;
+    };
 
     const withY = visibleEntries.map((entry) => ({
       ...entry,
@@ -468,10 +509,12 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
     });
 
     return withY;
-  }, [visibleEntries, railSize.height, dockPx, lineHeights, typeScale]);
+  }, [visibleEntries, railSize.height, dockPx, lineHeights, lines, resolveLineTranslation, typeScale]);
 
   const fontFamily = resolveThemeFontStack(theme);
   const fontWeight = resolveThemeFontWeight(theme, 700);
+  const translationFontFamily = resolveThemeTranslationFontStack(subtitleTheme ?? theme);
+  const translationFontWeight = resolveThemeFontWeight(subtitleTheme ?? theme, 500);
   const litColor = theme.primaryColor || '#FFFFFF';
   const dimColor = theme.secondaryColor || 'rgba(255,255,255,0.34)';
   const accent = theme.accentColor || litColor;
@@ -510,6 +553,7 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
                   : dist === 1
                     ? typeScale.nearPx
                     : typeScale.farPx;
+                const translation = resolveLineTranslation(entry.line, isActive);
                 return (
                   <motion.button
                     key={`${entry.line.startTime}-${entry.index}`}
@@ -535,31 +579,53 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
                       fontWeight: isActive ? fontWeight : 560,
                       letterSpacing: isActive ? '-0.01em' : '0',
                       lineHeight: 1.25,
-                      textShadow: isActive
-                        ? `0 2px 28px rgba(0,0,0,0.28), 0 0 24px color-mix(in srgb, ${accent} 22%, transparent)`
-                        : 'none',
                     }}
                   >
-                    {isInterludeLine(entry.line) ? (
-                      <InterludeDots
-                        count={5}
-                        size={isActive ? Math.max(8, Math.round(fontPx * 0.18)) : Math.max(6, Math.round(fontPx * 0.2))}
-                        gap={isActive ? Math.round(fontPx * 0.22) : Math.round(fontPx * 0.28)}
-                        color={dimColor}
-                        activeColor={accent}
-                        activeIndex={isActive ? 4 : undefined}
-                      />
-                    ) : (
-                      <SpotlightKaraokeLine
-                        line={entry.line}
-                        time={time}
-                        mode={mode}
-                        dimColor={dimColor}
-                        litColor={litColor}
-                        accentColor={accent}
-                        fontPx={fontPx}
-                      />
-                    )}
+                    <div
+                      style={{
+                        textShadow: isActive
+                          ? `0 2px 28px rgba(0,0,0,0.28), 0 0 24px color-mix(in srgb, ${accent} 22%, transparent)`
+                          : 'none',
+                      }}
+                    >
+                      {isInterludeLine(entry.line) ? (
+                        <InterludeDots
+                          count={5}
+                          size={isActive ? Math.max(8, Math.round(fontPx * 0.18)) : Math.max(6, Math.round(fontPx * 0.2))}
+                          gap={isActive ? Math.round(fontPx * 0.22) : Math.round(fontPx * 0.28)}
+                          color={dimColor}
+                          activeColor={accent}
+                          activeIndex={isActive ? 4 : undefined}
+                        />
+                      ) : (
+                        <SpotlightKaraokeLine
+                          line={entry.line}
+                          time={time}
+                          mode={mode}
+                          dimColor={dimColor}
+                          litColor={litColor}
+                          accentColor={accent}
+                          fontPx={fontPx}
+                        />
+                      )}
+                    </div>
+                    {translation ? (
+                      <div
+                        className="whitespace-pre-wrap break-words"
+                        style={{
+                          marginTop: '0.32em',
+                          color: colorWithAlpha(dimColor, 0.88),
+                          fontFamily: translationFontFamily,
+                          fontWeight: translationFontWeight,
+                          fontSize: typeScale.translationPx,
+                          letterSpacing: '0.01em',
+                          lineHeight: 1.35,
+                          textShadow: 'none',
+                        }}
+                      >
+                        {translation}
+                      </div>
+                    ) : null}
                   </motion.button>
                 );
               })}

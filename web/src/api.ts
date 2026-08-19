@@ -5,6 +5,20 @@ function origin(): string {
   return `${window.location.origin}${window.location.pathname.replace(/index\.php$/, '')}`;
 }
 
+const API_TIMEOUT_MS = 15_000;
+
+async function postForm(body: URLSearchParams): Promise<Response> {
+  return fetch(origin(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    body,
+    signal: AbortSignal.timeout(API_TIMEOUT_MS),
+  });
+}
+
 export function resolveMediaUrl(url?: string): string {
   if (!url) return '';
   if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url;
@@ -36,14 +50,7 @@ export async function searchMusic(options: {
     page: String(options.page || 1),
   });
 
-  const response = await fetch(origin(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-    body,
-  });
+  const response = await postForm(body);
 
   const json = (await response.json()) as SearchResponse;
   if (json.code === 200 && Array.isArray(json.data)) {
@@ -97,14 +104,7 @@ export async function postAction<T = unknown>(action: string, data: Record<strin
   error: string;
 }> {
   const body = new URLSearchParams({ action, ...data });
-  const response = await fetch(origin(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-    body,
-  });
+  const response = await postForm(body);
   return (await response.json()) as { data: T; code: number; error: string };
 }
 
@@ -308,4 +308,32 @@ export function fetchNeteaseComments(options: {
     offset: String(options.offset || 0),
     limit: String(options.limit || 20),
   });
+}
+
+export interface CacheUsage {
+  rebuildableBytes: number;
+  preservedBytes: number;
+  totalBytes: number;
+  rebuildableEntries: number;
+  totalMB: number;
+  rebuildableMB: number;
+  preservedMB: number;
+}
+
+export interface ClearCacheResult {
+  removedBytes: number;
+  removedEntries: number;
+  removedMB: number;
+  preserved: string[];
+  usage?: CacheUsage;
+}
+
+/** 查询当前缓存占用 */
+export async function fetchCacheUsage() {
+  return postAction<CacheUsage>('cache_usage');
+}
+
+/** 清理可重建缓存（保留登录态） */
+export async function clearAppCache() {
+  return postAction<ClearCacheResult>('clear_cache');
 }

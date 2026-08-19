@@ -2,21 +2,9 @@ import { createServer } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createApp } from './app.ts';
+import { installDirectNetwork } from './http.ts';
 
-for (const key of [
-  'http_proxy',
-  'https_proxy',
-  'HTTP_PROXY',
-  'HTTPS_PROXY',
-  'all_proxy',
-  'ALL_PROXY',
-  'socks_proxy',
-  'SOCKS_PROXY',
-]) {
-  delete process.env[key];
-}
-process.env.NO_PROXY = '*';
-process.env.no_proxy = '*';
+installDirectNetwork();
 
 function arg(name: string, fallback: string): string {
   const prefix = `--${name}=`;

@@ -216,8 +216,8 @@ export class LyricsService {
     if (cached && timedLyricScore(cached.lrc) + timedLyricScore(cached.yrc) > 0) return cached;
 
     let official: any = null;
-    if (cookie) {
-      const res = await eapiRequest(
+    const officialTask = cookie
+      ? eapiRequest(
         '/api/song/lyric/v1',
         {
           id: Number(songid),
@@ -231,10 +231,13 @@ export class LyricsService {
           yrv: 0,
         },
         cookie,
-      );
-      if (res.json && (res.json.lrc || res.json.yrc)) official = res.json;
-    }
-    const anonymous = await this.netease.fetchLyric(songid, cookie);
+      ).catch(() => null)
+      : Promise.resolve(null);
+    const [officialRes, anonymous] = await Promise.all([
+      officialTask,
+      this.netease.fetchLyric(songid, cookie),
+    ]);
+    if (officialRes?.json && (officialRes.json.lrc || officialRes.json.yrc)) official = officialRes.json;
 
     const lyrics: LyricBundle = {
       lrc: pickRicherLyric(neteaseLyricText(official, 'lrc'), neteaseLyricText(anonymous, 'lrc')),
@@ -295,14 +298,20 @@ export class LyricsService {
     }
 
     if (options.autoUseBest) {
+      const native = options.nativeType && options.nativeId
+        ? await this.fetch(options.nativeType, options.nativeId).catch(() => EMPTY_LYRICS)
+        : EMPTY_LYRICS;
+      const taggedNative = withSource(native, options.nativeType || 'native');
+      // 会员曲目通常自带逐字，先出歌词，别为了扫酷狗/AMLL把取流一起堵死
+      if (isWordByWord(native) && coverageScore(native) >= 48) {
+        return taggedNative;
+      }
       const best = await this.matchBest(options).catch(() => null);
       if (best && scoreBundle(best) > 0) {
-        const native = options.nativeType && options.nativeId
-          ? await this.fetch(options.nativeType, options.nativeId).catch(() => EMPTY_LYRICS)
-          : EMPTY_LYRICS;
-        const chosen = pickBetterLyrics(best, withSource(native, options.nativeType || 'native'));
+        const chosen = pickBetterLyrics(best, taggedNative);
         return chosen.source ? chosen : withSource(chosen, options.preferred);
       }
+      if (scoreBundle(native) > 0) return taggedNative;
     }
 
     const native = options.nativeType && options.nativeId
@@ -351,7 +360,7 @@ export class LyricsService {
       }
     };
 
-    for (const source of order) {
+    const jobs = order.map(async (source) => {
       if (source === 'netease' || source === 'qq') {
         if (options.nativeType === source && options.nativeId) {
           const exact = await this.fetch(source, options.nativeId).catch(() => EMPTY_LYRICS);
@@ -365,20 +374,21 @@ export class LyricsService {
           const lyrics = await this.fetch(source, String(hit.songid)).catch(() => EMPTY_LYRICS);
           consider(lyrics, source);
         }
-        continue;
+        return;
       }
 
       if (source === 'amll') {
         const amll = await this.fetchAmll(options).catch(() => EMPTY_LYRICS);
         consider(amll, 'amll');
-        continue;
+        return;
       }
 
       if (source === 'kugou') {
         const kugou = await this.fetchKugou(query).catch(() => EMPTY_LYRICS);
         consider(kugou, 'kugou');
       }
-    }
+    });
+    await Promise.all(jobs);
 
     return best;
   }
@@ -421,7 +431,7 @@ export class LyricsService {
     });
     const search = await request('GET', `http://lyrics.kugou.com/search?${searchQs}`, {
       headers: { Referer: 'https://www.kugou.com/' },
-      timeoutMs: 8000,
+      timeoutMs: 5000,
     });
     const candidate = search.json?.candidates?.[0];
     const id = candidate?.id;
@@ -437,7 +447,7 @@ export class LyricsService {
     });
     const down = await request('GET', `http://lyrics.kugou.com/download?${downQs}`, {
       headers: { Referer: 'https://www.kugou.com/' },
-      timeoutMs: 8000,
+      timeoutMs: 5000,
     });
     const encoded = String(down.json?.content || '');
     if (!encoded) return EMPTY_LYRICS;
@@ -458,8 +468,8 @@ export class LyricsService {
     if (options.nativeType === 'qq' && options.nativeId) {
       urls.push(`https://cdn.jsdelivr.net/gh/Steve-xmh/amll-ttml-db@main/qq-lyrics/${options.nativeId}.ttml`);
     }
-    for (const url of urls) {
-      const res = await request('GET', url, { timeoutMs: 8000 });
+    const results = await Promise.all(urls.map((url) => request('GET', url, { timeoutMs: 5000 })));
+    for (const res of results) {
       if (!res.ok || !res.body.includes('<p')) continue;
       const lrc = ttmlToLrc(res.body);
       if (timedLyricScore(lrc) > 0) return { lrc, yrc: '', tlyric: '' };

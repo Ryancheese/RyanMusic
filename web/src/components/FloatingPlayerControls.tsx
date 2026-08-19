@@ -41,8 +41,6 @@ interface FloatingPlayerControlsProps {
   onBack?: () => void;
   onTogglePanel?: () => void;
   trackTitle?: string;
-  /** 当前展示的是逐字歌词时，在中间胶囊显示「逐」 */
-  wordByWord?: boolean;
   children?: React.ReactNode;
 }
 
@@ -81,7 +79,6 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   onBack,
   onTogglePanel,
   trackTitle = '',
-  wordByWord = false,
   children,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -118,20 +115,6 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const skipClass = `flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-transform duration-200 ${
     isDaylight ? 'hover:scale-125 hover:bg-black/10' : 'hover:scale-125 hover:bg-white/12'
   }`;
-  const wordMark = wordByWord ? (
-    <span
-      className="pointer-events-none shrink-0 select-none rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-wide"
-      title="逐字歌词"
-      aria-label="逐字歌词"
-      style={{
-        color: 'color-mix(in srgb, var(--text-accent) 78%, white)',
-        backgroundColor: 'color-mix(in srgb, var(--text-accent) 22%, rgba(20, 16, 36, 0.45))',
-        border: '1px solid color-mix(in srgb, var(--text-accent) 30%, transparent)',
-      }}
-    >
-      逐
-    </span>
-  ) : null;
   const showSideChrome = currentView === 'player' && Boolean(onBack || onTogglePanel);
   const hideDock = isHidden || !canTogglePlay;
   const showSongTitle = currentView === 'home';
@@ -346,7 +329,6 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                       />
                     )}
                   </div>
-                  {wordMark}
                 </div>
                 <button
                   type="button"
@@ -402,7 +384,6 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                     />
                   )}
                 </div>
-                {wordMark}
               </div>
             )}
             </div>

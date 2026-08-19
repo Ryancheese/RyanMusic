@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AudioLines, Hexagon, LayoutGrid, Link2, List, Palette, SlidersHorizontal, SquareStack, X } from 'lucide-react';
+import { AudioLines, Gauge, HardDrive, Hexagon, Keyboard, LayoutGrid, Link2, List, MessageCircleHeart, Palette, SlidersHorizontal, SquareStack, Trash2, X } from 'lucide-react';
 import {
   LYRIC_SOURCE_OPTIONS,
   useLyricSettingsStore,
@@ -10,12 +10,15 @@ import {
 } from '../utils/lyrics/filtering';
 import { useControlAppearanceStore } from '../store/controlAppearanceStore';
 import { usePlaybackSettingsStore } from '../store/playbackSettingsStore';
+import { useCommentAtmosphereStore } from '../store/commentAtmosphereStore';
 import { useLibraryStore } from '../store/libraryStore';
 import {
   LIBRARY_CARD_STYLE_HINT,
   LIBRARY_CARD_STYLE_LABELS,
   LIBRARY_LAYOUT_MODE_LABELS,
 } from '../lib/libraryLayout';
+import { clearAppCache, fetchCacheUsage, type CacheUsage } from '../api';
+import { AUDIO_QUALITY_OPTIONS } from '../lib/audioQuality';
 import type { LibraryCardStyle, LibraryLayoutMode } from '../types';
 
 interface AppSettingsPanelProps {
@@ -24,12 +27,13 @@ interface AppSettingsPanelProps {
   onClose: () => void;
 }
 
-type SettingsTab = 'lyrics' | 'playback' | 'chrome';
+type SettingsTab = 'lyrics' | 'playback' | 'chrome' | 'storage';
 
 const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: 'lyrics', label: '歌词', icon: <AudioLines size={14} /> },
   { id: 'playback', label: '播放', icon: <Link2 size={14} /> },
   { id: 'chrome', label: '外观', icon: <Palette size={14} /> },
+  { id: 'storage', label: '存储', icon: <HardDrive size={14} /> },
 ];
 
 const SettingSlider: React.FC<{
@@ -118,6 +122,12 @@ const CARD_STYLE_OPTIONS: { id: LibraryCardStyle; label: string }[] = [
   { id: 'plaque', label: LIBRARY_CARD_STYLE_LABELS.plaque },
 ];
 
+function formatCacheSize(bytes: number, mb: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${mb.toFixed(1)} MB`;
+}
+
 const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, onClose }) => {
   const [tab, setTab] = useState<SettingsTab>('lyrics');
   const preferredSource = useLyricSettingsStore((state) => state.preferredSource);
@@ -130,6 +140,12 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
   const setFilterPattern = useLyricSettingsStore((state) => state.setFilterPattern);
   const crossPlayFallback = usePlaybackSettingsStore((state) => state.crossPlayFallback);
   const setCrossPlayFallback = usePlaybackSettingsStore((state) => state.setCrossPlayFallback);
+  const preferredQuality = usePlaybackSettingsStore((state) => state.preferredQuality);
+  const setPreferredQuality = usePlaybackSettingsStore((state) => state.setPreferredQuality);
+  const commentAtmosphere = useCommentAtmosphereStore((state) => state.enabled);
+  const setCommentAtmosphere = useCommentAtmosphereStore((state) => state.setEnabled);
+  const commentTypewriter = useCommentAtmosphereStore((state) => state.typewriter);
+  const setCommentTypewriter = useCommentAtmosphereStore((state) => state.setTypewriter);
   const opacity = useControlAppearanceStore((state) => state.opacity);
   const blur = useControlAppearanceStore((state) => state.blur);
   const hoverBoost = useControlAppearanceStore((state) => state.hoverBoost);
@@ -141,6 +157,32 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
   const setLayoutMode = useLibraryStore((state) => state.setLayoutMode);
   const setCardStyle = useLibraryStore((state) => state.setCardStyle);
   const panelRef = useRef<HTMLDivElement>(null);
+  const [cacheBusy, setCacheBusy] = useState(false);
+  const [cacheMessage, setCacheMessage] = useState('');
+  const [cacheUsage, setCacheUsage] = useState<CacheUsage | null>(null);
+  const [cacheUsageError, setCacheUsageError] = useState('');
+
+  useEffect(() => {
+    if (!open || tab !== 'storage') return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await fetchCacheUsage();
+        if (cancelled) return;
+        if (result.code === 200 && result.data) {
+          setCacheUsage(result.data);
+          setCacheUsageError('');
+        } else {
+          setCacheUsageError(result.error || '无法读取占用');
+        }
+      } catch {
+        if (!cancelled) setCacheUsageError('无法读取占用');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, tab]);
 
   useEffect(() => {
     if (!open) return;
@@ -176,7 +218,7 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
         <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
           <div>
             <div className="text-base font-semibold">设置</div>
-            <div className="mt-0.5 text-[11px] opacity-45">歌词、播放保底、歌单样式与底栏外观</div>
+            <div className="mt-0.5 text-[11px] opacity-45">歌词、舞台氛围、播放保底与底栏外观</div>
           </div>
           <button type="button" className="rounded-full p-1.5 opacity-60 hover:opacity-100" onClick={onClose}>
             <X size={18} />
@@ -223,6 +265,28 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                   card={card}
                   idle={idle}
                   onToggle={() => setAutoUseBest(!autoUseBest)}
+                />
+
+                <ToggleRow
+                  icon={<MessageCircleHeart size={15} />}
+                  title="歌曲评论氛围"
+                  description="在歌词舞台边缘随机飘出日式气泡评论（头像 + 昵称 + 热评），会躲开中部歌词、底栏和侧栏卡片。"
+                  enabled={commentAtmosphere}
+                  isDaylight={isDaylight}
+                  card={card}
+                  idle={idle}
+                  onToggle={() => setCommentAtmosphere(!commentAtmosphere)}
+                />
+
+                <ToggleRow
+                  icon={<Keyboard size={15} />}
+                  title="评论打字机效果"
+                  description="开启后，评论文字逐字打出，气泡宽度跟着已打出的字变长，头像始终贴在气泡角上。默认关闭。"
+                  enabled={commentTypewriter}
+                  isDaylight={isDaylight}
+                  card={card}
+                  idle={idle}
+                  onToggle={() => setCommentTypewriter(!commentTypewriter)}
                 />
 
                 <div>
@@ -321,6 +385,40 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
 
             {tab === 'playback' ? (
               <div className="space-y-5">
+                <div className={`rounded-2xl px-3 py-3 ${card}`}>
+                  <div className="mb-1 flex items-center gap-2 text-[11px] opacity-55">
+                    <Gauge size={14} />
+                    播放音质
+                  </div>
+                  <div className="text-sm font-semibold">默认播放音质</div>
+                  <div className="mt-1 text-[11px] leading-relaxed opacity-50">
+                    {preferredQuality === 'auto'
+                      ? '根据当前网速、延迟和省流模式自动选择。测不到网速时先走极高（约 320k），保证马上出声；当前这首仍可在播放面板里临时改档。'
+                      : '新歌曲会优先用这个档位；当前曲目没有该档时会尽快落到可播的 320k，而不是逐档死等。'}
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {AUDIO_QUALITY_OPTIONS.map((item) => {
+                      const active = item.id === preferredQuality;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          aria-pressed={active}
+                          title={item.hint}
+                          onClick={() => setPreferredQuality(item.id)}
+                          className={`rounded-xl px-2.5 py-2.5 text-[12px] font-medium transition ${
+                            active
+                              ? (isDaylight ? 'bg-white text-black shadow-sm ring-2 ring-white/90' : 'bg-white/10 text-white ring-2 ring-white/75')
+                              : (isDaylight ? 'bg-black/5 opacity-70 hover:opacity-100' : 'bg-white/5 opacity-70 hover:opacity-100')
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <ToggleRow
                   icon={<Link2 size={15} />}
                   title="下架歌曲跨渠道保底"
@@ -429,6 +527,94 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                     max={18}
                     onChange={setHoverBoost}
                   />
+                </div>
+              </div>
+            ) : null}
+
+            {tab === 'storage' ? (
+              <div className="space-y-5">
+                <div className={`rounded-2xl px-4 py-4 ${card}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${idle}`}>
+                      <HardDrive size={15} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold">内存管理</div>
+                      <div className="mt-1 text-[11px] leading-relaxed opacity-50">
+                        清理封面、歌词、播放地址、评论等可重建缓存，释放本机空间。登录状态与设置偏好会保留。
+                      </div>
+                      <div className="mt-2 text-[12px] leading-relaxed">
+                        {cacheUsageError ? (
+                          <span className="opacity-50">{cacheUsageError}</span>
+                        ) : cacheUsage ? (
+                          <>
+                            <span className="font-medium tabular-nums">
+                              当前占用 {formatCacheSize(cacheUsage.totalBytes, cacheUsage.totalMB)}
+                            </span>
+                            <span className="ml-1.5 opacity-45">
+                              可清理 {formatCacheSize(cacheUsage.rebuildableBytes, cacheUsage.rebuildableMB)}
+                              {cacheUsage.preservedBytes > 0
+                                ? ` · 登录数据 ${formatCacheSize(cacheUsage.preservedBytes, cacheUsage.preservedMB)}`
+                                : ''}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="opacity-40">正在读取占用…</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={cacheBusy}
+                    onClick={() => {
+                      void (async () => {
+                        setCacheBusy(true);
+                        setCacheMessage('');
+                        try {
+                          try {
+                            localStorage.removeItem('ryanmusic-playlist-tracks-v1');
+                          } catch {
+                            // ignore
+                          }
+                          const result = await clearAppCache();
+                          if (result.code !== 200 || !result.data) {
+                            setCacheMessage(result.error || '清理失败，请稍后重试');
+                            return;
+                          }
+                          const mb = result.data.removedMB ?? 0;
+                          const entries = result.data.removedEntries ?? 0;
+                          if (result.data.usage) setCacheUsage(result.data.usage);
+                          setCacheMessage(
+                            entries > 0 || mb > 0
+                              ? `已清理约 ${mb} MB（${entries} 项），登录态已保留`
+                              : '没有可清理的缓存',
+                          );
+                        } catch {
+                          setCacheMessage('清理失败，请稍后重试');
+                        } finally {
+                          setCacheBusy(false);
+                        }
+                      })();
+                    }}
+                    className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium transition ${
+                      cacheBusy ? 'opacity-50' : idle
+                    }`}
+                    style={{
+                      boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--text-accent) 45%, transparent)',
+                      background: 'color-mix(in srgb, var(--text-accent) 12%, transparent)',
+                    }}
+                  >
+                    <Trash2 size={15} />
+                    {cacheBusy ? '正在清理…' : '清理缓存'}
+                  </button>
+                  {cacheMessage ? (
+                    <div className="mt-3 text-[11px] leading-relaxed opacity-60">{cacheMessage}</div>
+                  ) : (
+                    <div className="mt-3 text-[11px] leading-relaxed opacity-40">
+                      不会删除网易云 / QQ 登录 Cookie，也不会清空主题与歌词设置。
+                    </div>
+                  )}
                 </div>
               </div>
             ) : null}

@@ -16,6 +16,10 @@ import InterludeDots from './InterludeDots';
 import WordByWordBadge from './WordByWordBadge';
 import SongComments from './SongComments';
 import { isInterludeLine } from '../utils/lyrics/parserCore';
+import { resolveLyricAlternateText } from '../utils/lyrics/alternateText';
+import { AUTO_AUDIO_QUALITY, audioQualityLabel, pickPreferredLevel } from '../lib/audioQuality';
+
+const hasReadableLyricText = (text?: string | null) => !!text && /[\p{L}\p{N}]/u.test(text);
 
 function lyricSourceLabel(source?: Track['lyricSource']): string {
   if (!source || source === 'native') return '歌曲自带';
@@ -101,9 +105,15 @@ const SidePanel: React.FC<SidePanelProps> = ({
     ? 'bg-black/6 hover:bg-black/10 text-black'
     : 'bg-white/10 hover:bg-white/16 text-white';
   const showExpanded = isMobile ? open : visible && open;
-  const selectedQuality = qualityOptions.find((item) => item.level === audioQuality)
-    || qualityOptions.find((item) => item.level === 'exhigh')
-    || qualityOptions[0];
+  const resolvedAutoLevel = pickPreferredLevel(qualityOptions, AUTO_AUDIO_QUALITY);
+  const selectedQuality = audioQuality === AUTO_AUDIO_QUALITY || !audioQuality
+    ? {
+        level: AUTO_AUDIO_QUALITY,
+        label: resolvedAutoLevel ? `自动 · ${audioQualityLabel(resolvedAutoLevel)}` : '自动',
+      }
+    : qualityOptions.find((item) => item.level === audioQuality)
+      || qualityOptions.find((item) => item.level === 'exhigh')
+      || qualityOptions[0];
 
   useEffect(() => {
     if (!showExpanded) return;
@@ -277,15 +287,33 @@ const SidePanel: React.FC<SidePanelProps> = ({
                           音质 {selectedQuality?.label || '选择'}
                           <ChevronDown size={12} className={qualityOpen ? 'rotate-180' : ''} />
                         </button>
-                        {qualityOpen ? (
+                            {qualityOpen ? (
                           <div
-                            className={`absolute right-0 z-50 mt-1.5 min-w-[8.5rem] overflow-hidden rounded-2xl border py-1 shadow-xl ${
+                            className={`absolute right-0 z-50 mt-1.5 min-w-[9.5rem] overflow-hidden rounded-2xl border py-1 shadow-xl ${
                               isDaylight ? 'border-black/10 bg-[var(--bg-color)]' : 'border-white/12 bg-[var(--bg-color)]'
                             }`}
                             role="listbox"
                           >
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={audioQuality === AUTO_AUDIO_QUALITY || !audioQuality}
+                              onClick={() => {
+                                onAudioQualityChange?.(AUTO_AUDIO_QUALITY);
+                                setQualityOpen(false);
+                              }}
+                              className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-[11px] ${
+                                audioQuality === AUTO_AUDIO_QUALITY || !audioQuality ? 'font-semibold' : 'opacity-70 hover:opacity-100'
+                              }`}
+                              style={audioQuality === AUTO_AUDIO_QUALITY || !audioQuality ? { color: 'var(--text-accent)' } : undefined}
+                            >
+                              <span>自动</span>
+                              {resolvedAutoLevel ? (
+                                <span className="ml-3 opacity-40">{audioQualityLabel(resolvedAutoLevel)}</span>
+                              ) : null}
+                            </button>
                             {qualityOptions.map((item) => {
-                              const active = item === selectedQuality;
+                              const active = audioQuality === item.level;
                               return (
                                 <button
                                   key={item.level}
@@ -412,6 +440,10 @@ const SidePanel: React.FC<SidePanelProps> = ({
                     {lines.length ? (
                       lines.map((line, i) => {
                         const active = i === lineIndex;
+                        const translation = isInterludeLine(line)
+                          ? null
+                          : resolveLyricAlternateText(line, 'translation');
+                        const showTranslation = hasReadableLyricText(translation);
                         return (
                           <button
                             key={`${line.startTime}-${i}`}
@@ -432,7 +464,18 @@ const SidePanel: React.FC<SidePanelProps> = ({
                                 activeIndex={active ? 5 : undefined}
                               />
                             ) : (
-                              line.fullText || line.words.map((w) => w.text).join('')
+                              <>
+                                <span className="block">
+                                  {line.fullText || line.words.map((w) => w.text).join('')}
+                                </span>
+                                {showTranslation ? (
+                                  <span className={`mt-1 block text-[11px] font-normal leading-relaxed ${
+                                    active ? 'opacity-60' : 'opacity-80'
+                                  }`}>
+                                    {translation}
+                                  </span>
+                                ) : null}
+                              </>
                             )}
                           </button>
                         );

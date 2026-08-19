@@ -12,7 +12,7 @@ import { useThemeAccentStore } from './store/themeStore';
 import { useLyricSettingsStore } from './store/lyricSettingsStore';
 import { usePlaybackSettingsStore } from './store/playbackSettingsStore';
 import type { LyricProviderSource } from './types';
-import { trackUsesWordByWordLyrics } from './lib/lyrics';
+import { AUTO_AUDIO_QUALITY, estimateNetworkQualityCeiling } from './lib/audioQuality';
 import FloatingPlayerControls from './components/FloatingPlayerControls';
 import HomeView from './components/HomeView';
 import PlayerView from './components/PlayerView';
@@ -98,9 +98,6 @@ const App: React.FC = () => {
   const setLayoutMode = useLibraryStore((state) => state.setLayoutMode);
   const preferredLyricSource = useLyricSettingsStore((state) => state.preferredSource);
   const autoUseBestLyrics = useLyricSettingsStore((state) => state.autoUseBest);
-  const lyricFilterPattern = useLyricSettingsStore((state) => (
-    state.filterEnabled ? state.filterPattern : ''
-  ));
 
   const neteasePlaylists = useCloudStore((state) => state.neteasePlaylists);
   const qqPlaylists = useCloudStore((state) => state.qqPlaylists);
@@ -123,11 +120,8 @@ const App: React.FC = () => {
 
   const [authFallback, setAuthFallback] = useState(false);
   const crossPlayFallback = usePlaybackSettingsStore((state) => state.crossPlayFallback);
+  const preferredQuality = usePlaybackSettingsStore((state) => state.preferredQuality);
   const track = queue[index] || null;
-  const wordByWordLyrics = useMemo(
-    () => trackUsesWordByWordLyrics(track, lyricFilterPattern),
-    [lyricFilterPattern, track],
-  );
   const vipPlay = Boolean(
     (track?.type === 'netease' && netease?.loggedIn && Number(netease.vip) > 0)
     || (track?.type === 'qq' && qq?.loggedIn && Number(qq.vip) > 0),
@@ -138,7 +132,12 @@ const App: React.FC = () => {
     const params = new URLSearchParams();
     if (authedPlay) {
       params.set('auth', '1');
-      if (track.type === 'netease' && audioQuality) params.set('level', audioQuality);
+      if (track.type === 'netease') {
+        const level = audioQuality === AUTO_AUDIO_QUALITY
+          ? estimateNetworkQualityCeiling()
+          : audioQuality;
+        if (level) params.set('level', level);
+      }
     }
     if (crossPlayFallback) {
       params.set('cross', '1');
@@ -200,6 +199,9 @@ const App: React.FC = () => {
     [onAccent, theme, uiTint, userAccent],
   );
 
+  const preferredQualityRef = useRef(preferredQuality);
+  preferredQualityRef.current = preferredQuality;
+
   useEffect(() => {
     let cancelled = false;
     setQualityOptions([]);
@@ -207,23 +209,25 @@ const App: React.FC = () => {
       setAudioQuality('');
       return;
     }
-    void fetchNeteaseQualities(track.songid).then((res) => {
-      if (cancelled) return;
-      const list = res.data?.qualities || [];
-      setQualityOptions(list);
-      // 不自动切到最高档：先按无 level（约 320k）出声，用户点选音质才换源
-      setAudioQuality((prev) => {
-        if (prev && list.some((item) => item.level === prev)) return prev;
-        return '';
+    setAudioQuality(preferredQualityRef.current);
+    const timer = window.setTimeout(() => {
+      void fetchNeteaseQualities(track.songid).then((res) => {
+        if (cancelled) return;
+        setQualityOptions(res.data?.qualities || []);
+      }).catch(() => {
+        if (!cancelled) setQualityOptions([]);
       });
-    }).catch(() => {
-      if (!cancelled) {
-        setQualityOptions([]);
-        setAudioQuality('');
-      }
-    });
-    return () => { cancelled = true; };
+    }, 1200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [authFallback, vipPlay, track?.songid, track?.type]);
+
+  useEffect(() => {
+    if (!track || track.type !== 'netease' || !vipPlay || authFallback) return;
+    setAudioQuality(preferredQuality);
+  }, [authFallback, preferredQuality, track?.songid, track?.type, vipPlay]);
 
 
   const goHome = useCallback(() => {
@@ -1016,7 +1020,6 @@ const App: React.FC = () => {
         }}
         onTogglePanel={() => setPanelOpen((open) => !open)}
         trackTitle={track?.title || ''}
-        wordByWord={wordByWordLyrics}
       >
         {view === 'player' ? (
           <SidePanel

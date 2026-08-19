@@ -13,6 +13,7 @@ import { QqService } from './qq.ts';
 import { verifySign } from './sign.ts';
 import { httpsNeteaseUrl, mediaReferer, parseSongUrl } from './util.ts';
 import { pickBestCrossPlayTrack } from './crossPlay.ts';
+import { fetchOpen } from './http.ts';
 
 export interface AppOptions {
   webRoot: string;
@@ -65,7 +66,7 @@ async function proxyMedia(
   const range = req.headers.get('range');
   if (range) headers.Range = range;
   try {
-    const res = await fetch(url, { headers, redirect: 'follow' });
+    const res = await fetchOpen(url, { headers, redirect: 'follow', connectTimeoutMs: 8_000 });
     if (res.status >= 400) {
       return new Response(opts.download ? '无法获取播放地址' : '上游资源不可用', { status: res.status });
     }
@@ -324,6 +325,34 @@ export function createApp(options: AppOptions) {
           return jsonResponse(data, 200, '');
         } catch (err) {
           return jsonResponse('', 502, `(°ー°〃) ${err instanceof Error ? err.message : '歌词获取失败'}`);
+        }
+      }
+      if (action === 'cache_usage' || action === 'clear_cache') {
+        try {
+          const bytesToMB = (bytes: number) => Math.round((bytes / (1024 * 1024)) * 10) / 10;
+          if (action === 'cache_usage') {
+            const usage = cache.usage();
+            return jsonResponse({
+              ...usage,
+              totalMB: bytesToMB(usage.totalBytes),
+              rebuildableMB: bytesToMB(usage.rebuildableBytes),
+              preservedMB: bytesToMB(usage.preservedBytes),
+            }, 200, '');
+          }
+          const result = cache.clearSafe();
+          const usage = cache.usage();
+          return jsonResponse({
+            ...result,
+            removedMB: bytesToMB(result.removedBytes),
+            usage: {
+              ...usage,
+              totalMB: bytesToMB(usage.totalBytes),
+              rebuildableMB: bytesToMB(usage.rebuildableBytes),
+              preservedMB: bytesToMB(usage.preservedBytes),
+            },
+          }, 200, '');
+        } catch (err) {
+          return jsonResponse('', 500, err instanceof Error ? err.message : '清理失败');
         }
       }
 
