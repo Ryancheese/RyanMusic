@@ -2,13 +2,7 @@
   "name": "ryanmusic",
   "private": true,
   "type": "module",
-  "scripts": {
-    "vercel-build": "esbuild server/src/app.ts --bundle --platform=node --format=esm --outfile=api/bundle.mjs --packages=bundle"
-  },
   "dependencies": {
     "hono": "^4.7.11"
-  },
-  "devDependencies": {
-    "esbuild": "^0.25.5"
   }
 }
