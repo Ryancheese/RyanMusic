@@ -6,11 +6,12 @@ import { AudioLines, ChevronDown, Download, FileDown, Home, Image, ListMusic, Me
 import type { LyricProviderSource, ThemeTokens, Track, VisualizerMode } from '../types';
 import type { VisualizerBackgroundConfig } from './visualizer/backgrounds/definition';
 import { coverRefreshUrl } from '../api';
-import { findLatestActiveLineIndex, resolveVisualizerLyrics } from '../lib/lyrics';
+import { hasUsableTrackLyrics, resolveVisualizerLyrics } from '../lib/lyrics';
 import { LYRIC_SOURCE_OPTIONS, useLyricSettingsStore } from '../store/lyricSettingsStore';
 import { useIsMobile } from '../lib/media';
 import LyricsStylePicker, { type StageSettingsTab } from './LyricsStylePicker';
 import CoverArt from './CoverArt';
+import DelistedCoverBadge from './DelistedCoverBadge';
 import RyanLoader from './RyanLoader';
 import InterludeDots from './InterludeDots';
 import WordByWordBadge from './WordByWordBadge';
@@ -21,7 +22,15 @@ import { AUTO_AUDIO_QUALITY, audioQualityLabel, pickPreferredLevel } from '../li
 
 const hasReadableLyricText = (text?: string | null) => !!text && /[\p{L}\p{N}]/u.test(text);
 
-function lyricSourceLabel(source?: Track['lyricSource']): string {
+function lyricSourceLabel(
+  source?: Track['lyricSource'],
+  track?: Track | null,
+  pending?: boolean,
+): string {
+  if (pending) return '匹配最佳歌词…';
+  if ((!source || source === 'native') && track && !hasUsableTrackLyrics(track)) {
+    return '尚未匹配';
+  }
   if (!source || source === 'native') return '歌曲自带';
   return LYRIC_SOURCE_OPTIONS.find((item) => item.id === source)?.label || source;
 }
@@ -40,6 +49,7 @@ interface SidePanelProps {
   styleOpen: boolean;
   buffering?: boolean;
   lyricsSwitching?: boolean;
+  lyricsLoading?: boolean;
   qualityOptions?: Array<{ level: string; label: string; br?: number }>;
   audioQuality?: string;
   onAudioQualityChange?: (level: string) => void;
@@ -70,6 +80,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
   styleOpen,
   buffering = false,
   lyricsSwitching = false,
+  lyricsLoading = false,
   qualityOptions = [],
   audioQuality = '',
   onAudioQualityChange,
@@ -100,6 +111,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
   );
   const lines = resolvedLyrics.lines;
   const isWordByWord = resolvedLyrics.isWordByWord;
+  const lyricsPending = lyricsLoading || lyricsSwitching;
   const coverUrl = track?.pic || (track ? coverRefreshUrl(track.type, track.songid) : '');
   const capsule = isDaylight
     ? 'bg-black/6 hover:bg-black/10 text-black'
@@ -228,6 +240,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
             <div className={`flex gap-3 px-4 pb-2 ${isMobile ? '' : 'px-5'}`}>
               <div className={`relative overflow-hidden bg-zinc-800/30 shadow-inner ${isMobile ? 'h-14 w-14 shrink-0 rounded-xl' : 'h-14 w-14 shrink-0 rounded-2xl'}`}>
                 <CoverArt src={coverUrl} />
+                {track?.delisted ? <DelistedCoverBadge /> : null}
                 {buffering ? (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/35 backdrop-blur-[1px]">
                     <RyanLoader size={28} />
@@ -237,6 +250,11 @@ const SidePanel: React.FC<SidePanelProps> = ({
               <div className="min-w-0 flex-1">
                 <div className="truncate text-base font-semibold" style={{ color: theme.primaryColor }}>
                   {track?.title || '未播放'}
+                  {track?.delisted ? (
+                    <span className="ml-1.5 inline-flex align-middle text-[10px] font-medium text-orange-500/90">
+                      下架
+                    </span>
+                  ) : null}
                 </div>
                 <div className="mt-0.5 truncate text-sm opacity-55">{track?.author}</div>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -379,20 +397,20 @@ const SidePanel: React.FC<SidePanelProps> = ({
                       <div className="flex min-w-0 items-center gap-1.5 text-[11px] opacity-45">
                         <span className="shrink-0">歌词来源</span>
                         <span className="truncate font-medium opacity-90" style={{ color: 'var(--text-accent)' }}>
-                          {lyricSourceLabel(track.lyricSource)}
+                          {lyricSourceLabel(track.lyricSource, track, lyricsPending && !lines.length)}
                         </span>
                         {isWordByWord ? <WordByWordBadge compact className="shrink-0" /> : null}
                       </div>
                       <div className="relative shrink-0">
                         <button
                           type="button"
-                          disabled={!onSwitchLyricSource || lyricsSwitching}
+                          disabled={!onSwitchLyricSource || lyricsPending}
                           onClick={() => setLyricSourceOpen((prev) => !prev)}
                           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition ${capsule} disabled:opacity-40`}
                           aria-haspopup="listbox"
                           aria-expanded={lyricSourceOpen}
                         >
-                          {lyricsSwitching ? (
+                          {lyricsPending ? (
                             <RefreshCw size={12} className="animate-spin" />
                           ) : (
                             <RefreshCw size={12} />
@@ -437,7 +455,11 @@ const SidePanel: React.FC<SidePanelProps> = ({
                   ) : null}
                   <div className="min-h-0 flex-1">
                     <div ref={lyricScrollRef} className="hide-scrollbar h-full overflow-y-auto px-4 py-2">
-                    {lines.length ? (
+                    {lyricsPending && !lines.length ? (
+                      <div className="flex h-full min-h-[12rem] items-center justify-center py-8">
+                        <RyanLoader size={36} label="正在匹配最佳歌词…" />
+                      </div>
+                    ) : lines.length ? (
                       lines.map((line, i) => {
                         const active = i === lineIndex;
                         const translation = isInterludeLine(line)
@@ -481,8 +503,8 @@ const SidePanel: React.FC<SidePanelProps> = ({
                         );
                       })
                     ) : (
-                      <div className="flex h-full items-center justify-center text-sm opacity-40">
-                        {track ? (lyricsSwitching ? '正在切换歌词源…' : '暂无歌词') : '选择一首歌开始播放'}
+                      <div className="flex h-full min-h-[12rem] items-center justify-center py-8 text-sm opacity-40">
+                        {track ? '未找到可用歌词' : '选择一首歌开始播放'}
                       </div>
                     )}
                     </div>
@@ -500,7 +522,12 @@ const SidePanel: React.FC<SidePanelProps> = ({
                       }`}
                     >
                       <span className="w-5 text-right font-mono text-[10px] opacity-40">{i + 1}</span>
-                      <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                      <span className="min-w-0 flex-1 truncate">
+                        {item.title}
+                        {item.delisted ? (
+                          <span className="ml-1 text-[10px] text-orange-400/90">下架</span>
+                        ) : null}
+                      </span>
                       <span className="max-w-[40%] truncate text-xs opacity-40">{item.author}</span>
                     </button>
                   ))}

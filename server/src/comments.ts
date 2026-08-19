@@ -45,6 +45,25 @@ function fail(code: number, error: string): ActionResult {
   return { code, error, data: '' };
 }
 
+/** 网易云无法在非移动端展示的占位评论（语音/图片/视频等） */
+const MOBILE_ONLY_COMMENT_RE = /\[(?:发布了(?:语音|图片|视频|动态)|语音|图片|视频)[^\]]*?(?:请前往|前往).*?(?:移动端|手机).*?版本[^\]]*\]/u;
+const DELETED_COMMENT_RE = /^\[(?:该)?评论已删除\]$/u;
+
+export function isPlaceholderCommentContent(content: string): boolean {
+  const text = String(content || '').trim();
+  if (!text) return true;
+  if (DELETED_COMMENT_RE.test(text)) return true;
+  if (MOBILE_ONLY_COMMENT_RE.test(text)) {
+    const withoutTags = text.replace(/\[[^\]]+\]/g, '').replace(/\s+/g, '').trim();
+    // 「歌名 + 占位符」或纯占位符都过滤
+    if (!withoutTags || withoutTags.length <= 24) return true;
+  }
+  if (/^\[(?:发布了(?:语音|图片|视频|动态)[^\]]+|(?:语音|图片|视频))\]$/u.test(text)) {
+    return true;
+  }
+  return false;
+}
+
 function uniqueComments(list: SongComment[]): SongComment[] {
   const seen = new Set<string>();
   const out: SongComment[] = [];
@@ -64,7 +83,7 @@ function mapList(raw: unknown): SongComment[] {
 export function mapNeteaseComment(raw: any): SongComment | null {
   const id = String(raw?.commentId || raw?.commentid || raw?.id || '').trim();
   const content = String(raw?.content || '').trim();
-  if (!id || !content) return null;
+  if (!id || !content || isPlaceholderCommentContent(content)) return null;
   const replied = Array.isArray(raw?.beReplied) ? raw.beReplied[0] : null;
   const replyContent = String(replied?.content || '').trim();
   return {
@@ -78,7 +97,7 @@ export function mapNeteaseComment(raw: any): SongComment | null {
     likedCount: Number(raw?.likedCount || 0) || 0,
     liked: Boolean(raw?.liked),
     location: String(raw?.ipLocation?.location || '').trim(),
-    reply: replyContent
+    reply: replyContent && !isPlaceholderCommentContent(replyContent)
       ? {
           nickname: String(replied?.user?.nickname || '网易云用户'),
           content: replyContent,

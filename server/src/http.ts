@@ -442,7 +442,10 @@ export async function followLocation(url: string, referer: string, timeoutMs = R
       signal: AbortSignal.timeout(timeoutMs),
     });
     const loc = res.headers.get('location');
-    if (loc) return new URL(loc, url).toString();
+    if (loc) {
+      void res.body?.cancel();
+      return new URL(loc, url).toString();
+    }
     const text = await res.text();
     const code = text.match(/[?&]code=([^&\s'"]+)/);
     if (code) return `${url}${url.includes('?') ? '&' : '?'}code=${code[1]}`;

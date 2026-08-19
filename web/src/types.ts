@@ -26,6 +26,8 @@ export interface Track {
   url: string;
   pic: string;
   link?: string;
+  /** 平台侧已下架/无官方版权，播放将走 RyanMusic 跨渠道私链 */
+  delisted?: boolean;
 }
 
 export interface SearchResponse {

@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AlertCircle, Play, Plus, Search, X } from 'lucide-react';
 import type { MusicSource, ThemeTokens, Track } from '../types';
 import CoverArt from './CoverArt';
+import DelistedCoverBadge from './DelistedCoverBadge';
 import RyanLoader from './RyanLoader';
 
 interface SearchWorkspaceProps {
@@ -21,6 +22,7 @@ interface SearchWorkspaceProps {
   onSubmit: () => void;
   onClose: () => void;
   onPlay: (track: Track, index: number) => void;
+  onPrefetch?: (track: Track) => void;
   onAddQueue: (track: Track) => void;
   onLoadMore: () => void;
 }
@@ -41,6 +43,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
   onSubmit,
   onClose,
   onPlay,
+  onPrefetch,
   onAddQueue,
   onLoadMore,
 }) => {
@@ -171,20 +174,30 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                     >
                       <button
                         type="button"
+                        onPointerDown={() => onPrefetch?.(track)}
                         onClick={() => onPlay(track, index)}
                         className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-zinc-500/15"
                       >
                         <CoverArt src={track.pic} />
+                        {track.delisted ? <DelistedCoverBadge /> : null}
                         <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
                           <Play size={18} fill="currentColor" />
                         </span>
                       </button>
                       <button
                         type="button"
+                        onPointerDown={() => onPrefetch?.(track)}
                         onClick={() => onPlay(track, index)}
                         className="min-w-0 flex-1 text-left"
                       >
-                        <div className="truncate text-sm font-semibold">{track.title}</div>
+                        <div className="truncate text-sm font-semibold">
+                          {track.title}
+                          {track.delisted ? (
+                            <span className="ml-1.5 inline-flex align-middle text-[10px] font-medium text-orange-600/90 dark:text-orange-300/90">
+                              下架
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="mt-1 truncate text-xs" style={{ color: 'var(--text-secondary)' }}>
                           {track.author}
                           <span className="mx-1 opacity-40">•</span>

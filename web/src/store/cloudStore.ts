@@ -118,6 +118,7 @@ function toEntries(tracks: CloudTrack[] | undefined, type: MusicSource): Library
       songid: String(item.songid),
       title: item.title || '未知曲目',
       author: item.author || '未知艺人',
+      ...(item.delisted ? { delisted: true } : {}),
     }));
 }
 

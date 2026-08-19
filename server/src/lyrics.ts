@@ -3,8 +3,12 @@ import { qrcPlainOrDecrypt, looksLikeQrc } from './crypto/qrcDecrypt.ts';
 import { eapiRequest } from './crypto/netease.ts';
 import { NeteaseService } from './netease.ts';
 import { QqService } from './qq.ts';
+import { fetchKugouLyricText, searchKugouSongs } from './kugouLyrics.ts';
 import { request } from './http.ts';
-import { decodeEntities, neteaseLyricText, pickRicherLyric, timedLyricScore } from './util.ts';
+import { decodeEntities, effectiveTimedLyricScore, isPlaceholderLyricText, neteaseLyricText, pickRicherLyric, timedLyricScore } from './util.ts';
+
+const AMLL_DB_BASE = 'https://amll-ttml-db.stevexmh.net';
+type AmllPlatform = 'ncm' | 'qq';
 
 export type LyricProviderSource = 'netease' | 'qq' | 'kugou' | 'amll';
 
@@ -21,7 +25,11 @@ const AUTO_MATCH_MIN_SCORE = 75;
 const AUTO_MATCH_SEARCH_LIMIT = 8;
 
 function scoreBundle(lyrics: LyricBundle): number {
-  return timedLyricScore(lyrics.yrc) + timedLyricScore(lyrics.lrc);
+  return effectiveTimedLyricScore(lyrics.yrc) + effectiveTimedLyricScore(lyrics.lrc);
+}
+
+function hasUsableLyrics(lyrics: LyricBundle): boolean {
+  return scoreBundle(lyrics) > 0;
 }
 
 /** 行覆盖度：避免「逐字很少但分数虚高」压过更完整的逐行 */
@@ -132,11 +140,20 @@ function scoreCandidate(
 function pickBestSearchTrack(
   target: { title: string; artist: string; durationMs?: number },
   tracks: Array<{ songid: string; title: string; author: string }>,
+  mode: 'strict' | 'titleOnly' = 'strict',
 ): { songid: string; title: string; author: string } | null {
   const scored = tracks
     .slice(0, AUTO_MATCH_SEARCH_LIMIT)
     .map((track) => ({ track, details: scoreCandidate(target, track) }))
     .sort((a, b) => b.details.score - a.details.score);
+
+  if (mode === 'titleOnly') {
+    const best = scored.find((item) => item.details.titleMatched);
+    if (!best) return null;
+    if (best.details.score < 65) return null;
+    return best.track;
+  }
+
   const best = scored.find((item) => item.details.titleMatched && item.details.artistMatched)
     ?? scored[0];
   if (!best) return null;
@@ -213,7 +230,7 @@ export class LyricsService {
     const cookie = this.neteaseCookie() || '';
     const bucket = cookie ? 'netease_lyric_auth_v2' : 'netease_lyric_v2';
     const cached = this.readCache(bucket, songid);
-    if (cached && timedLyricScore(cached.lrc) + timedLyricScore(cached.yrc) > 0) return cached;
+    if (cached && hasUsableLyrics(cached)) return cached;
 
     let official: any = null;
     const officialTask = cookie
@@ -244,7 +261,10 @@ export class LyricsService {
       yrc: pickRicherLyric(neteaseLyricText(official, 'yrc'), neteaseLyricText(anonymous, 'yrc')),
       tlyric: pickRicherLyric(neteaseLyricText(official, 'tlyric'), neteaseLyricText(anonymous, 'tlyric')),
     };
-    if (timedLyricScore(lyrics.lrc) + timedLyricScore(lyrics.yrc) > 0) {
+    if (isPlaceholderLyricText(lyrics.lrc) && !effectiveTimedLyricScore(lyrics.yrc)) {
+      lyrics.lrc = '';
+    }
+    if (hasUsableLyrics(lyrics)) {
       this.writeCache(bucket, songid, lyrics, cookie ? 1800 : 3600);
     }
     return lyrics;
@@ -252,7 +272,7 @@ export class LyricsService {
 
   private async fetchQq(songmid: string): Promise<LyricBundle> {
     const cached = this.readCache('qq_lyric_v2', songmid);
-    if (cached && timedLyricScore(cached.lrc) + timedLyricScore(cached.yrc) > 0) return cached;
+    if (cached && hasUsableLyrics(cached)) return cached;
 
     const cookie = this.qqCookie() || 'tmeLoginType=-1;';
     const songId = await this.qq.songNumericId(songmid);
@@ -278,7 +298,10 @@ export class LyricsService {
     }
 
     const lyrics = { lrc, yrc, tlyric };
-    if (timedLyricScore(yrc) + timedLyricScore(lrc) > 0) this.writeCache('qq_lyric_v2', songmid, lyrics, 3600);
+    if (isPlaceholderLyricText(lrc) && !effectiveTimedLyricScore(yrc)) {
+      return { lrc: '', yrc: '', tlyric: isPlaceholderLyricText(tlyric) ? '' : tlyric };
+    }
+    if (hasUsableLyrics(lyrics)) this.writeCache('qq_lyric_v2', songmid, lyrics, 3600);
     return lyrics;
   }
 
@@ -297,34 +320,54 @@ export class LyricsService {
       return withSource(forced, options.preferred);
     }
 
-    if (options.autoUseBest) {
-      const native = options.nativeType && options.nativeId
-        ? await this.fetch(options.nativeType, options.nativeId).catch(() => EMPTY_LYRICS)
-        : EMPTY_LYRICS;
-      const taggedNative = withSource(native, options.nativeType || 'native');
-      // 会员曲目通常自带逐字，先出歌词，别为了扫酷狗/AMLL把取流一起堵死
-      if (isWordByWord(native) && coverageScore(native) >= 48) {
-        return taggedNative;
-      }
-      const best = await this.matchBest(options).catch(() => null);
-      if (best && scoreBundle(best) > 0) {
-        const chosen = pickBetterLyrics(best, taggedNative);
-        return chosen.source ? chosen : withSource(chosen, options.preferred);
-      }
-      if (scoreBundle(native) > 0) return taggedNative;
-    }
-
     const native = options.nativeType && options.nativeId
       ? await this.fetch(options.nativeType, options.nativeId).catch(() => EMPTY_LYRICS)
       : EMPTY_LYRICS;
-    const preferred = await this.fetchPreferred(options).catch(() => EMPTY_LYRICS);
     const taggedNative = withSource(native, options.nativeType || 'native');
-    const taggedPreferred = withSource(preferred, options.preferred);
-    if (scoreBundle(preferred) <= 0 && scoreBundle(native) <= 0) {
-      return taggedNative;
+
+    if (options.autoUseBest) {
+      // 用户设置的默认源优先（精确 ID 或按歌名搜索）
+      const preferredLyrics = await this.fetchPreferred(options).catch(() => EMPTY_LYRICS);
+      if (hasUsableLyrics(preferredLyrics)) {
+        return withSource(preferredLyrics, options.preferred);
+      }
+
+      // 默认源失败后再考虑当前平台逐字（且不与已选默认源重复尝试）
+      const nativeIsPreferred = options.nativeType === options.preferred;
+      if (
+        !nativeIsPreferred
+        && isWordByWord(native)
+        && coverageScore(native) >= 48
+        && hasUsableLyrics(native)
+      ) {
+        return taggedNative;
+      }
+
+      const best = await this.matchBest(options).catch(() => null);
+      if (best && hasUsableLyrics(best)) {
+        if (hasUsableLyrics(native) && !nativeIsPreferred) {
+          return pickBetterLyrics(best, taggedNative);
+        }
+        return best.source ? best : withSource(best, options.preferred);
+      }
+      if (hasUsableLyrics(native)) return taggedNative;
+
+      const relaxed = await this.matchBest({
+        ...options,
+        artist: '',
+      }).catch(() => null);
+      if (relaxed && hasUsableLyrics(relaxed)) {
+        return relaxed.source ? relaxed : withSource(relaxed, options.preferred);
+      }
     }
-    if (scoreBundle(preferred) <= 0) return taggedNative;
-    if (scoreBundle(native) <= 0) return taggedPreferred;
+
+    const preferred = await this.fetchPreferred(options).catch(() => EMPTY_LYRICS);
+    const taggedPreferred = withSource(preferred, options.preferred);
+    if (!hasUsableLyrics(preferred) && !hasUsableLyrics(native)) {
+      return taggedPreferred.source ? taggedPreferred : taggedNative;
+    }
+    if (!hasUsableLyrics(preferred)) return taggedNative;
+    if (!hasUsableLyrics(native)) return taggedPreferred;
     return pickBetterLyrics(taggedPreferred, taggedNative);
   }
 
@@ -369,7 +412,17 @@ export class LyricsService {
         const found = source === 'qq'
           ? await this.qq.searchByName(query, 1).catch(() => null)
           : await this.netease.searchByName(query, 1).catch(() => null);
-        const hit = pickBestSearchTrack(target, found?.tracks || []);
+        let hit = pickBestSearchTrack(target, found?.tracks || []);
+        if (!hit?.songid && options.artist.trim()) {
+          const titleOnlyFound = source === 'qq'
+            ? await this.qq.searchByName(options.title, 1).catch(() => null)
+            : await this.netease.searchByName(options.title, 1).catch(() => null);
+          hit = pickBestSearchTrack(
+            { ...target, artist: '' },
+            titleOnlyFound?.tracks || [],
+            'titleOnly',
+          );
+        }
         if (hit?.songid) {
           const lyrics = await this.fetch(source, String(hit.songid)).catch(() => EMPTY_LYRICS);
           consider(lyrics, source);
@@ -378,13 +431,21 @@ export class LyricsService {
       }
 
       if (source === 'amll') {
-        const amll = await this.fetchAmll(options).catch(() => EMPTY_LYRICS);
+        const amll = await this.fetchAmll({
+          ...options,
+          searchQuery: query,
+        }).catch(() => EMPTY_LYRICS);
         consider(amll, 'amll');
         return;
       }
 
       if (source === 'kugou') {
-        const kugou = await this.fetchKugou(query).catch(() => EMPTY_LYRICS);
+        const kugou = await this.fetchKugou({
+          title: options.title,
+          artist: options.artist,
+          durationMs: options.durationMs,
+          searchQuery: query,
+        }).catch(() => EMPTY_LYRICS);
         consider(kugou, 'kugou');
       }
     });
@@ -403,12 +464,19 @@ export class LyricsService {
     const query = [options.title, options.artist].filter(Boolean).join(' ').trim() || options.title;
     if (options.preferred === 'netease' || options.preferred === 'qq') {
       if (options.nativeType === options.preferred && options.nativeId) {
-        return this.fetch(options.preferred, options.nativeId);
+        const exact = await this.fetch(options.preferred, options.nativeId);
+        if (hasUsableLyrics(exact)) return exact;
       }
       return this.searchAndFetch(options.preferred, query);
     }
-    if (options.preferred === 'kugou') return this.fetchKugou(query);
-    return this.fetchAmll(options);
+    if (options.preferred === 'kugou') {
+      return this.fetchKugou({
+        title: options.title,
+        artist: options.artist,
+        searchQuery: query,
+      });
+    }
+    return this.fetchAmll({ ...options, searchQuery: query });
   }
 
   private async searchAndFetch(type: 'netease' | 'qq', query: string): Promise<LyricBundle> {
@@ -420,39 +488,29 @@ export class LyricsService {
     return this.fetch(type, String(first.songid));
   }
 
-  private async fetchKugou(query: string): Promise<LyricBundle> {
-    const searchQs = new URLSearchParams({
-      ver: '1',
-      man: 'yes',
-      client: 'pc',
-      keyword: query,
-      duration: '0',
-      hash: '',
-    });
-    const search = await request('GET', `http://lyrics.kugou.com/search?${searchQs}`, {
-      headers: { Referer: 'https://www.kugou.com/' },
-      timeoutMs: 5000,
-    });
-    const candidate = search.json?.candidates?.[0];
-    const id = candidate?.id;
-    const accesskey = candidate?.accesskey;
-    if (!id || !accesskey) return EMPTY_LYRICS;
-    const downQs = new URLSearchParams({
-      ver: '1',
-      client: 'pc',
-      id: String(id),
-      accesskey: String(accesskey),
-      fmt: 'lrc',
-      charset: 'utf8',
-    });
-    const down = await request('GET', `http://lyrics.kugou.com/download?${downQs}`, {
-      headers: { Referer: 'https://www.kugou.com/' },
-      timeoutMs: 5000,
-    });
-    const encoded = String(down.json?.content || '');
-    if (!encoded) return EMPTY_LYRICS;
-    const lrc = decodeEntities(Buffer.from(encoded, 'base64').toString('utf8'));
-    return { lrc, yrc: '', tlyric: '' };
+  private amllPlatform(type: 'netease' | 'qq'): AmllPlatform {
+    return type === 'netease' ? 'ncm' : 'qq';
+  }
+
+  private async fetchAmllFromDb(platform: AmllPlatform, musicId: string): Promise<LyricBundle> {
+    const id = String(musicId).trim();
+    if (!id) return EMPTY_LYRICS;
+    for (const format of ['yrc', 'ttml', 'lrc'] as const) {
+      const url = `${AMLL_DB_BASE}/${platform}/${encodeURIComponent(id)}?format=${format}`;
+      const res = await request('GET', url, { timeoutMs: 5000 });
+      if (!res.ok || !res.body?.trim()) continue;
+      if (format === 'yrc' && effectiveTimedLyricScore(res.body) > 0) {
+        return { lrc: '', yrc: res.body, tlyric: '' };
+      }
+      if (format === 'ttml' && /<tt(?:\s|>)/i.test(res.body)) {
+        const lrc = ttmlToLrc(res.body);
+        if (effectiveTimedLyricScore(lrc) > 0) return { lrc, yrc: '', tlyric: '' };
+      }
+      if (format === 'lrc' && effectiveTimedLyricScore(res.body) > 0) {
+        return { lrc: res.body, yrc: '', tlyric: '' };
+      }
+    }
+    return EMPTY_LYRICS;
   }
 
   private async fetchAmll(options: {
@@ -460,20 +518,84 @@ export class LyricsService {
     artist: string;
     nativeType?: 'netease' | 'qq';
     nativeId?: string;
+    searchQuery?: string;
   }): Promise<LyricBundle> {
-    const urls: string[] = [];
+    const probes: Array<{ platform: AmllPlatform; id: string }> = [];
     if (options.nativeType === 'netease' && options.nativeId) {
-      urls.push(`https://cdn.jsdelivr.net/gh/Steve-xmh/amll-ttml-db@main/ncm-lyrics/${options.nativeId}.ttml`);
+      probes.push({ platform: 'ncm', id: options.nativeId });
     }
     if (options.nativeType === 'qq' && options.nativeId) {
-      urls.push(`https://cdn.jsdelivr.net/gh/Steve-xmh/amll-ttml-db@main/qq-lyrics/${options.nativeId}.ttml`);
+      probes.push({ platform: 'qq', id: options.nativeId });
     }
-    const results = await Promise.all(urls.map((url) => request('GET', url, { timeoutMs: 5000 })));
-    for (const res of results) {
-      if (!res.ok || !res.body.includes('<p')) continue;
-      const lrc = ttmlToLrc(res.body);
-      if (timedLyricScore(lrc) > 0) return { lrc, yrc: '', tlyric: '' };
+
+    const target = {
+      title: options.title,
+      artist: options.artist,
+    };
+    const query = options.searchQuery || [options.title, options.artist].filter(Boolean).join(' ').trim();
+    if (query) {
+      for (const source of ['netease', 'qq'] as const) {
+        const found = source === 'qq'
+          ? await this.qq.searchByName(query, 1).catch(() => null)
+          : await this.netease.searchByName(query, 1).catch(() => null);
+        let hit = pickBestSearchTrack(target, found?.tracks || []);
+        if (!hit?.songid && options.artist.trim()) {
+          const titleOnly = source === 'qq'
+            ? await this.qq.searchByName(options.title, 1).catch(() => null)
+            : await this.netease.searchByName(options.title, 1).catch(() => null);
+          hit = pickBestSearchTrack({ ...target, artist: '' }, titleOnly?.tracks || [], 'titleOnly');
+        }
+        if (hit?.songid) {
+          probes.push({ platform: this.amllPlatform(source), id: String(hit.songid) });
+        }
+      }
+    }
+
+    const seen = new Set<string>();
+    for (const probe of probes) {
+      const key = `${probe.platform}:${probe.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const lyrics = await this.fetchAmllFromDb(probe.platform, probe.id);
+      if (hasUsableLyrics(lyrics)) return lyrics;
     }
     return EMPTY_LYRICS;
+  }
+
+  private async fetchKugou(options: {
+    title: string;
+    artist: string;
+    durationMs?: number;
+    searchQuery?: string;
+  }): Promise<LyricBundle> {
+    const query = options.searchQuery || [options.title, options.artist].filter(Boolean).join(' ').trim();
+    if (!query) return EMPTY_LYRICS;
+    const target = {
+      title: options.title,
+      artist: options.artist,
+      durationMs: options.durationMs,
+    };
+    const songs = await searchKugouSongs(query, 1, 8).catch(() => []);
+    const ranked = songs
+      .map((song) => ({
+        song,
+        details: scoreCandidate(target, {
+          title: song.name,
+          author: song.artists,
+          durationMs: song.durationMs,
+        }),
+      }))
+      .sort((a, b) => b.details.score - a.details.score);
+    const best = ranked.find((item) => item.details.titleMatched && item.details.artistMatched)
+      ?? ranked.find((item) => item.details.titleMatched)
+      ?? ranked[0];
+    const song = best?.song;
+    if (!song) return EMPTY_LYRICS;
+    const lyricText = await fetchKugouLyricText(song).catch(() => '');
+    if (!lyricText || !effectiveTimedLyricScore(lyricText)) return EMPTY_LYRICS;
+    if (/\[\d+,\d+\]/.test(lyricText)) {
+      return { lrc: '', yrc: lyricText, tlyric: '' };
+    }
+    return { lrc: lyricText, yrc: '', tlyric: '' };
   }
 }

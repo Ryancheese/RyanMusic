@@ -5,7 +5,7 @@ import { Hono } from 'hono';
 import { NeteaseAccount } from './accounts/netease.ts';
 import { QqAccount } from './accounts/qq.ts';
 import { FileCache } from './cache.ts';
-import { NETEASE_UA, UA, VERSION, apiSecret, randomCnIp, type MusicSource } from './config.ts';
+import { NETEASE_UA, UA, VERSION, apiSecret, bootstrapBase, randomCnIp, type MusicSource } from './config.ts';
 import { LyricsService } from './lyrics.ts';
 import { NeteaseService } from './netease.ts';
 import { spaHtml } from './pages.ts';
@@ -13,7 +13,7 @@ import { QqService } from './qq.ts';
 import { verifySign } from './sign.ts';
 import { httpsNeteaseUrl, mediaReferer, parseSongUrl } from './util.ts';
 import { pickBestCrossPlayTrack } from './crossPlay.ts';
-import { fetchOpen } from './http.ts';
+import { fetchOpen, request } from './http.ts';
 
 export interface AppOptions {
   webRoot: string;
@@ -113,6 +113,10 @@ export function createApp(options: AppOptions) {
     () => neteaseAccount.sessionCookie(),
     () => qqAccount.sessionCookie(),
   );
+  const privateBase = bootstrapBase();
+  if (privateBase) {
+    void request('GET', `${privateBase}/`, { timeoutMs: 2_000 });
+  }
   const app = new Hono();
 
   const mime: Record<string, string> = {
@@ -167,36 +171,47 @@ export function createApp(options: AppOptions) {
 
     if (get === 'url') {
       const useAuth = Boolean(c.req.query('auth'));
+      const skipCache = Boolean(c.req.query('fresh'));
       const level = String(c.req.query('level') || '').trim();
       const neteaseCookie = useAuth ? neteaseAccount.sessionCookie() || '' : '';
       const qqCookie = useAuth ? qqAccount.sessionCookie() || '' : '';
-      let play =
+      const wantCross = c.req.query('cross') === '1';
+      const isDelisted = c.req.query('delisted') === '1';
+      const resolveCurrent = (auth: boolean, fresh = skipCache) => (
         type === 'qq'
-          ? await qq.resolvePlayUrl(id, qqCookie)
-          : await netease.resolvePlayUrl(id, neteaseCookie, level);
-      if (!play && useAuth) {
-        play = type === 'qq'
-          ? await qq.resolvePlayUrl(id)
-          : await netease.resolvePlayUrl(id, '', level);
-      }
-      // 原渠道下架/无私链：按歌名艺人到另一渠道搜同名，再用对方私链取流（跨渠道保底）
-      if (!play && c.req.query('cross') === '1') {
+          ? qq.resolvePlayUrl(id, auth ? qqCookie : '', fresh)
+          : netease.resolvePlayUrl(id, auth ? neteaseCookie : '', level, fresh)
+      );
+      const resolveCross = async () => {
         const title = String(c.req.query('title') || '').trim();
         const artist = String(c.req.query('artist') || '').trim();
-        if (title) {
-          const altType: MusicSource = type === 'qq' ? 'netease' : 'qq';
-          const query = [title, artist].filter(Boolean).join(' ');
-          const found = altType === 'qq'
-            ? await qq.searchByName(query, 1).catch(() => null)
-            : await netease.searchByName(query, 1).catch(() => null);
-          const best = pickBestCrossPlayTrack({ title, artist }, found?.tracks || []);
-          if (best?.songid) {
-            play = altType === 'qq'
-              ? await qq.resolvePlayUrl(String(best.songid))
-              : await netease.resolvePlayUrl(String(best.songid));
-          }
+        if (!title) return null;
+        const altType: MusicSource = type === 'qq' ? 'netease' : 'qq';
+        const searchAlt = async (query: string) => (
+          altType === 'qq'
+            ? qq.searchByName(query, 1).catch(() => null)
+            : netease.searchByName(query, 1).catch(() => null)
+        );
+        const pickCross = async (query: string, mode: 'strict' | 'titleOnly') => {
+          const found = await searchAlt(query);
+          return pickBestCrossPlayTrack({ title, artist }, found?.tracks || [], mode);
+        };
+        let best = await pickCross([title, artist].filter(Boolean).join(' '), 'strict');
+        if (!best?.songid && artist.trim()) {
+          best = await pickCross(title, 'titleOnly');
         }
+        if (!best?.songid) return null;
+        return altType === 'qq'
+          ? qq.resolvePlayUrl(String(best.songid), '', true)
+          : netease.resolvePlayUrl(String(best.songid), '', '', true);
+      };
+      let play: string | null = null;
+      if (isDelisted) {
+        play = await resolveCross();
       }
+      if (!play) play = await resolveCurrent(useAuth);
+      if (!play && useAuth) play = await resolveCurrent(false, skipCache);
+      if (!play && wantCross && !isDelisted) play = await resolveCross();
       if (!play) return c.text('无法获取播放地址', 502);
       if (c.req.query('probe')) return new Response(null, { status: 204 });
       let name = c.req.query('name') || 'RyanMusic';
@@ -209,12 +224,15 @@ export function createApp(options: AppOptions) {
         cookie: type === 'netease' ? neteaseCookie : type === 'qq' ? qqCookie : undefined,
       };
       let streamed = await proxyMedia(play, c.req.raw, proxyOpts);
-      if (streamed.status >= 400 && useAuth) {
-        const fallback = type === 'qq'
-          ? await qq.resolvePlayUrl(id)
-          : await netease.resolvePlayUrl(id, '');
-        if (fallback && fallback !== play) {
-          streamed = await proxyMedia(fallback, c.req.raw, { ...proxyOpts, cookie: undefined });
+      if (streamed.status >= 400) {
+        if (type === 'qq') qq.forgetCachedPlay(id);
+        else netease.forgetCachedPlay(id);
+        let retry = await resolveCurrent(false, true);
+        if ((!retry || retry === play) && (wantCross || isDelisted)) {
+          retry = await resolveCross();
+        }
+        if (retry && retry !== play) {
+          streamed = await proxyMedia(retry, c.req.raw, { ...proxyOpts, cookie: undefined });
         }
       }
       return streamed;
@@ -265,6 +283,37 @@ export function createApp(options: AppOptions) {
         if (typeof v === 'string') post[k] = v;
       }
       const action = (post.action || '').trim();
+      if (action === 'sign_media') {
+        const type = post.type === 'qq' ? 'qq' : 'netease';
+        const id = String(post.id || post.songid || '').trim();
+        if (!id) return jsonResponse(null, 400, '缺少歌曲');
+        let delisted = post.delisted === '1';
+        if (!delisted) {
+          try {
+            if (type === 'netease') {
+              const [track] = await netease.songsByIds([id]);
+              delisted = Boolean(track?.delisted);
+            } else {
+              const [track] = await qq.songsByIds([id]);
+              delisted = Boolean(track?.delisted);
+            }
+          } catch {
+            // ignore probe errors
+          }
+        }
+        const stub = {
+          type,
+          songid: id,
+          title: String(post.title || ''),
+          author: String(post.artist || post.author || ''),
+          lrc: '',
+          url: '',
+          pic: '',
+          ...(delisted ? { delisted: true } : {}),
+        };
+        const wrapped = type === 'qq' ? qq.wrap(stub) : netease.wrap(stub);
+        return jsonResponse({ url: wrapped.url, pic: wrapped.pic, delisted }, 200, '');
+      }
       if (action.startsWith('netease_')) {
         if (action === 'netease_qualities') {
           const songid = String(post.id || post.songid || '').trim();

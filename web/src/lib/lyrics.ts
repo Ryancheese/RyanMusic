@@ -62,6 +62,31 @@ export function timedLyricScore(text?: string | null): number {
   return word * 10 + lrc;
 }
 
+const PLACEHOLDER_LYRIC_RE = /^(?:暂无歌词|无歌词|纯音乐|此歌曲为没有填词的纯音乐|instrumental|not\s*available|no\s*lyrics?)[\s.…]*$/iu;
+
+export function isPlaceholderLyricText(text?: string | null): boolean {
+  const raw = normalizeLyricText(text)
+    .replace(/\[[^\]]+\]/g, '')
+    .replace(/\(\d+,\d+(?:,\d+)?\)/g, '')
+    .replace(/<\d+,\d+[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!raw) return true;
+  return PLACEHOLDER_LYRIC_RE.test(raw);
+}
+
+export function effectiveTimedLyricScore(text?: string | null): number {
+  if (isPlaceholderLyricText(text)) return 0;
+  return timedLyricScore(text);
+}
+
+export function hasUsableTrackLyrics(
+  track?: Pick<Track, 'lrc' | 'yrc'> | null,
+): boolean {
+  if (!track) return false;
+  return effectiveTimedLyricScore(track.yrc) + effectiveTimedLyricScore(track.lrc) > 0;
+}
+
 export function detectLyricParseFormat(content?: string): LyricParseFormat {
   const raw = normalizeLyricText(content);
   if (!raw.trim()) return 'lrc';

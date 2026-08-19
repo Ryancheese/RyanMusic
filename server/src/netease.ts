@@ -7,6 +7,9 @@ import {
   firstTruthy,
   httpsNeteaseUrl,
   isBadMediaUrl,
+  isNeteaseDelisted,
+  isNeteaseTrialMediaUrl,
+  isNeteaseTrialPlayItem,
   nameSearchSourcePage,
   sliceNameSearchSongids,
 } from './util.ts';
@@ -57,12 +60,18 @@ export class NeteaseService {
     });
     const songs = res.json?.result?.songs;
     if (!Array.isArray(songs) || !songs.length) return null;
+    const privileges = res.json?.result?.privileges;
+    const privById = new Map<string, any>(
+      Array.isArray(privileges)
+        ? privileges.map((item: any) => [String(item.id), item])
+        : [],
+    );
     const ids = songs.map((s: any) => String(s.id));
     const sliced = sliceNameSearchSongids(ids, page);
     if (!sliced.songids.length) return null;
     const byId = new Map(songs.map((song: any) => [String(song.id), song]));
     const tracks = sliced.songids
-      .map((id) => this.trackFromSong(byId.get(String(id))))
+      .map((id) => this.trackFromSong(byId.get(String(id)), privById.get(String(id))))
       .filter((item): item is NonNullable<typeof item> => Boolean(item))
       .map((item) => this.wrap({ ...item, lrc: '', url: '' }));
     return { tracks, hasMore: sliced.has_more };
@@ -81,6 +90,12 @@ export class NeteaseService {
     });
     const songs = res.json?.songs;
     if (!Array.isArray(songs)) return [];
+    const privileges = res.json?.privileges;
+    const privById = new Map<string, any>(
+      Array.isArray(privileges)
+        ? privileges.map((item: any) => [String(item.id), item])
+        : [],
+    );
 
     return songs.map((value: any) => {
       const id = String(value.id);
@@ -88,6 +103,7 @@ export class NeteaseService {
         ? value.artists.map((a: any) => a.name).filter(Boolean)
         : [];
       const pic = value.album?.picUrl ? `${value.album.picUrl}?param=300x300` : '';
+      const delisted = isNeteaseDelisted(value, privById.get(id));
       return this.wrap({
         type: 'netease',
         songid: id,
@@ -99,6 +115,7 @@ export class NeteaseService {
         tlyric: '',
         url: '',
         pic,
+        ...(delisted ? { delisted: true } : {}),
       });
     });
   }
@@ -128,39 +145,43 @@ export class NeteaseService {
 
   static readonly FAST_PLAY_LEVELS = ['exhigh', 'higher', 'standard'] as const;
 
-  async resolvePlayUrl(songid: string, cookie = '', level = ''): Promise<string | null> {
-    const inflightKey = `${cookie ? 'auth' : 'private'}:${level || 'auto'}:${songid}`;
+  async resolvePlayUrl(songid: string, cookie = '', level = '', skipCache = false): Promise<string | null> {
+    const inflightKey = `${cookie ? 'auth' : 'private'}:${level || 'auto'}:${skipCache ? 'fresh' : 'cache'}:${songid}`;
     const inflight = this.playInflight.get(inflightKey);
     if (inflight) return inflight;
-    const pending = this.resolvePlayUrlInner(songid, cookie, level).finally(() => {
+    const pending = this.resolvePlayUrlInner(songid, cookie, level, skipCache).finally(() => {
       this.playInflight.delete(inflightKey);
     });
     this.playInflight.set(inflightKey, pending);
     return pending;
   }
 
-  private async resolvePlayUrlInner(songid: string, cookie = '', level = ''): Promise<string | null> {
+  forgetCachedPlay(songid: string) {
+    this.cache.setTtl('netease_play_v6', songid, '', -1);
+  }
+
+  private async resolvePlayUrlInner(songid: string, cookie = '', level = '', skipCache = false): Promise<string | null> {
     const cacheKey = cookie
-      ? `netease_play_auth_v4_${level || 'auto'}`
-      : 'netease_play_v4';
-    const cached = this.cache.getTtl(cacheKey, songid);
-    if (cached) return cached;
+      ? `netease_play_auth_v6_${level || 'auto'}`
+      : 'netease_play_v6';
+    if (!skipCache) {
+      const cached = this.cache.getTtl(cacheKey, songid);
+      if (cached && !isNeteaseTrialMediaUrl(cached)) return cached;
+    }
 
     if (cookie) {
       const authUrl = await this.cookiePlayUrl(songid, cookie, level);
-      if (authUrl) {
+      if (authUrl && !isNeteaseTrialMediaUrl(authUrl)) {
         this.cache.setTtl(cacheKey, songid, authUrl, 600);
         return authUrl;
       }
     }
 
-    const url = await firstTruthy([
-      () => this.metingPlayUrl(songid),
-      () => this.bootstrapPlayUrl(songid),
-    ]);
-    if (url && !isBadMediaUrl(url) && !/\/404/.test(url)) {
+    // 非会员一刀切：只走 RyanMusic 私链，官方/Meting 会给 30 秒试听。
+    const url = await this.bootstrapPlayUrl(songid);
+    if (url && !isBadMediaUrl(url) && !isNeteaseTrialMediaUrl(url) && !/\/404/i.test(url)) {
       const safeUrl = httpsNeteaseUrl(url);
-      this.cache.setTtl('netease_play_v4', songid, safeUrl, 600);
+      this.cache.setTtl('netease_play_v6', songid, safeUrl, 1800);
       return safeUrl;
     }
     return null;
@@ -229,7 +250,7 @@ export class NeteaseService {
       );
       const item = weapi.json?.data?.[0];
       const url = item?.url as string | undefined;
-      if (url && !this.isTrialPlayItem(item) && !isBadMediaUrl(url) && !/\/404/i.test(url)) {
+      if (url && !isNeteaseTrialPlayItem(item) && !isBadMediaUrl(url) && !/\/404/i.test(url)) {
         return httpsNeteaseUrl(url);
       }
       return null;
@@ -267,26 +288,13 @@ export class NeteaseService {
     );
     const item = res.json?.data?.[0];
     const url = item?.url as string | undefined;
-    if (this.isTrialPlayItem(item)) return null;
+    if (isNeteaseTrialPlayItem(item)) return null;
     if (!url || isBadMediaUrl(url) || /\/404/i.test(url)) return null;
     return {
       url: httpsNeteaseUrl(url),
       br: typeof item?.br === 'number' ? item.br : undefined,
       size: typeof item?.size === 'number' ? item.size : undefined,
     };
-  }
-
-  private isTrialPlayItem(item: any): boolean {
-    if (!item) return false;
-    if (item.freeTrialInfo) return true;
-    const time = Number(item.time || 0);
-    if (time > 0 && time <= 60_000) return true;
-    const privilege = item.freeTrialPrivilege;
-    return Boolean(
-      privilege
-      && (privilege.resConsumable || privilege.userConsumable)
-      && time > 0,
-    );
   }
 
   private async bootstrapPlayUrl(songid: string): Promise<string | null> {
@@ -298,26 +306,16 @@ export class NeteaseService {
         Referer: `${base}/`,
       },
       body: { input: songid, filter: 'id', type: 'netease', page: 1 },
+      timeoutMs: 2_500,
     });
     const apiPath = res.json?.data?.[0]?.url as string | undefined;
     if (!apiPath) return null;
     const api = `${base}/${apiPath.replace(/^\//, '')}`;
-    let loc = await followLocation(api, `${base}/`);
-    if (!loc) return null;
+    const loc = await followLocation(api, `${base}/`, 2_500);
+    if (!loc || isBadMediaUrl(loc) || isNeteaseTrialMediaUrl(loc)) return null;
     if (/(126\.net|163\.com|music\.163)/i.test(loc)) return loc;
-    return (await followLocation(loc, `${base}/`)) || loc;
-  }
-
-  private async metingPlayUrl(songid: string): Promise<string | null> {
-    const endpoints = [
-      `https://api.injahow.cn/meting/?server=netease&type=url&id=${encodeURIComponent(songid)}`,
-      `https://api.injahow.cn/meting/?type=url&id=${encodeURIComponent(songid)}`,
-    ];
-    return firstTruthy(endpoints.map((endpoint) => async () => {
-      const loc = await followLocation(endpoint, 'https://api.injahow.cn/');
-      if (loc && !isBadMediaUrl(loc) && /(126\.net|163\.com|music\.163)/i.test(loc)) return loc;
-      return null;
-    }));
+    const hop = await followLocation(loc, `${base}/`, 2_000);
+    return hop && !isNeteaseTrialMediaUrl(hop) ? hop : loc;
   }
 
   async resolvePicUrl(songid: string): Promise<string | null> {
@@ -335,7 +333,7 @@ export class NeteaseService {
     return httpsNeteaseUrl(withSize);
   }
 
-  trackFromSong(song: any): Omit<Track, 'lrc' | 'url'> | null {
+  trackFromSong(song: any, privilege?: any): Omit<Track, 'lrc' | 'url'> | null {
     const id = song?.id;
     if (!id) return null;
     const artists: string[] = [];
@@ -345,6 +343,7 @@ export class NeteaseService {
       for (const a of song.artists) if (a?.name) artists.push(a.name);
     }
     const pic = song.al?.picUrl || song.album?.picUrl || '';
+    const delisted = isNeteaseDelisted(song, privilege);
     return {
       type: 'netease',
       songid: String(id),
@@ -352,6 +351,7 @@ export class NeteaseService {
       author: artists.join(', ') || '未知艺人',
       link: `https://music.163.com/#/song?id=${id}`,
       pic,
+      ...(delisted ? { delisted: true } : {}),
     };
   }
 
@@ -372,7 +372,7 @@ export class NeteaseService {
       const songs = res.json?.songs;
       if (!Array.isArray(songs)) continue;
       for (const song of songs) {
-        const t = this.trackFromSong(song);
+        const t = this.trackFromSong(song, res.json?.privileges?.find((p: any) => String(p.id) === String(song.id)));
         if (t) out.push(this.wrap({ ...t, lrc: '', url: '' }));
       }
     }

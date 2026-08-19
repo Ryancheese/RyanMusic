@@ -44,9 +44,12 @@ function artistSimilarity(target: string, search: string): number {
   return Math.max(hits / Math.max(left.length, right.length), stringSimilarity(target, search));
 }
 
+export type CrossPlayMatchMode = 'strict' | 'titleOnly';
+
 export function pickBestCrossPlayTrack(
   target: { title: string; artist: string },
   tracks: Track[],
+  mode: CrossPlayMatchMode = 'strict',
 ): Track | null {
   const scored = tracks
     .slice(0, AUTO_MATCH_SEARCH_LIMIT)
@@ -62,11 +65,20 @@ export function pickBestCrossPlayTrack(
       return {
         track,
         score: Math.round(identity),
+        titleSim,
         titleMatched,
         artistMatched,
       };
     })
     .sort((a, b) => b.score - a.score);
+
+  if (mode === 'titleOnly') {
+    const best = scored.find((item) => item.titleMatched);
+    if (!best) return null;
+    const titleScore = Math.round(best.titleSim * 80 + 20);
+    if (titleScore < 65) return null;
+    return best.track;
+  }
 
   const best = scored.find((item) => item.titleMatched && item.artistMatched) ?? scored[0];
   if (!best) return null;

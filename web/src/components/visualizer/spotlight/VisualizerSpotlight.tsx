@@ -275,7 +275,8 @@ const SpotlightWipeChar: React.FC<{
   litColor: string;
   accentColor: string;
   fontPx: number;
-}> = ({ glyph, time, mode, dimColor, litColor, accentColor, fontPx }) => {
+  lightLyrics?: boolean;
+}> = ({ glyph, time, mode, dimColor, litColor, accentColor, fontPx, lightLyrics = false }) => {
   if (mode === 'past') {
     return <span className="inline-block" style={{ color: litColor }}>{glyph.char}</span>;
   }
@@ -285,7 +286,28 @@ const SpotlightWipeChar: React.FC<{
 
   const p = glyphFillProgress(glyph, time);
   const scale = glyphPulseScale(glyph, time);
-  const glowFilter = glyphGlowFilter(glyph, time, litColor, accentColor, fontPx);
+  const glowFilter = lightLyrics ? 'none' : glyphGlowFilter(glyph, time, litColor, accentColor, fontPx);
+
+  if (lightLyrics) {
+    const wipe = Math.max(0, Math.min(100, p * 100));
+    return (
+      <span
+        className="inline-block will-change-transform"
+        style={{
+          backgroundImage: `linear-gradient(90deg, ${litColor} 0%, ${litColor} ${wipe}%, ${dimColor} ${wipe}%, ${dimColor} 100%)`,
+          WebkitBackgroundClip: 'text',
+          backgroundClip: 'text',
+          color: 'transparent',
+          transform: `scale(${scale})`,
+          transformOrigin: 'center bottom',
+          zIndex: scale > 1.05 ? 3 : 1,
+        }}
+      >
+        {glyph.char}
+      </span>
+    );
+  }
+
   const wipeMask = glyphWipeMask(p);
 
   return (
@@ -329,7 +351,8 @@ const SpotlightKaraokeLine: React.FC<{
   litColor: string;
   accentColor: string;
   fontPx: number;
-}> = ({ line, time, mode, dimColor, litColor, accentColor, fontPx }) => {
+  lightLyrics?: boolean;
+}> = ({ line, time, mode, dimColor, litColor, accentColor, fontPx, lightLyrics }) => {
   const glyphs = useMemo(() => buildSpotlightGlyphs(line), [line]);
   if (!glyphs.length) {
     return <span style={{ color: mode === 'future' ? dimColor : litColor }}>{line.fullText || ''}</span>;
@@ -346,6 +369,7 @@ const SpotlightKaraokeLine: React.FC<{
           litColor={litColor}
           accentColor={accentColor}
           fontPx={fontPx}
+          lightLyrics={lightLyrics}
         />
       ))}
     </span>
@@ -371,6 +395,7 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
     songArtist,
     onLyricLineSeek,
     isPlayerChromeHidden,
+    isDaylight = false,
   } = props;
 
   const railRef = useRef<HTMLDivElement>(null);
@@ -518,6 +543,7 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
   const litColor = theme.primaryColor || '#FFFFFF';
   const dimColor = theme.secondaryColor || 'rgba(255,255,255,0.34)';
   const accent = theme.accentColor || litColor;
+  const lightLyrics = isDaylight;
 
   return (
     <VisualizerShell
@@ -583,7 +609,7 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
                   >
                     <div
                       style={{
-                        textShadow: isActive
+                        textShadow: isActive && !lightLyrics
                           ? `0 2px 28px rgba(0,0,0,0.28), 0 0 24px color-mix(in srgb, ${accent} 22%, transparent)`
                           : 'none',
                       }}
@@ -606,6 +632,7 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
                           litColor={litColor}
                           accentColor={accent}
                           fontPx={fontPx}
+                          lightLyrics={lightLyrics}
                         />
                       )}
                     </div>

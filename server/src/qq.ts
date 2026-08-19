@@ -2,7 +2,7 @@ import { bootstrapBase, UA, type Track } from './config.ts';
 import { FileCache } from './cache.ts';
 import { followLocation, request } from './http.ts';
 import { proxyUrl } from './sign.ts';
-import { decodeEntities, firstTruthy, isBadMediaUrl, isQqPrivatePlayUrl, isQqTrialMediaUrl, jsonpToJson, nameSearchSourcePage, sliceNameSearchSongids } from './util.ts';
+import { decodeEntities, isBadMediaUrl, isQqDelisted, isQqTrialMediaUrl, jsonpToJson, nameSearchSourcePage, sliceNameSearchSongids } from './util.ts';
 
 export class QqService {
   private readonly playInflight = new Map<string, Promise<string | null>>();
@@ -139,67 +139,45 @@ export class QqService {
     return jsonpToJson(res.body) || {};
   }
 
-  async resolvePlayUrl(songmid: string, cookie = ''): Promise<string | null> {
-    const inflightKey = `${cookie ? 'auth' : 'private'}:${songmid}`;
+  async resolvePlayUrl(songmid: string, cookie = '', skipCache = false): Promise<string | null> {
+    const inflightKey = `${cookie ? 'auth' : 'private'}:${skipCache ? 'fresh' : 'cache'}:${songmid}`;
     const inflight = this.playInflight.get(inflightKey);
     if (inflight) return inflight;
-    const pending = this.resolvePlayUrlInner(songmid, cookie).finally(() => {
+    const pending = this.resolvePlayUrlInner(songmid, cookie, skipCache).finally(() => {
       this.playInflight.delete(inflightKey);
     });
     this.playInflight.set(inflightKey, pending);
     return pending;
   }
 
-  private async resolvePlayUrlInner(songmid: string, cookie = ''): Promise<string | null> {
-    const cacheKey = cookie ? 'qq_play_auth_v6' : 'qq_play_v6';
-    const cached = this.cache.getTtl(cacheKey, songmid);
-    if (cached && !isQqTrialMediaUrl(cached)) return cached;
+  forgetCachedPlay(songmid: string) {
+    this.cache.setTtl('qq_play_v7', songmid, '', -1);
+    this.cache.setTtl('qq_play_auth_v7', songmid, '', -1);
+  }
 
-    // 非会员绝走私链。官方 GetVkey 对 VIP 曲会给 30 秒试听，不能抢在私链前面。
+  private async resolvePlayUrlInner(songmid: string, cookie = '', skipCache = false): Promise<string | null> {
+    const cacheKey = cookie ? 'qq_play_auth_v7' : 'qq_play_v7';
+    if (!skipCache) {
+      const cached = this.cache.getTtl(cacheKey, songmid);
+      if (cached && !isQqTrialMediaUrl(cached)) return cached;
+    }
+
     if (cookie) {
       const official = await this.officialPlayUrl(songmid, cookie);
-      if (official && !await this.looksLikeTrialMedia(official)) {
+      if (official && !isQqTrialMediaUrl(official)) {
         this.cache.setTtl(cacheKey, songmid, official, 600);
         return official;
       }
     }
 
-    const url = await firstTruthy([
-      () => this.pyqPlayUrl(songmid),
-      () => this.bootstrapPlayUrl(songmid),
-    ]);
-    if (url && !isBadMediaUrl(url) && !await this.looksLikeTrialMedia(url)) {
-      this.cache.setTtl('qq_play_v6', songmid, url, 1800);
+    // 非会员一刀切 RyanMusic 私链；试听链不再参与竞速。
+    const url = await this.bootstrapPlayUrl(songmid)
+      || await this.pyqPlayUrl(songmid);
+    if (url && !isBadMediaUrl(url)) {
+      this.cache.setTtl('qq_play_v7', songmid, url, 600);
       return url;
     }
     return null;
-  }
-
-  private async looksLikeTrialMedia(url: string, filename = ''): Promise<boolean> {
-    if (isQqTrialMediaUrl(url, filename)) return true;
-    if (isQqPrivatePlayUrl(url)) return false;
-    const total = await this.probeContentLength(url);
-    // 约 30 秒 96k 试听通常 < 900KB；完整 C400 四分钟也在 2MB 以上
-    return total > 0 && total < 900_000;
-  }
-
-  private async probeContentLength(url: string): Promise<number> {
-    try {
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Range: 'bytes=0-0',
-          Referer: 'https://y.qq.com/',
-          'User-Agent': UA,
-        },
-        signal: AbortSignal.timeout(2_000),
-      });
-      const range = res.headers.get('content-range') || '';
-      const fromRange = range.match(/\/(\d+)\s*$/);
-      return Number(fromRange?.[1] || res.headers.get('content-length') || 0);
-    } catch {
-      return 0;
-    }
   }
 
   private async pyqPlayUrl(songmid: string): Promise<string | null> {
@@ -309,7 +287,7 @@ export class QqService {
     const apiPath = res.json?.data?.[0]?.url as string | undefined;
     if (!apiPath) return null;
     const api = `${base}/${String(apiPath).replace(/^\//, '')}`;
-    let loc = await followLocation(api, `${base}/`);
+    let loc = await followLocation(api, `${base}/`, 4_500);
     if (!loc) return null;
     if (/stream\.qqmusic\.qq\.com|aqqmusic\.tc\.qq\.com/i.test(loc)) return loc;
     return (await followLocation(loc, `${base}/`)) || loc;
@@ -358,6 +336,7 @@ export class QqService {
       lrc: '',
       url: '',
       pic,
+      ...(isQqDelisted(song) ? { delisted: true } : {}),
     });
   }
 }

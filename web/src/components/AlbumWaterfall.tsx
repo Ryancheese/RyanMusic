@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CoverArt from './CoverArt';
+import DelistedCoverBadge from './DelistedCoverBadge';
 import RyanLoader from './RyanLoader';
 import type { LibraryCardStyle, LibraryLayoutMode } from '../types';
 import {
@@ -16,6 +17,7 @@ export interface AlbumWaterfallItem {
   name: string;
   coverUrl?: string;
   description?: string;
+  delisted?: boolean;
 }
 
 interface AlbumWaterfallProps {
@@ -33,6 +35,25 @@ interface AlbumWaterfallProps {
 const CARD_GAP = 18;
 const ZOOM_MIN = 0.55;
 const ZOOM_MAX = 1.9;
+
+function libraryCardSurface(isDaylight: boolean, plaque = false) {
+  if (plaque) {
+    return {
+      backgroundColor: isDaylight ? 'rgba(255,255,255,0.94)' : 'rgba(34,34,38,0.98)',
+      border: isDaylight ? '1px solid rgba(0,0,0,0.1)' : '1px solid rgba(255,255,255,0.1)',
+      boxShadow: isDaylight
+        ? '0 10px 26px rgba(0,0,0,0.12)'
+        : '0 12px 32px rgba(0,0,0,0.55)',
+    };
+  }
+  return {
+    backgroundColor: isDaylight ? 'rgba(255,255,255,0.78)' : 'rgba(255,255,255,0.08)',
+    border: isDaylight ? '1px solid rgba(0,0,0,0.08)' : '1px solid rgba(255,255,255,0.08)',
+    boxShadow: isDaylight
+      ? '0 10px 24px rgba(0,0,0,0.14)'
+      : '0 14px 30px rgba(0,0,0,0.48)',
+  };
+}
 
 function layoutForWidth(width: number, mode: LibraryLayoutMode, zoom = 1) {
   const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
@@ -322,7 +343,9 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                 <div
                   key={`sk-square-${index}`}
                   className="flex flex-col rounded-2xl p-2.5"
-                  style={{ backgroundColor: isDaylight ? 'rgba(0,0,0,0.04)' : 'rgba(12,12,12,0.92)' }}
+                  style={{
+                    ...libraryCardSurface(isDaylight, showPlaque),
+                  }}
                 >
                   <div className="ryan-cover-shimmer aspect-square w-full rounded-xl" />
                   {showPlaque ? (
@@ -348,18 +371,14 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                     onClick={() => onSelect(item, index)}
                     title={item.name}
                     className="app-scroll-item group flex w-full flex-col rounded-2xl p-2.5 text-left transition hover:brightness-110"
-                    style={{
-                      backgroundColor: isDaylight ? 'rgba(0,0,0,0.045)' : 'rgba(18,18,18,0.96)',
-                      boxShadow: isDaylight
-                        ? '0 8px 22px rgba(0,0,0,0.08)'
-                        : '0 10px 28px rgba(0,0,0,0.45)',
-                    }}
+                    style={libraryCardSurface(isDaylight, showPlaque)}
                   >
                     <div
                       className="relative aspect-square w-full overflow-hidden rounded-xl"
                       style={{ backgroundColor: isDaylight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}
                     >
                       <CoverArt src={item.coverUrl} lazy={false} />
+                      {item.delisted ? <DelistedCoverBadge /> : null}
                       {!showPlaque ? (
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-3 pt-10 pb-2.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                           <div className="truncate text-xs font-semibold text-white">{item.name}</div>
@@ -404,7 +423,9 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                 <div
                   key={`sk-list-${index}`}
                   className="flex items-center gap-3 rounded-2xl px-3 py-2.5"
-                  style={{ backgroundColor: isDaylight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.05)' }}
+                  style={{
+                    ...libraryCardSurface(isDaylight, false),
+                  }}
                 >
                   <div className="ryan-cover-shimmer h-14 w-14 shrink-0 rounded-xl" />
                   <div className="min-w-0 flex-1 space-y-2">
@@ -435,14 +456,15 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                       opacity: 1,
                       left: 'auto',
                       top: 'auto',
-                      backgroundColor: isDaylight ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.04)',
+                      ...libraryCardSurface(isDaylight, false),
                     }}
                   >
                     <div
-                      className="h-14 w-14 shrink-0 overflow-hidden rounded-xl"
+                      className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl"
                       style={{ backgroundColor: isDaylight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}
                     >
                       <CoverArt src={item.coverUrl} />
+                      {item.delisted ? <DelistedCoverBadge /> : null}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold">{item.name}</div>
@@ -521,12 +543,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                       willChange: 'transform, opacity',
                       isolation: 'isolate',
                       contain: 'layout style',
-                      boxShadow: isPlaque
-                        ? (isDaylight ? '0 8px 22px rgba(0,0,0,0.08)' : '0 10px 28px rgba(0,0,0,0.45)')
-                        : '0 14px 28px rgba(0,0,0,0.22)',
-                      backgroundColor: isPlaque
-                        ? (isDaylight ? 'rgba(0,0,0,0.045)' : 'rgba(18,18,18,0.96)')
-                        : (isDaylight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)'),
+                      ...libraryCardSurface(isDaylight, isPlaque),
                     }}
                     onClick={(event) => event.preventDefault()}
                     onKeyDown={(event) => {
@@ -545,6 +562,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                       }}
                     >
                       <CoverArt src={item.coverUrl} />
+                      {item.delisted ? <DelistedCoverBadge /> : null}
                       {!isPlaque ? (
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-3 pt-10 pb-2.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
                           <div className="truncate text-left text-xs font-semibold text-white">{item.name}</div>

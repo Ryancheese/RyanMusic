@@ -119,6 +119,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       name: item.title,
       description: item.author || '',
       coverUrl: coverRefreshUrl(item.type, item.songid),
+      delisted: item.delisted,
     }));
   }, [cloudPlaylists, cloudTracks, ownerLabel, showingPlaylists]);
 

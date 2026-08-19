@@ -6,8 +6,9 @@ function origin(): string {
 }
 
 const API_TIMEOUT_MS = 15_000;
+const LYRICS_TIMEOUT_MS = 45_000;
 
-async function postForm(body: URLSearchParams): Promise<Response> {
+async function postForm(body: URLSearchParams, timeoutMs = API_TIMEOUT_MS): Promise<Response> {
   return fetch(origin(), {
     method: 'POST',
     headers: {
@@ -15,7 +16,7 @@ async function postForm(body: URLSearchParams): Promise<Response> {
       'X-Requested-With': 'XMLHttpRequest',
     },
     body,
-    signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }
 
@@ -70,6 +71,26 @@ export async function fetchTrackById(type: MusicSource, songid: string): Promise
   return result.data[0];
 }
 
+export async function fetchSignedMedia(
+  type: MusicSource,
+  songid: string,
+  meta?: { title?: string; author?: string; delisted?: boolean },
+): Promise<{ url: string; pic: string; delisted?: boolean } | null> {
+  const res = await postAction<{ url?: string; pic?: string; delisted?: boolean }>('sign_media', {
+    type,
+    id: String(songid),
+    title: meta?.title || '',
+    author: meta?.author || '',
+    delisted: meta?.delisted ? '1' : '',
+  });
+  if (res.code !== 200 || !res.data?.url) return null;
+  return {
+    url: resolveMediaUrl(res.data.url),
+    pic: resolveMediaUrl(res.data.pic || ''),
+    delisted: Boolean(res.data.delisted || meta?.delisted),
+  };
+}
+
 export function coverRefreshUrl(type: MusicSource, songid: string): string {
   return `${origin()}?cover=1&type=${encodeURIComponent(type)}&id=${encodeURIComponent(songid)}`;
 }
@@ -98,13 +119,17 @@ export function buildDownloadUrl(url: string, name: string): string {
   return `${origin()}?download=1&url=${encodeURIComponent(url)}&name=${encodeURIComponent(name)}`;
 }
 
-export async function postAction<T = unknown>(action: string, data: Record<string, string> = {}): Promise<{
+export async function postAction<T = unknown>(
+  action: string,
+  data: Record<string, string> = {},
+  timeoutMs = API_TIMEOUT_MS,
+): Promise<{
   data: T;
   code: number;
   error: string;
 }> {
   const body = new URLSearchParams({ action, ...data });
-  const response = await postForm(body);
+  const response = await postForm(body, timeoutMs);
   return (await response.json()) as { data: T; code: number; error: string };
 }
 
@@ -141,6 +166,7 @@ export interface CloudTrack {
   title: string;
   author: string;
   pic?: string;
+  delisted?: boolean;
 }
 
 export interface CloudPlaylistDetail {
@@ -218,6 +244,7 @@ export async function fetchTrackLyrics(options: {
   preferred?: 'netease' | 'qq' | 'kugou' | 'amll';
   autoUseBest?: boolean;
   forceSource?: boolean;
+  nativeOnly?: boolean;
 }): Promise<(Pick<Track, 'lrc' | 'yrc' | 'tlyric' | 'lyricSource'>) | null> {
   const result = await postAction<Pick<Track, 'lrc' | 'yrc' | 'tlyric'> & { source?: string }>('lyrics', {
     type: options.type,
@@ -225,10 +252,10 @@ export async function fetchTrackLyrics(options: {
     title: options.title || '',
     artist: options.artist || '',
     durationMs: options.durationMs ? String(Math.round(options.durationMs)) : '',
-    preferred: options.preferred || '',
+    preferred: options.nativeOnly ? '' : (options.preferred || ''),
     autoUseBest: options.autoUseBest ? '1' : '0',
     forceSource: options.forceSource ? '1' : '0',
-  });
+  }, LYRICS_TIMEOUT_MS);
   if (result.code !== 200 || !result.data) return null;
   const source = result.data.source;
   const lyricSource = (

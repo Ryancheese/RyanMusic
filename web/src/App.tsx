@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type Track, type VisualizerMode } from './types';
-import { buildDownloadUrl, canNativeSave, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type PlayQuality } from './api';
+import { buildDownloadUrl, canNativeSave, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type PlayQuality } from './api';
 import { contrastText, extractAccentFromImage } from './lib/color';
 import { isMobileViewport, isWindowsApp, prefersLightweightVisualizer } from './lib/media';
 import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig, writeVisualizerMode } from './lib/visualizer';
@@ -9,7 +9,8 @@ import { useLibraryStore } from './store/libraryStore';
 import { useCloudStore } from './store/cloudStore';
 import { usePlayerStore } from './store/playerStore';
 import { useThemeAccentStore } from './store/themeStore';
-import { useLyricSettingsStore } from './store/lyricSettingsStore';
+import { useLyricSettingsStore, buildLyricSourceOrder } from './store/lyricSettingsStore';
+import { hasUsableTrackLyrics } from './lib/lyrics';
 import { usePlaybackSettingsStore } from './store/playbackSettingsStore';
 import type { LyricProviderSource } from './types';
 import { AUTO_AUDIO_QUALITY, estimateNetworkQualityCeiling } from './lib/audioQuality';
@@ -35,6 +36,46 @@ const THEME_KEY = 'ryanmusic-theme';
 
 function readTheme(): boolean {
   return localStorage.getItem(THEME_KEY) === 'daylight';
+}
+
+function trackVipPlay(track: Track | null, netease: AccountStatus | null, qq: AccountStatus | null) {
+  return Boolean(
+    (track?.type === 'netease' && netease?.loggedIn && Number(netease.vip) > 0)
+    || (track?.type === 'qq' && qq?.loggedIn && Number(qq.vip) > 0),
+  );
+}
+
+function buildPlayMediaUrl(
+  track: Track | null,
+  options: {
+    authed: boolean;
+    audioQuality: string;
+    crossPlayFallback: boolean;
+    fresh?: number;
+  },
+): string {
+  if (!track?.url) return '';
+  const params = new URLSearchParams();
+  if (options.authed) {
+    params.set('auth', '1');
+    if (track.type === 'netease') {
+      const level = options.audioQuality === AUTO_AUDIO_QUALITY
+        ? estimateNetworkQualityCeiling()
+        : options.audioQuality;
+      if (level) params.set('level', level);
+    }
+  }
+  if (options.crossPlayFallback || track.delisted) {
+    params.set('cross', '1');
+    if (track.title) params.set('title', track.title);
+    if (track.author) params.set('artist', track.author);
+  }
+  if (track.delisted) params.set('delisted', '1');
+  if (options.fresh) params.set('fresh', '1');
+  const query = params.toString();
+  if (!query) return track.url;
+  const join = track.url.includes('?') ? '&' : '?';
+  return `${track.url}${join}${query}`;
 }
 
 const App: React.FC = () => {
@@ -63,6 +104,7 @@ const App: React.FC = () => {
   const [lyricsSwitching, setLyricsSwitching] = useState(false);
   const [lyricsLoading, setLyricsLoading] = useState(false);
   const lyricRequestGen = useRef(0);
+  const durationRef = useRef(0);
   const [accent, setAccent] = useState<string | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
   const [legalOpen, setLegalOpen] = useState(false);
@@ -82,6 +124,7 @@ const App: React.FC = () => {
   const index = usePlayerStore((state) => state.index);
   const status = usePlayerStore((state) => state.status);
   const duration = usePlayerStore((state) => state.duration);
+  durationRef.current = duration;
   const loopMode = usePlayerStore((state) => state.loopMode);
   const playTracks = usePlayerStore((state) => state.playTracks);
   const addToQueue = usePlayerStore((state) => state.addToQueue);
@@ -97,7 +140,6 @@ const App: React.FC = () => {
   const cardStyle = useLibraryStore((state) => state.cardStyle);
   const setLayoutMode = useLibraryStore((state) => state.setLayoutMode);
   const preferredLyricSource = useLyricSettingsStore((state) => state.preferredSource);
-  const autoUseBestLyrics = useLyricSettingsStore((state) => state.autoUseBest);
 
   const neteasePlaylists = useCloudStore((state) => state.neteasePlaylists);
   const qqPlaylists = useCloudStore((state) => state.qqPlaylists);
@@ -119,36 +161,34 @@ const App: React.FC = () => {
   const closeQqPlaylist = useCloudStore((state) => state.closeQqPlaylist);
 
   const [authFallback, setAuthFallback] = useState(false);
+  const [streamFresh, setStreamFresh] = useState(0);
   const crossPlayFallback = usePlaybackSettingsStore((state) => state.crossPlayFallback);
   const preferredQuality = usePlaybackSettingsStore((state) => state.preferredQuality);
   const track = queue[index] || null;
-  const vipPlay = Boolean(
-    (track?.type === 'netease' && netease?.loggedIn && Number(netease.vip) > 0)
-    || (track?.type === 'qq' && qq?.loggedIn && Number(qq.vip) > 0),
-  );
+  const vipPlay = trackVipPlay(track, netease, qq);
   const authedPlay = !authFallback && vipPlay;
-  const mediaUrl = useMemo(() => {
-    if (!track?.url) return '';
-    const params = new URLSearchParams();
-    if (authedPlay) {
-      params.set('auth', '1');
-      if (track.type === 'netease') {
-        const level = audioQuality === AUTO_AUDIO_QUALITY
-          ? estimateNetworkQualityCeiling()
-          : audioQuality;
-        if (level) params.set('level', level);
-      }
-    }
-    if (crossPlayFallback) {
-      params.set('cross', '1');
-      if (track.title) params.set('title', track.title);
-      if (track.author) params.set('artist', track.author);
-    }
-    const query = params.toString();
-    if (!query) return track.url;
-    const join = track.url.includes('?') ? '&' : '?';
-    return `${track.url}${join}${query}`;
-  }, [audioQuality, authedPlay, crossPlayFallback, track?.author, track?.title, track?.type, track?.url]);
+  const mediaUrl = useMemo(
+    () => buildPlayMediaUrl(track, {
+      authed: authedPlay,
+      audioQuality,
+      crossPlayFallback,
+      fresh: streamFresh,
+    }),
+    [audioQuality, authedPlay, crossPlayFallback, streamFresh, track],
+  );
+  const prefetchTrackMedia = useCallback((item: Track) => {
+    const url = buildPlayMediaUrl(item, {
+      authed: !authFallback && trackVipPlay(item, netease, qq),
+      audioQuality: preferredQuality,
+      crossPlayFallback,
+    });
+    if (!url) return;
+    void fetch(url, {
+      method: 'GET',
+      headers: { Range: 'bytes=0-1' },
+      cache: 'no-store',
+    }).catch(() => {});
+  }, [authFallback, crossPlayFallback, netease, preferredQuality, qq]);
   const theme = isDaylight ? DAYLIGHT_THEME : MIDNIGHT_THEME;
   const resolveAccent = useThemeAccentStore((state) => state.resolveAccent);
   const presetId = useThemeAccentStore((state) => state.presetId);
@@ -474,6 +514,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     setAuthFallback(false);
+    setStreamFresh(0);
   }, [track?.songid, track?.type, netease?.loggedIn, netease?.vip, qq?.loggedIn, qq?.vip]);
 
   useEffect(() => {
@@ -507,6 +548,43 @@ const App: React.FC = () => {
       playPromise.then(() => setStatus('playing')).catch(() => setStatus('paused'));
     }
   }, [currentTime, mediaUrl, setDuration, setStatus, track?.songid, track?.type]);
+
+  useEffect(() => {
+    if (!queue.length) return;
+    const currentKey = track ? `${track.type}:${track.songid}` : '';
+    const upcoming: Track[] = [];
+    if (index + 1 < queue.length) upcoming.push(queue[index + 1]);
+    else if (loopMode === 'all' && queue[0]) upcoming.push(queue[0]);
+    if (index + 2 < queue.length) upcoming.push(queue[index + 2]);
+    for (const item of upcoming) {
+      if (`${item.type}:${item.songid}` === currentKey) continue;
+      prefetchTrackMedia(item);
+    }
+  }, [index, loopMode, prefetchTrackMedia, queue, track]);
+
+  useEffect(() => {
+    const list = homeTab === 'qq' ? qqTracks : neteaseTracks;
+    if (!list.length) return;
+    let cancelled = false;
+    void (async () => {
+      for (const item of list.slice(0, 3)) {
+        if (cancelled) return;
+        const signed = await fetchSignedMedia(item.type, item.songid, {
+          title: item.title,
+          author: item.author,
+        });
+        if (cancelled || !signed?.url) continue;
+        await fetch(signed.url, {
+          method: 'GET',
+          headers: { Range: 'bytes=0-1' },
+          cache: 'no-store',
+        }).catch(() => {});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [homeTab, neteaseTracks, qqTracks]);
 
   useEffect(() => {
     let alive = true;
@@ -554,26 +632,96 @@ const App: React.FC = () => {
     const title = track.title;
     const artist = track.author;
     const preferred = preferredLyricSource;
-    const autoUseBest = autoUseBestLyrics;
-    const durationMs = duration > 0 ? duration * 1000 : 0;
     let alive = true;
     const gen = ++lyricRequestGen.current;
     setLyricsLoading(true);
-    void fetchTrackLyrics({ type, songid: id, title, artist, preferred, autoUseBest, durationMs })
-      .then((lyrics) => {
-        if (!alive || gen !== lyricRequestGen.current || !lyrics) return;
-        if (!lyrics.lrc && !lyrics.yrc) return;
-        patchCurrentLyrics(lyrics, { replace: true });
-      })
-      .finally(() => {
-        if (alive && gen === lyricRequestGen.current) setLyricsLoading(false);
+
+    const applyLyrics = (
+      lyrics: Pick<Track, 'lrc' | 'yrc' | 'tlyric' | 'lyricSource'> | null,
+      fallbackSource?: typeof preferred | typeof type,
+    ) => {
+      if (!alive || gen !== lyricRequestGen.current || !lyrics || !hasUsableTrackLyrics(lyrics)) return false;
+      patchCurrentLyrics({
+        ...lyrics,
+        lyricSource: lyrics.lyricSource || fallbackSource,
+      }, { replace: true });
+      return true;
+    };
+
+    const runMatch = async (durationMs: number) => {
+      const preferredFirst = await fetchTrackLyrics({
+        type,
+        songid: id,
+        title,
+        artist,
+        preferred,
+        autoUseBest: false,
+        forceSource: true,
+        durationMs,
       });
+      if (applyLyrics(preferredFirst, preferred)) return true;
+
+      const primary = await fetchTrackLyrics({
+        type,
+        songid: id,
+        title,
+        artist,
+        preferred,
+        autoUseBest: true,
+        durationMs,
+      });
+      if (applyLyrics(primary, preferred)) return true;
+
+      if (preferred !== type) {
+        const nativeFirst = await fetchTrackLyrics({
+          type,
+          songid: id,
+          title,
+          artist,
+          nativeOnly: true,
+          durationMs,
+        });
+        if (applyLyrics(nativeFirst, type)) return true;
+      }
+
+      for (const source of buildLyricSourceOrder(preferred)) {
+        if (source === preferred) continue;
+        const forced = await fetchTrackLyrics({
+          type,
+          songid: id,
+          title,
+          artist,
+          preferred: source,
+          autoUseBest: false,
+          forceSource: true,
+          durationMs,
+        });
+        if (applyLyrics(forced, source)) return true;
+      }
+      return false;
+    };
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const firstDurationMs = durationRef.current > 0 ? durationRef.current * 1000 : 0;
+          if (await runMatch(firstDurationMs)) return;
+          if (firstDurationMs <= 0) {
+            await new Promise((resolve) => window.setTimeout(resolve, 1200));
+            if (!alive || gen !== lyricRequestGen.current) return;
+            const retryMs = durationRef.current > 0 ? durationRef.current * 1000 : 0;
+            if (retryMs > 0) await runMatch(retryMs);
+          }
+        } finally {
+          if (alive && gen === lyricRequestGen.current) setLyricsLoading(false);
+        }
+      })();
+    }, 80);
     return () => {
       alive = false;
+      window.clearTimeout(timer);
     };
   }, [
-    autoUseBestLyrics,
-    duration,
     patchCurrentLyrics,
     preferredLyricSource,
     track?.author,
@@ -603,7 +751,7 @@ const App: React.FC = () => {
         durationMs,
       });
       if (gen !== lyricRequestGen.current) return;
-      if (!lyrics || (!lyrics.lrc && !lyrics.yrc)) return;
+      if (!lyrics || !hasUsableTrackLyrics(lyrics)) return;
       patchCurrentLyrics(
         { ...lyrics, lyricSource: lyrics.lyricSource || source },
         { replace: true },
@@ -624,11 +772,12 @@ const App: React.FC = () => {
       const url = new URL(next.url, window.location.origin);
       url.searchParams.set('probe', '1');
       if (nextVip) url.searchParams.set('auth', '1');
-      if (crossPlayFallback) {
+      if (crossPlayFallback || next.delisted) {
         url.searchParams.set('cross', '1');
         if (next.title) url.searchParams.set('title', next.title);
         if (next.author) url.searchParams.set('artist', next.author);
       }
+      if (next.delisted) url.searchParams.set('delisted', '1');
       const controller = new AbortController();
       void fetch(url, { signal: controller.signal }).catch(() => undefined);
       return () => controller.abort();
@@ -806,6 +955,7 @@ const App: React.FC = () => {
         onError={() => {
           setBuffering(false);
           if (authedPlay) setAuthFallback(true);
+          if (streamFresh < 1) setStreamFresh(1);
         }}
       />
 
@@ -926,6 +1076,7 @@ const App: React.FC = () => {
           setView('player');
           setChromeHidden(false);
         }}
+        onPrefetch={prefetchTrackMedia}
         onAddQueue={(item) => {
           addToQueue(item);
         }}
@@ -1036,6 +1187,7 @@ const App: React.FC = () => {
             styleOpen={styleOpen}
             buffering={(buffering || status === 'loading') && status !== 'paused'}
             lyricsSwitching={lyricsSwitching}
+            lyricsLoading={lyricsLoading}
             onStyleOpenChange={setStyleOpen}
             onVisualizerModeChange={(mode) => {
               setVisualizerMode(mode);

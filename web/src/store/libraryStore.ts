@@ -6,6 +6,7 @@ export interface LibraryEntry {
   songid: string;
   title: string;
   author: string;
+  delisted?: boolean;
 }
 
 const UI_KEY = 'ryanmusic-library-ui-v4';

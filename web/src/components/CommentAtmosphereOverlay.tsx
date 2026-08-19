@@ -25,7 +25,7 @@ interface ActiveBubble {
   placement: BubblePlacement;
 }
 
-const MAX_VISIBLE = 2;
+const MAX_VISIBLE = 1;
 const SHOW_MS_MIN = 7200;
 const SHOW_MS_MAX = 11000;
 const HOLD_MS_MIN = 4200;
@@ -127,14 +127,25 @@ function pickPlacement(
 
   for (const candidate of candidates) {
     const ok = existing.every((item) => {
-      if (item.side !== candidate.side) {
-        return Math.abs(item.topPct - candidate.topPct) > 14;
+      if (item.side === candidate.side) {
+        const dx = Math.abs(item.edgePct - candidate.edgePct);
+        const dy = Math.abs(item.topPct - candidate.topPct);
+        return dx > 18 || dy > 22;
       }
-      const dx = Math.abs(item.edgePct - candidate.edgePct);
-      const dy = Math.abs(item.topPct - candidate.topPct);
-      return dx > 12 || dy > 18;
+      return Math.abs(item.topPct - candidate.topPct) > 16;
     });
     if (ok) return candidate;
+  }
+
+  if (existing.length > 0) {
+    const occupiedSide = existing[0].side;
+    const oppositeSide = occupiedSide === 'left' ? 'right' : 'left';
+    const fallbackZone = zones.find((zone) => zone.side === oppositeSide) || zones[0];
+    return {
+      side: fallbackZone.side,
+      edgePct: rand(fallbackZone.edge[0], fallbackZone.edge[1]),
+      topPct: rand(fallbackZone.top[0], fallbackZone.top[1]),
+    };
   }
   return candidates[0] || { side: 'left', edgePct: 6, topPct: 14 };
 }
@@ -332,30 +343,33 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
     }
 
     let cancelled = false;
-    void (async () => {
-      try {
-        const result = await fetchNeteaseComments({
-          type: track.type,
-          id: track.songid,
-          title: track.title,
-          artist: track.author,
-          offset: 0,
-          limit: 30,
-        });
-        if (cancelled) return;
-        if (result.code !== 200 || !result.data) {
-          setPool([]);
-          return;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await fetchNeteaseComments({
+            type: track.type,
+            id: track.songid,
+            title: track.title,
+            artist: track.author,
+            offset: 0,
+            limit: 30,
+          });
+          if (cancelled) return;
+          if (result.code !== 200 || !result.data) {
+            setPool([]);
+            return;
+          }
+          setPool(buildPool(result.data.hotComments || [], result.data.comments || []));
+          cursorRef.current = 0;
+        } catch {
+          if (!cancelled) setPool([]);
         }
-        setPool(buildPool(result.data.hotComments || [], result.data.comments || []));
-        cursorRef.current = 0;
-      } catch {
-        if (!cancelled) setPool([]);
-      }
-    })();
+      })();
+    }, 800);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [clearTimers, enabled, trackKey]);
 
@@ -411,7 +425,6 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
     };
 
     scheduleNext(900);
-    if (pool.length > 1) scheduleNext(2600);
 
     return () => {
       alive = false;

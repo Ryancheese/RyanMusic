@@ -20,6 +20,25 @@ export function timedLyricScore(text?: string | null): number {
   return word * 10 + lrc;
 }
 
+const PLACEHOLDER_LYRIC_RE = /^(?:暂无歌词|无歌词|纯音乐|此歌曲为没有填词的纯音乐|instrumental|not\s*available|no\s*lyrics?)[\s.…]*$/iu;
+
+/** 去掉时间轴后是否仅为「暂无歌词」等占位 */
+export function isPlaceholderLyricText(text?: string | null): boolean {
+  const raw = String(text || '')
+    .replace(/\[[^\]]+\]/g, '')
+    .replace(/\(\d+,\d+(?:,\d+)?\)/g, '')
+    .replace(/<\d+,\d+[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!raw) return true;
+  return PLACEHOLDER_LYRIC_RE.test(raw);
+}
+
+export function effectiveTimedLyricScore(text?: string | null): number {
+  if (isPlaceholderLyricText(text)) return 0;
+  return timedLyricScore(text);
+}
+
 export function pickRicherLyric(primary: string, fallback: string): string {
   return timedLyricScore(primary) >= timedLyricScore(fallback) ? primary || fallback : fallback;
 }
@@ -139,6 +158,26 @@ export function isBadMediaUrl(url?: string | null): boolean {
   return false;
 }
 
+/** 网易云无版权/下架（st=-200 等） */
+export function isNeteaseDelisted(song: any, privilege?: any): boolean {
+  const priv = privilege || song?.privilege || song?.priv;
+  if (priv) {
+    const st = Number(priv.st);
+    if (st === -200 || st === -100) return true;
+    if (Number(priv.pl) <= 0 && Number(priv.dl) <= 0 && st < 0) return true;
+  }
+  return Number(song?.st) === -200;
+}
+
+/** QQ 官方不可播（仍可走私链） */
+export function isQqDelisted(song: any): boolean {
+  const action = song?.action;
+  if (action && Number(action.play) === 0) return true;
+  const pay = song?.pay;
+  if (pay && Number(pay.pay_play) === 0 && Number(pay.price_play) > 0) return true;
+  return false;
+}
+
 /** QQ 朋友圈/私链：带 code 或 myhkw fromtag，不是官方 GetVkey 试听 */
 export function isQqPrivatePlayUrl(url: string): boolean {
   return /fromtag=myhkw|fcg_pyq_play|[?&]code=/i.test(url);
@@ -153,6 +192,26 @@ export function isQqTrialMediaUrl(url: string, filename = ''): boolean {
   return false;
 }
 
+/** 网易云官方试听片段：freeTrialInfo / 时长不足 60 秒 */
+export function isNeteaseTrialPlayItem(item: any): boolean {
+  if (!item) return false;
+  if (item.freeTrialInfo) return true;
+  const time = Number(item.time || 0);
+  if (time > 0 && time <= 60_000) return true;
+  const privilege = item.freeTrialPrivilege;
+  return Boolean(
+    privilege
+    && (privilege.resConsumable || privilege.userConsumable)
+    && time > 0,
+  );
+}
+
+/** 网易云试听包装链或路径 */
+export function isNeteaseTrialMediaUrl(url: string): boolean {
+  if (!url) return false;
+  return /\/trial\/|\/preview\/|freeTrial|tryid=|song\/media\/outer\/url/i.test(url);
+}
+
 export function httpsNeteaseUrl(url: string): string {
   if (url.startsWith('http://') && /(126\.net|163\.com)/i.test(url)) {
     return `https://${url.slice(7)}`;
@@ -161,8 +220,15 @@ export function httpsNeteaseUrl(url: string): string {
 }
 
 export function mediaReferer(url: string): string {
-  if (/(163\.com|126\.net|netease)/i.test(url)) return 'https://music.163.com/';
-  if (/myhkw\.cn/i.test(url)) return 'https://s.myhkw.cn/';
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host.endsWith('126.net') || host.endsWith('163.com') || host.includes('netease')) {
+      return 'https://music.163.com/';
+    }
+    if (host.endsWith('myhkw.cn')) return 'https://s.myhkw.cn/';
+  } catch {
+    // ignore invalid url
+  }
   return 'https://y.qq.com/';
 }
 
