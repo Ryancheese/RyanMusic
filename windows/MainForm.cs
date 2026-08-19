@@ -22,6 +22,9 @@ public sealed class MainForm : Form
     private const int DwmwaBorderColor = 34;
     private const int DwmwaCaptionColor = 35;
     private const int DwmwaTextColor = 36;
+    private const string ReleasesRepo = "Ryancheese/RyanMusic-Releases";
+    private const string ReleasesPageUrl = "https://github.com/Ryancheese/RyanMusic-Releases/releases/latest";
+    private const string ReleasesApiUrl = "https://api.github.com/repos/Ryancheese/RyanMusic-Releases/releases/latest";
 
     private readonly WebView2 _webView = new();
     private bool _daylight;
@@ -1193,13 +1196,13 @@ public sealed class MainForm : Form
     private async Task<ReleaseUpdateInfo> FetchLatestReleaseAsync()
     {
         var current = CurrentAppVersion();
-        const string page = "https://github.com/Ryancheese/RyanMusic/releases/latest";
+        const string page = ReleasesPageUrl;
         try
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
             client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/vnd.github+json");
             client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", $"RyanMusic/{current}");
-            using var resp = await client.GetAsync("https://api.github.com/repos/Ryancheese/RyanMusic/releases/latest");
+            using var resp = await client.GetAsync(ReleasesApiUrl);
             resp.EnsureSuccessStatusCode();
             await using var stream = await resp.Content.ReadAsStreamAsync();
             using var doc = await JsonDocument.ParseAsync(stream);

@@ -1,8 +1,6 @@
 import { isMacosApp, isWindowsApp } from './media';
+import { RELEASES_API_URL, RELEASES_PAGE_URL } from './releases';
 import { APP_VERSION, compareSemver } from '../whatsNew';
-
-const RELEASES_URL = 'https://github.com/Ryancheese/RyanMusic/releases/latest';
-const GITHUB_LATEST = 'https://api.github.com/repos/Ryancheese/RyanMusic/releases/latest';
 
 export interface AppUpdateInfo {
   ok: boolean;
@@ -53,7 +51,7 @@ export async function checkAppUpdate(): Promise<AppUpdateInfo> {
   }
 
   try {
-    const res = await fetch(GITHUB_LATEST, { headers: { Accept: 'application/vnd.github+json' } });
+    const res = await fetch(RELEASES_API_URL, { headers: { Accept: 'application/vnd.github+json' } });
     if (!res.ok) throw new Error('无法读取 GitHub Releases');
     const json = await res.json() as { tag_name?: string; body?: string; html_url?: string };
     const latest = String(json.tag_name || '').replace(/^v/i, '');
@@ -65,14 +63,14 @@ export async function checkAppUpdate(): Promise<AppUpdateInfo> {
       current,
       latest,
       notes: String(json.body || ''),
-      url: json.html_url || RELEASES_URL,
+      url: json.html_url || RELEASES_PAGE_URL,
     };
   } catch (error) {
     return {
       ok: false,
       hasUpdate: false,
       current: APP_VERSION,
-      url: RELEASES_URL,
+      url: RELEASES_PAGE_URL,
       error: error instanceof Error ? error.message : '检查更新失败',
     };
   }
@@ -83,8 +81,8 @@ export async function installAppUpdate(
 ): Promise<AppUpdateInfo> {
   const bridge = nativeBridge();
   if (!bridge) {
-    window.open(RELEASES_URL, '_blank', 'noopener');
-    return { ok: true, hasUpdate: true, url: RELEASES_URL };
+    window.open(RELEASES_PAGE_URL, '_blank', 'noopener');
+    return { ok: true, hasUpdate: true, url: RELEASES_PAGE_URL };
   }
 
   window.__ryanUpdateProgress = (payload) => {

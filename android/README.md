@@ -6,7 +6,7 @@
 
 ## 安装
 
-1. 打开 [Releases](https://github.com/Ryancheese/RyanMusic/releases) 或 [Actions](https://github.com/Ryancheese/RyanMusic/actions) 下载 `RyanMusic-android.apk`
+1. 打开 [Releases](https://github.com/Ryancheese/RyanMusic-Releases/releases) 或源码仓 **Actions** 下载 `RyanMusic-android.apk`
 2. 允许「安装未知应用」后安装
 3. 仅支持 **64 位 ARM** 手机（近年安卓机基本都是）
 

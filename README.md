@@ -13,12 +13,13 @@
 | `windows/` | Windows 原生窗口 App（WebView2）与一键安装脚本 |
 | `android/` | Android 独立 APK（内嵌 PHP + WebView；失败时自动连线上站点） |
 | `shared/cloud-origin.txt` | 各端共用的在线服务地址 |
+| `shared/releases-repo.txt` | 公开安装包仓（应用内更新指向此处） |
 
 ## 下载安装包（推荐发给朋友）
 
-从 GitHub Releases 下载：
+从 **公开 Releases 仓** 下载（源码可私有，不影响用户更新）：
 
-**https://github.com/Ryancheese/RyanMusic/releases**
+**https://github.com/Ryancheese/RyanMusic-Releases/releases**
 
 | 平台 | 文件 | 说明 |
 |------|------|------|
@@ -26,7 +27,9 @@
 | macOS Apple Silicon | `RyanMusic-mac-arm64.dmg` | 拖到「应用程序」；首次请右键 → 打开 |
 | Android | `RyanMusic-android.apk` | 允许「安装未知应用」后安装（arm64） |
 
-> Intel Mac 暂请使用下方「一键安装」脚本编译安装。
+> Intel Mac 需有源码仓访问权限后使用下方「一键安装」脚本；普通用户请直接下载 DMG。
+
+> 若源码仓已设为 Private，详见 [docs/private-repo-and-releases.md](docs/private-repo-and-releases.md)。
 
 搜索、歌词、取流走同一套后端：电脑 / Docker / Vercel 默认是 `server/`（Node）。手机优先用 APK 内嵌 PHP；被系统拦截时自动连线上站点 [ryanmusic.vercel.app](https://ryanmusic.vercel.app)。若希望手机走家里电脑的代理，电脑版已监听局域网：托盘 / 菜单里「复制手机访问地址」。
 

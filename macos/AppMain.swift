@@ -3,6 +3,10 @@ import Darwin
 import MediaPlayer
 import WebKit
 
+private let releasesRepo = "Ryancheese/RyanMusic-Releases"
+private let releasesPageURL = "https://github.com/\(releasesRepo)/releases/latest"
+private let releasesAPIURL = "https://api.github.com/repos/\(releasesRepo)/releases/latest"
+
 /// 顶部标题栏命中层：拖拽移动；双击缩放（与系统 App 一致）
 /// 左右留空给红绿灯 / LOGO，避免挡住交互
 final class TitlebarDragOverlay: NSView {
@@ -886,7 +890,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     private func checkLatest(completion: @escaping (UpdateInfo) -> Void) {
         let current = currentVersion()
-        guard let endpoint = URL(string: "https://api.github.com/repos/Ryancheese/RyanMusic/releases/latest") else {
+        guard let endpoint = URL(string: releasesAPIURL) else {
             completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: "", downloadURL: nil, error: "更新地址无效"))
             return
         }
@@ -895,17 +899,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         request.setValue("RyanMusic/\(current)", forHTTPHeaderField: "User-Agent")
         directSession.dataTask(with: request) { data, _, error in
             if let error {
-                completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: "https://github.com/Ryancheese/RyanMusic/releases/latest", downloadURL: nil, error: error.localizedDescription))
+                completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: releasesPageURL, downloadURL: nil, error: error.localizedDescription))
                 return
             }
             guard let data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: "https://github.com/Ryancheese/RyanMusic/releases/latest", downloadURL: nil, error: "无法解析 GitHub 版本信息"))
+                completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: releasesPageURL, downloadURL: nil, error: "无法解析 GitHub 版本信息"))
                 return
             }
             let latest = String(json["tag_name"] as? String ?? "").replacingOccurrences(of: #"^v"#, with: "", options: .regularExpression)
             let notes = String(json["body"] as? String ?? "")
-            let page = String(json["html_url"] as? String ?? "https://github.com/Ryancheese/RyanMusic/releases/latest")
+            let page = String(json["html_url"] as? String ?? releasesPageURL)
             let assets = json["assets"] as? [[String: Any]] ?? []
             let needle = self.archAssetNeedle()
             let asset = assets.first { asset in

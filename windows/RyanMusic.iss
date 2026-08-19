@@ -15,7 +15,7 @@
 
 #define MyAppName "RyanMusic"
 #define MyAppPublisher "RyanMusic"
-#define MyAppURL "https://github.com/Ryancheese/RyanMusic"
+#define MyAppURL "https://github.com/Ryancheese/RyanMusic-Releases"
 #define MyAppExeName "RyanMusic.exe"
 
 [Setup]

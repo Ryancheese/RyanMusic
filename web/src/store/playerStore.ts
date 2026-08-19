@@ -50,12 +50,35 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playTracks: (tracks, index = 0) => {
     if (!tracks.length) return;
     const safeIndex = Math.max(0, Math.min(index, tracks.length - 1));
-    const track = tracks[safeIndex];
+    const prevQueue = get().queue;
+    const lyricByKey = new Map(
+      prevQueue.map((item) => [trackKey(item), item] as const),
+    );
+    const merged = tracks.map((track) => {
+      const prev = lyricByKey.get(trackKey(track));
+      if (!prev) return track;
+      const keepLyrics = effectiveTimedLyricScore(prev.yrc) + effectiveTimedLyricScore(prev.lrc)
+        > effectiveTimedLyricScore(track.yrc) + effectiveTimedLyricScore(track.lrc);
+      if (!keepLyrics) return track;
+      return {
+        ...track,
+        lrc: prev.lrc || track.lrc,
+        yrc: prev.yrc || track.yrc,
+        tlyric: prev.tlyric || track.tlyric,
+        lyricSource: prev.lyricSource || track.lyricSource,
+      };
+    });
+    const track = merged[safeIndex];
+    const sameAsCurrent = prevQueue[get().index]
+      && trackKey(prevQueue[get().index]) === trackKey(track);
     set({
-      queue: tracks,
+      queue: merged,
       index: safeIndex,
-      status: 'loading',
-      duration: 0,
+      status: sameAsCurrent && (get().status === 'playing' || get().status === 'paused')
+        ? get().status
+        : 'loading',
+      // 同一首继续播时不要把 duration 清零，避免进度/歌词状态抖动
+      duration: sameAsCurrent ? get().duration : 0,
       error: '',
       source: track.type,
     });
@@ -66,6 +89,77 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ queue: [...queue, track] });
   },
   playLibraryEntry: async (entry, queueEntries) => {
+    const entryKey = `${entry.type}:${String(entry.songid)}`;
+    const state = get();
+    const current = state.queue[state.index];
+    const sameAsCurrent = Boolean(
+      current
+      && current.type === entry.type
+      && String(current.songid) === String(entry.songid),
+    );
+
+    // 正在播同一首：保留歌词与进度，只补齐队列，避免空歌词覆盖
+    if (sameAsCurrent && current?.url) {
+      if (!queueEntries?.length) return;
+      const kept = { ...current };
+      window.setTimeout(() => {
+        void (async () => {
+          const latest = get().queue[get().index];
+          if (!latest || trackKey(latest) !== trackKey(kept)) return;
+          const live = {
+            ...kept,
+            lrc: latest.lrc || kept.lrc,
+            yrc: latest.yrc || kept.yrc,
+            tlyric: latest.tlyric || kept.tlyric,
+            lyricSource: latest.lyricSource || kept.lyricSource,
+          };
+          const resolved = await Promise.all(
+            queueEntries.map(async (item) => {
+              if (`${item.type}:${String(item.songid)}` === entryKey) return live;
+              const existing = get().queue.find(
+                (row) => row.type === item.type && String(row.songid) === String(item.songid),
+              );
+              if (existing?.url) return existing;
+              const signedItem = await fetchSignedMedia(item.type, item.songid, {
+                title: item.title,
+                author: item.author,
+                delisted: item.delisted,
+              });
+              if (!signedItem?.url) return null;
+              return {
+                type: item.type,
+                songid: String(item.songid),
+                title: item.title || '未知曲目',
+                author: item.author || '',
+                lrc: '',
+                url: signedItem.url,
+                pic: signedItem.pic,
+                ...(signedItem.delisted || item.delisted ? { delisted: true } : {}),
+              } satisfies Track;
+            }),
+          );
+          if (trackKey(get().queue[get().index] || live) !== trackKey(live)) return;
+          const tracks = resolved.filter((item): item is Track => Boolean(item));
+          const index = Math.max(0, tracks.findIndex((item) => trackKey(item) === trackKey(live)));
+          if (!tracks.length) return;
+          const again = get().queue[get().index];
+          if (again && trackKey(again) === trackKey(live) && index >= 0) {
+            tracks[index] = {
+              ...tracks[index],
+              lrc: again.lrc || tracks[index].lrc,
+              yrc: again.yrc || tracks[index].yrc,
+              tlyric: again.tlyric || tracks[index].tlyric,
+              lyricSource: again.lyricSource || tracks[index].lyricSource,
+              url: again.url || tracks[index].url,
+              pic: again.pic || tracks[index].pic,
+            };
+          }
+          set({ queue: tracks, index: index < 0 ? 0 : index });
+        })();
+      }, 0);
+      return;
+    }
+
     set({ status: 'loading', error: '' });
     const signed = await fetchSignedMedia(entry.type, entry.songid, {
       title: entry.title || '',
@@ -76,32 +170,38 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ status: 'idle', error: '无法播放，歌曲可能已失效' });
       return;
     }
+    const prev = state.queue.find(
+      (row) => row.type === entry.type && String(row.songid) === String(entry.songid),
+    );
     const first: Track = {
       type: entry.type,
       songid: String(entry.songid),
       title: entry.title || '未知曲目',
       author: entry.author || '',
-      lrc: '',
+      lrc: prev?.lrc || '',
+      yrc: prev?.yrc || '',
+      tlyric: prev?.tlyric || '',
+      lyricSource: prev?.lyricSource,
       url: signed.url,
-      pic: signed.pic,
-      ...(signed.delisted || entry.delisted ? { delisted: true } : {}),
+      pic: signed.pic || prev?.pic || '',
+      ...(signed.delisted || entry.delisted || prev?.delisted ? { delisted: true } : {}),
     };
     get().playTracks([first], 0);
     if (!queueEntries?.length) return;
     window.setTimeout(() => {
       void (async () => {
-        const current = get().queue[get().index];
-        if (!current || trackKey(current) !== trackKey(first)) return;
+        const playing = get().queue[get().index];
+        if (!playing || trackKey(playing) !== trackKey(first)) return;
         // 保留当前已匹配的歌词：重建队列时不能用初始空 first 覆盖
         const liveFirst: Track = {
           ...first,
-          lrc: current.lrc || '',
-          yrc: current.yrc || '',
-          tlyric: current.tlyric || '',
-          lyricSource: current.lyricSource,
-          delisted: current.delisted || first.delisted,
-          pic: current.pic || first.pic,
-          url: current.url || first.url,
+          lrc: playing.lrc || first.lrc || '',
+          yrc: playing.yrc || first.yrc || '',
+          tlyric: playing.tlyric || first.tlyric || '',
+          lyricSource: playing.lyricSource || first.lyricSource,
+          delisted: playing.delisted || first.delisted,
+          pic: playing.pic || first.pic,
+          url: playing.url || first.url,
         };
         const resolved = await Promise.all(
           queueEntries.map(async (item) => {
@@ -143,7 +243,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           tracks.findIndex((item) => trackKey(item) === trackKey(first)),
         );
         if (tracks.length) {
-          // 再并一次：签名队列拉取期间歌词可能刚写完
           const latest = get().queue[get().index];
           if (latest && trackKey(latest) === trackKey(first) && index >= 0) {
             tracks[index] = {
