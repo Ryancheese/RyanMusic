@@ -1,9 +1,10 @@
 {
+  "buildCommand": "npm run vercel-build",
   "functions": {
     "api/index.ts": {
       "memory": 1024,
       "maxDuration": 60,
-      "includeFiles": "maicong-music/**"
+      "includeFiles": "{maicong-music/**,api/bundle.mjs,server/src/**}"
     }
   },
   "rewrites": [

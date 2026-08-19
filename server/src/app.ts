@@ -93,7 +93,13 @@ async function proxyMedia(
 }
 
 export function createApp(options: AppOptions) {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = process.env.NODE_TLS_REJECT_UNAUTHORIZED || '0';
+  try {
+    if (!process.env.NODE_TLS_REJECT_UNAUTHORIZED) {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    }
+  } catch {
+    // Vercel / 部分 serverless 会锁住该环境变量
+  }
   const secret = apiSecret(options.coreMarker || join(options.webRoot, 'core'));
   const cache = new FileCache(options.cacheDir);
   const netease = new NeteaseService(cache, secret);
