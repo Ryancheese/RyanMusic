@@ -1,6 +1,6 @@
 import { handle } from 'hono/vercel';
 import { join } from 'node:path';
-import { createApp } from '../server/src/app.ts';
+import { createApp } from './bundle.mjs';
 
 const webRoot = join(process.cwd(), 'maicong-music');
 const cacheDir = process.env.RYANMUSIC_CACHE_DIR || '/tmp/ryanmusic-cache';

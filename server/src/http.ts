@@ -278,7 +278,11 @@ export function installDirectNetwork(): void {
   }
   if (dnsPatched) return;
   dnsPatched = true;
-  (dns as typeof dns & { lookup: typeof patchedLookup }).lookup = patchedLookup as typeof dns.lookup;
+  try {
+    (dns as typeof dns & { lookup: typeof patchedLookup }).lookup = patchedLookup as typeof dns.lookup;
+  } catch {
+    // Vercel 等 serverless 环境可能不允许 patch dns.lookup
+  }
 }
 
 installDirectNetwork();

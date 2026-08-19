@@ -9,6 +9,7 @@ web/.next/
 maicong-music/core/cache/
 dist/
 server/dist/
+esbuild.tgz
 macos/AppIcon.iconset/
 windows/bin/
 windows/obj/
