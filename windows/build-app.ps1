@@ -1,12 +1,10 @@
 ﻿# RyanMusic Windows 打包脚本（Inno Setup 安装向导）
 # 用法（在仓库根目录或 windows 目录）：
 #   powershell -ExecutionPolicy Bypass -File windows/build-app.ps1
-#   powershell -ExecutionPolicy Bypass -File windows/build-app.ps1 -BundlePhp
-#   powershell -ExecutionPolicy Bypass -File windows/build-app.ps1 -BundlePhp -SkipInstaller
-#   powershell -ExecutionPolicy Bypass -File windows/build-app.ps1 -BundlePhp -AlsoZip
+#   powershell -ExecutionPolicy Bypass -File windows/build-app.ps1 -SkipInstaller
+#   powershell -ExecutionPolicy Bypass -File windows/build-app.ps1 -AlsoZip
 
 param(
-  [switch]$BundlePhp,
   [switch]$BundleNode,
   [switch]$NoBundleNode,
   [switch]$SkipInstaller,
@@ -27,8 +25,7 @@ $IssPath = Join-Path $WinDir "RyanMusic.iss"
 $MusicSrc = Join-Path $Root "maicong-music"
 $Csproj = Join-Path $WinDir "RyanMusic.csproj"
 # CLI / 内置服务器用 NTS；latest 别名跟随官方小版本更新
-$PhpZipUrl = "https://windows.php.net/downloads/releases/latest/php-8.3-nts-Win32-vs16-x64-latest.zip"
-# 固定版本，避免 download.php 跳转到 HTML 页面
+# 固定版本，避免下载器跳到 HTML 页面
 $InnoSetupVersion = "6.7.3"
 $NodeBundleVersion = if ($env:NODE_BUNDLE_VERSION) { $env:NODE_BUNDLE_VERSION } else { "22.18.0" }
 # 默认内嵌 Node；可用 -NoBundleNode 跳过
@@ -65,23 +62,6 @@ function Get-AppVersion {
     return $Matches[1].Trim()
   }
   return "1.0.0"
-}
-
-function Write-PortablePhpIni([string]$PhpDir) {
-  $iniPath = Join-Path $PhpDir "php.ini"
-  $ini = @"
-; RyanMusic portable PHP
-extension_dir="ext"
-extension=curl
-extension=openssl
-extension=mbstring
-extension=fileinfo
-date.timezone=Asia/Shanghai
-memory_limit=256M
-max_execution_time=60
-display_errors=0
-"@
-  Set-Content -Path $iniPath -Value $ini -Encoding ASCII
 }
 
 function Install-BundledNode([string]$TargetNodeDir) {
@@ -135,48 +115,6 @@ function Install-BundledNode([string]$TargetNodeDir) {
     Write-Host "    已安装：$(Join-Path $TargetNodeDir 'node.exe')"
   } catch {
     throw
-  }
-}
-
-function Install-BundledPhp([string]$TargetPhpDir) {
-  Write-Host "==> 下载便携 PHP"
-  $tmpRoot = Join-Path $env:TEMP ("ryanmusic-php-" + [Guid]::NewGuid().ToString("N"))
-  New-Item -ItemType Directory -Path $tmpRoot | Out-Null
-  $zipFile = Join-Path $tmpRoot "php.zip"
-  try {
-    Write-Host "    $PhpZipUrl"
-    & curl.exe -fL --retry 3 --retry-all-errors --max-time 600 -o $zipFile $PhpZipUrl
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $zipFile) -or ((Get-Item $zipFile).Length -lt 1MB)) {
-      throw "便携 PHP 下载失败：$PhpZipUrl"
-    }
-    $extractDir = Join-Path $tmpRoot "extract"
-    Expand-Archive -Path $zipFile -DestinationPath $extractDir -Force
-
-    # zip 解压后可能是扁平目录或带子目录
-    $phpExe = Get-ChildItem -Path $extractDir -Filter "php.exe" -Recurse -ErrorAction SilentlyContinue |
-      Select-Object -First 1
-    if (-not $phpExe) {
-      throw "PHP zip 中未找到 php.exe"
-    }
-    $srcPhpDir = $phpExe.Directory.FullName
-
-    if (Test-Path $TargetPhpDir) {
-      Remove-Item -Recurse -Force $TargetPhpDir
-    }
-    New-Item -ItemType Directory -Path $TargetPhpDir | Out-Null
-    Copy-Item -Path (Join-Path $srcPhpDir "*") -Destination $TargetPhpDir -Recurse -Force
-
-    Write-PortablePhpIni $TargetPhpDir
-
-    $bundled = Join-Path $TargetPhpDir "php.exe"
-    if (-not (Test-Path $bundled)) {
-      throw "便携 PHP 安装失败：$bundled"
-    }
-    Write-Host "    已安装：$bundled"
-  } finally {
-    if (Test-Path $tmpRoot) {
-      Remove-Item -Recurse -Force $tmpRoot -ErrorAction SilentlyContinue
-    }
   }
 }
 
@@ -450,17 +388,13 @@ if ($ShouldBundleNode) {
   Install-BundledNode (Join-Path $DistDir "node")
 }
 
-if ($BundlePhp) {
-  Install-BundledPhp (Join-Path $DistDir "php")
-}
-
 Write-Host "==> 写入使用说明"
 $readmeTxt = @"
 RyanMusic Windows
 =================
 
 安装版：双击 RyanMusic-Setup-x64.exe，按向导完成安装。
-本目录为安装包内容（已内嵌 Node 后端；若无 Node 则回退 PHP），也可直接运行 RyanMusic.exe。
+本目录为安装包内容（已内嵌 Node 后端），也可直接运行 RyanMusic.exe。
 
 系统要求：
 - Windows 10/11 x64

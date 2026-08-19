@@ -28,7 +28,7 @@ public sealed class MainForm : Form
 
     private readonly WebView2 _webView = new();
     private bool _daylight;
-    private Process? _phpProcess;
+    private Process? _serverProcess;
     private int _port = 18765;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(2) };
     private NotifyIcon? _tray;
@@ -58,7 +58,7 @@ public sealed class MainForm : Form
         FormClosing += OnFormClosingGuard;
         FormClosed += (_, _) =>
         {
-            StopPhp();
+            StopServer();
             DisposeTray();
         };
         HandleCreated += (_, _) => ApplyTitleBarTheme(_daylight);
@@ -573,141 +573,6 @@ public sealed class MainForm : Form
         return Path.Combine(baseDir, "maicong-music");
     }
 
-    private static string? FindPhp()
-    {
-        // 安装包内嵌 PHP 优先，避免 PATH 里无 curl 的系统 PHP 抢先
-        var candidates = new List<string>();
-        void AddCandidate(string? path)
-        {
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                return;
-            }
-
-            var full = Path.GetFullPath(path);
-            if (File.Exists(full) &&
-                !candidates.Exists(x => string.Equals(x, full, StringComparison.OrdinalIgnoreCase)))
-            {
-                candidates.Add(full);
-            }
-        }
-
-        AddCandidate(Path.Combine(AppContext.BaseDirectory, "php", "php.exe"));
-        AddCandidate(Path.Combine(AppContext.BaseDirectory, "runtime", "php", "php.exe"));
-
-        var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
-        foreach (var dir in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            AddCandidate(Path.Combine(dir.Trim('"'), "php.exe"));
-        }
-
-        AddCandidate(@"C:\php\php.exe");
-        AddCandidate(@"C:\Program Files\PHP\php.exe");
-        AddCandidate(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Programs",
-            "PHP",
-            "php.exe"));
-
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "where.exe",
-                Arguments = "php",
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var p = Process.Start(psi);
-            var output = p?.StandardOutput.ReadToEnd() ?? "";
-            p?.WaitForExit(3000);
-            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                if (line.EndsWith("php.exe", StringComparison.OrdinalIgnoreCase))
-                {
-                    AddCandidate(line);
-                }
-            }
-        }
-        catch
-        {
-            // ignore
-        }
-
-        string? fallback = null;
-        foreach (var exe in candidates)
-        {
-            if (PhpHasCurl(exe))
-            {
-                return exe;
-            }
-
-            fallback ??= exe;
-        }
-
-        return fallback;
-    }
-
-    private static bool PhpHasCurl(string phpExe)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = phpExe,
-                Arguments = "-n -d extension_dir=ext -d extension=curl -m",
-                WorkingDirectory = Path.GetDirectoryName(phpExe) ?? "",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var p = Process.Start(psi);
-            if (p == null)
-            {
-                return false;
-            }
-
-            var output = p.StandardOutput.ReadToEnd() + "\n" + p.StandardError.ReadToEnd();
-            if (!p.WaitForExit(8000))
-            {
-                try { p.Kill(entireProcessTree: true); } catch { }
-                return false;
-            }
-
-            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                if (string.Equals(line, "curl", StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-
-            // 再试：依赖已有 php.ini（便携包场景）
-            psi.Arguments = "-m";
-            using var p2 = Process.Start(psi);
-            if (p2 == null)
-            {
-                return false;
-            }
-
-            output = p2.StandardOutput.ReadToEnd();
-            if (!p2.WaitForExit(8000))
-            {
-                try { p2.Kill(entireProcessTree: true); } catch { }
-                return false;
-            }
-
-            return output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Any(line => string.Equals(line, "curl", StringComparison.OrdinalIgnoreCase));
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     private static int PickPort(int start)
     {
         for (var port = start; port < start + 40; port++)
@@ -728,59 +593,6 @@ public sealed class MainForm : Form
     }
 
     private string _logPath = "";
-
-    private void StartPhp(string phpPath, string webRoot, int port)
-    {
-        _logPath = Path.Combine(ResolveDataDir(), "ryanmusic-php.log");
-        try
-        {
-            File.WriteAllText(
-                _logPath,
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] RyanMusic PHP log\r\nphp={phpPath}\r\nroot={webRoot}\r\nport={port}\r\nlan={FormatLanUrl(port)}\r\n\r\n");
-            var hint = Path.Combine(ResolveDataDir(), "如何查看日志.txt");
-            File.WriteAllText(
-                hint,
-                $"PHP 运行日志路径：\r\n{_logPath}\r\n\r\n可在资源管理器地址栏粘贴打开：\r\n{_logPath}\r\n",
-                Encoding.UTF8);
-        }
-        catch
-        {
-            // ignore
-        }
-
-        var phpDir = Path.GetDirectoryName(phpPath) ?? "";
-        var iniPath = EnsurePhpIni(phpDir); // 可能写到 LocalAppData，避免 Program Files 拒绝访问
-
-        var args = new StringBuilder();
-        if (!string.IsNullOrEmpty(iniPath))
-        {
-            args.Append("-c \"").Append(iniPath).Append("\" ");
-        }
-        args.Append("-S 0.0.0.0:").Append(port);
-        args.Append(" -t \"").Append(webRoot).Append('"');
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = phpPath,
-            Arguments = args.ToString(),
-            WorkingDirectory = webRoot,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-        // 音源缓存写到可写目录（Program Files 下 core/cache 无写权限）
-        psi.Environment["RYANMUSIC_CACHE_DIR"] = ResolveDataDir("cache");
-        _phpProcess = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        _phpProcess.OutputDataReceived += (_, e) => AppendLog(e.Data);
-        _phpProcess.ErrorDataReceived += (_, e) => AppendLog(e.Data);
-        if (!_phpProcess.Start())
-        {
-            throw new InvalidOperationException("无法启动 PHP 进程");
-        }
-        _phpProcess.BeginOutputReadLine();
-        _phpProcess.BeginErrorReadLine();
-    }
 
     private static string? ResolveServerJs()
     {
@@ -894,15 +706,15 @@ public sealed class MainForm : Form
         }
         psi.Environment["NO_PROXY"] = "*";
         psi.Environment["no_proxy"] = "*";
-        _phpProcess = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        _phpProcess.OutputDataReceived += (_, e) => AppendLog(e.Data);
-        _phpProcess.ErrorDataReceived += (_, e) => AppendLog(e.Data);
-        if (!_phpProcess.Start())
+        _serverProcess = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        _serverProcess.OutputDataReceived += (_, e) => AppendLog(e.Data);
+        _serverProcess.ErrorDataReceived += (_, e) => AppendLog(e.Data);
+        if (!_serverProcess.Start())
         {
             throw new InvalidOperationException("无法启动 Node 服务");
         }
-        _phpProcess.BeginOutputReadLine();
-        _phpProcess.BeginErrorReadLine();
+        _serverProcess.BeginOutputReadLine();
+        _serverProcess.BeginErrorReadLine();
     }
 
     private void CopyLanUrl()
@@ -1012,82 +824,6 @@ public sealed class MainForm : Form
         catch
         {
             // ignore
-        }
-    }
-
-    /// <summary>
-    /// 确保 curl 等扩展启用。优先改安装目录 php.ini；若无写权限则复制到 LocalAppData。
-    /// </summary>
-    private static string? EnsurePhpIni(string phpDir)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(phpDir) || !Directory.Exists(phpDir))
-            {
-                return null;
-            }
-
-            var bundledIni = Path.Combine(phpDir, "php.ini");
-            string? sourceIni = File.Exists(bundledIni) ? bundledIni : null;
-            if (sourceIni == null)
-            {
-                foreach (var name in new[] { "php.ini-development", "php.ini-production" })
-                {
-                    var src = Path.Combine(phpDir, name);
-                    if (File.Exists(src))
-                    {
-                        sourceIni = src;
-                        break;
-                    }
-                }
-            }
-
-            var lines = sourceIni != null
-                ? File.ReadAllLines(sourceIni).ToList()
-                : new List<string>();
-            var extDir = Path.Combine(phpDir, "ext").Replace('\\', '/');
-
-            void Upsert(string keyPattern, string valueLine)
-            {
-                for (var i = 0; i < lines.Count; i++)
-                {
-                    if (System.Text.RegularExpressions.Regex.IsMatch(lines[i], keyPattern))
-                    {
-                        lines[i] = valueLine;
-                        return;
-                    }
-                }
-                lines.Add(valueLine);
-            }
-
-            Upsert(@"^\s*;?\s*extension_dir\s*=", $"extension_dir=\"{extDir}\"");
-            foreach (var ext in new[] { "curl", "openssl", "mbstring", "fileinfo" })
-            {
-                Upsert($@"^\s*;?\s*extension\s*=\s*{ext}\b", $"extension={ext}");
-            }
-
-            // 先尝试写回安装目录（绿色包场景）
-            try
-            {
-                File.WriteAllLines(bundledIni, lines);
-                return bundledIni;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // Program Files：落到可写目录
-            }
-            catch (IOException)
-            {
-                // fall through
-            }
-
-            var userIni = Path.Combine(ResolveDataDir("php"), "php.ini");
-            File.WriteAllLines(userIni, lines);
-            return userIni;
-        }
-        catch
-        {
-            return null;
         }
     }
 
@@ -1413,14 +1149,14 @@ public sealed class MainForm : Form
         }
     }
 
-    private void StopPhp()
+    private void StopServer()
     {
         try
         {
-            if (_phpProcess is { HasExited: false })
+            if (_serverProcess is { HasExited: false })
             {
-                _phpProcess.Kill(entireProcessTree: true);
-                _phpProcess.WaitForExit(2000);
+                _serverProcess.Kill(entireProcessTree: true);
+                _serverProcess.WaitForExit(2000);
             }
         }
         catch
@@ -1429,8 +1165,8 @@ public sealed class MainForm : Form
         }
         finally
         {
-            _phpProcess?.Dispose();
-            _phpProcess = null;
+            _serverProcess?.Dispose();
+            _serverProcess = null;
         }
     }
 

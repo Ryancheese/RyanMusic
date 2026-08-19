@@ -23,20 +23,6 @@ function Assert-Windows {
   }
 }
 
-function Find-Php {
-  $cmd = Get-Command php -ErrorAction SilentlyContinue
-  if ($cmd) { return $cmd.Source }
-  $candidates = @(
-    "C:\php\php.exe",
-    "C:\Program Files\PHP\php.exe",
-    (Join-Path $env:LOCALAPPDATA "Programs\PHP\php.exe")
-  )
-  foreach ($c in $candidates) {
-    if (Test-Path $c) { return $c }
-  }
-  return $null
-}
-
 function Find-Node {
   $cmd = Get-Command node -ErrorAction SilentlyContinue
   if ($cmd) { return $cmd.Source }
@@ -86,73 +72,6 @@ function Ensure-Node {
     exit 1
   }
   Write-Green "Node 安装完成：$node"
-}
-
-function Note-PhpFallback {
-  $php = Find-Php
-  if ($php) {
-    Write-Green "已检测到 PHP（Node 不可用时的回退）：$php"
-    Enable-PhpExtensions $php
-  } else {
-    Write-Yellow "未检测到 PHP。桌面端将使用 Node 后端。"
-  }
-}
-
-function Enable-PhpExtensions([string]$phpExe) {
-  $phpDir = Split-Path $phpExe -Parent
-  $extDir = Join-Path $phpDir "ext"
-  $iniPath = Join-Path $phpDir "php.ini"
-
-  if (-not (Test-Path $iniPath)) {
-    $candidates = @(
-      (Join-Path $phpDir "php.ini-development"),
-      (Join-Path $phpDir "php.ini-production")
-    )
-    foreach ($c in $candidates) {
-      if (Test-Path $c) {
-        Copy-Item $c $iniPath -Force
-        Write-Yellow "已生成 php.ini（来自 $(Split-Path $c -Leaf)）"
-        break
-      }
-    }
-  }
-
-  if (-not (Test-Path $iniPath)) {
-    Write-Yellow "未找到 php.ini，将在启动参数中强制加载扩展。"
-  } else {
-    $ini = Get-Content $iniPath -Raw -ErrorAction SilentlyContinue
-    if ($null -eq $ini) { $ini = "" }
-    # 去掉可能存在的 UTF-8 BOM，避免 PHP 解析异常
-    if ($ini.Length -gt 0 -and [int][char]$ini[0] -eq 0xFEFF) {
-      $ini = $ini.Substring(1)
-    }
-
-    # extension_dir
-    if ($ini -notmatch '(?m)^\s*extension_dir\s*=') {
-      $ini = "extension_dir=`"ext`"`r`n" + $ini
-    } else {
-      $ini = [regex]::Replace($ini, '(?m)^\s*;?\s*extension_dir\s*=.*$', 'extension_dir="ext"')
-    }
-
-    foreach ($ext in @('curl', 'openssl', 'mbstring', 'fileinfo')) {
-      # 清掉重复项（含 php_xxx.dll / 注释行），再写唯一启用行
-      $ini = [regex]::Replace($ini, "(?m)^\s*;?\s*extension\s*=\s*(php_)?$ext(\.dll)?\s*.*\r?\n?", "")
-      $ini = $ini.TrimEnd() + "`r`nextension=$ext`r`n"
-    }
-
-    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-    [System.IO.File]::WriteAllText($iniPath, $ini, $utf8NoBom)
-  }
-
-  $prevEap = $ErrorActionPreference
-  $ErrorActionPreference = "Continue"
-  $mods = (& $phpExe -m 2>&1 | ForEach-Object { "$_" }) -join "`n"
-  $ErrorActionPreference = $prevEap
-  if ($mods -match '(?im)^\s*curl\s*$') {
-    Write-Green "PHP curl 扩展已启用"
-  } else {
-    Write-Yellow "php.ini 已尝试启用 curl，若仍失败请重启终端后再装一次。"
-  }
 }
 
 function Refresh-Path {
@@ -342,10 +261,10 @@ function Stop-RunningApp {
     }
   }
 
-  # 结束占用安装目录的内嵌 Node / PHP（命令行含 InstallDir）
+  # 结束占用安装目录的内嵌 Node（命令行含 InstallDir）
   try {
     $installLower = $InstallDir.ToLowerInvariant()
-    foreach ($procName in @("node.exe", "php.exe")) {
+    foreach ($procName in @("node.exe")) {
       Get-CimInstance Win32_Process -Filter "Name='$procName'" -ErrorAction SilentlyContinue | ForEach-Object {
         $cmd = $_.CommandLine
         if (-not $cmd) { return }
@@ -387,7 +306,7 @@ function Clear-InstallDir {
   if (Test-Path (Join-Path $InstallDir "RyanMusic.exe")) {
     Write-Red "安装目录仍被占用：$InstallDir"
     Write-Red "请先完全退出 RyanMusic（任务栏/托盘也关掉），再重新运行安装命令。"
-    Write-Yellow "或任务管理器结束 RyanMusic.exe / node.exe / php.exe 后重试。"
+    Write-Yellow "或任务管理器结束 RyanMusic.exe / node.exe 后重试。"
     exit 1
   }
 }
@@ -438,7 +357,6 @@ function Build-And-Install([string]$root) {
 try {
   Assert-Windows
   Ensure-Node
-  Note-PhpFallback
   Ensure-Dotnet
 
   $root = Resolve-RepoRoot

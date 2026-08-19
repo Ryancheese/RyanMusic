@@ -19,10 +19,20 @@
 
 ### 2. 创建 Personal Access Token
 
-GitHub → Settings → Developer settings → Fine-grained tokens：
+**推荐 Classic PAT**（跨仓发 Release 最省事）：
+
+GitHub → Settings → Developer settings → **Personal access tokens (classic)** → Generate new token：
+
+- 勾选 **`repo`**（或至少 **`public_repo`**，因 Releases 仓为 Public）
+- 复制 token（只显示一次）
+
+若用 **Fine-grained token**，必须同时满足：
 
 - Repository access：仅 `RyanMusic-Releases`
-- Permissions：`Contents` → Read and write
+- Permissions：`Contents` → **Read and write**
+- 且 token 所属账号对该仓有 **Write** 权限
+
+常见失败：`403 Resource not accessible by personal access token` → 权限不足或未勾选目标仓库。
 
 ### 3. 写入私有源码仓 Secret
 
@@ -42,8 +52,8 @@ Vercel 项目需重新连接 GitHub，并授予访问私有仓权限。
 ## 发版流程（不变）
 
 ```bash
-git tag v1.8.68
-git push origin v1.8.68
+git tag v1.8.69
+git push origin v1.8.69
 ```
 
 CI 会在 **公开** `RyanMusic-Releases` 创建/更新同名 Release，并上传 DMG / EXE / APK。

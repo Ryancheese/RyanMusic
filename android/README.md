@@ -1,8 +1,8 @@
 # RyanMusic Android
 
-独立 APK：内嵌 PHP（arm64）+ Web 前端。多数机型安装即可搜索、播放（仍需联网取流）。
+独立 APK：WebView 壳 + 在线 Node 服务。安装后即可搜索、播放（仍需联网取流）。
 
-搜索与取流必须经过后端签名代理（网易云 / QQ），所以各端本质是「同一套服务 + WebView」。电脑 / Docker / 线上站点用 **Node（`server/`）**；手机优先用 APK 内嵌 PHP，部分华为 / HarmonyOS 拦截时会**自动改连线上 Node 站点**，不再依赖电脑。
+搜索与取流必须经过后端签名代理（网易云 / QQ），所以各端本质是「同一套服务 + WebView」。电脑 / Docker / 线上站点统一使用 **Node（`server/`）**；Android 默认连接线上 Node 站点，也可切到局域网电脑或自建地址。
 
 ## 安装
 
@@ -14,9 +14,9 @@
 
 返回键可切换：**本机服务 / 在线服务 / 自定义服务器**。
 
-## 本机 PHP 失败时
+## 使用在线服务或局域网服务
 
-部分华为 / HarmonyOS 会拦截应用内启动 PHP。应用会自动连接 [ryanmusic.vercel.app](https://ryanmusic.vercel.app)，一般无需再开电脑。
+默认会连接 [ryanmusic.vercel.app](https://ryanmusic.vercel.app)，一般无需再开电脑。
 
 若线上站点较慢、或想走家里电脑的代理：
 
@@ -31,7 +31,6 @@
 
 ```bash
 cd web && npm ci && npm run build
-bash android/scripts/fetch-php.sh
 cd android && ./gradlew assembleRelease
 # 产物：android/app/build/outputs/apk/release/app-release.apk
 ```

@@ -29,22 +29,6 @@ require_macos() {
   fi
 }
 
-find_php() {
-  local candidates=(/opt/homebrew/bin/php /usr/local/bin/php)
-  local c
-  for c in "${candidates[@]}"; do
-    if [[ -x "$c" ]]; then
-      echo "$c"
-      return 0
-    fi
-  done
-  if command -v php >/dev/null 2>&1; then
-    command -v php
-    return 0
-  fi
-  return 1
-}
-
 find_node() {
   local candidates=(/opt/homebrew/bin/node /usr/local/bin/node)
   local c
@@ -81,14 +65,6 @@ ensure_node() {
     exit 1
   fi
   green "Node 安装完成：$(find_node)"
-}
-
-note_php_fallback() {
-  if find_php >/dev/null; then
-    green "已检测到 PHP（Node 不可用时的回退）：$(find_php)"
-  else
-    yellow "未检测到 PHP。桌面端将使用 Node 后端。"
-  fi
 }
 
 ensure_swiftc() {
@@ -160,7 +136,6 @@ build_and_install() {
 main() {
   require_macos
   ensure_node
-  note_php_fallback
   ensure_swiftc
 
   local root

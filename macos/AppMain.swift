@@ -62,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var window: NSWindow!
     var webView: RyanWebView!
     private var titlebarDragOverlay: TitlebarDragOverlay?
-    var phpProcess: Process?
+    var serverProcess: Process?
     var port: Int = 18765
     private var healthTimer: Timer?
     private var activeDownloads: [ObjectIdentifier: URL] = [:]
@@ -170,7 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         chromeObservers.removeAll()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         MPNowPlayingInfoCenter.default().playbackState = .stopped
-        stopPHP()
+        stopServer()
     }
 
     private func setupWindow() {
@@ -542,68 +542,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         Self.alert("下载失败：\(error.localizedDescription)")
     }
 
-    // MARK: - PHP process
-
-    private func startPHP(phpPath: String, webRoot: String, port: Int) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: phpPath)
-
-        var args = [String]()
-        let iniBeside = (phpPath as NSString).deletingLastPathComponent + "/php.ini"
-        let iniResource = (Bundle.main.resourcePath ?? "") + "/php/php.ini"
-        if FileManager.default.fileExists(atPath: iniBeside) {
-            args.append(contentsOf: ["-c", iniBeside])
-        } else if FileManager.default.fileExists(atPath: iniResource) {
-            args.append(contentsOf: ["-c", iniResource])
-        }
-        args.append(contentsOf: ["-S", "0.0.0.0:\(port)", "-t", webRoot])
-        process.arguments = args
-
-        // 保证内嵌 PHP 能找到同目录 dylib（部分环境仍需要）
-        var env = ProcessInfo.processInfo.environment
-        // 剥离 Clash/Surge 等注入的代理环境，避免 PHP/curl 出站被 VPN 劫持
-        let proxyEnvKeys = [
-            "http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
-            "all_proxy", "ALL_PROXY", "socks_proxy", "SOCKS_PROXY",
-            "socks5_proxy", "SOCKS5_PROXY", "ftp_proxy", "FTP_PROXY"
-        ]
-        for key in proxyEnvKeys {
-            env.removeValue(forKey: key)
-        }
-        env["NO_PROXY"] = "*"
-        env["no_proxy"] = "*"
-
-        let phpDir = (phpPath as NSString).deletingLastPathComponent
-        let libDir = (phpDir as NSString).appendingPathComponent("../lib")
-        if FileManager.default.fileExists(atPath: libDir) {
-            let resolved = (libDir as NSString).standardizingPath
-            if let existing = env["DYLD_FALLBACK_LIBRARY_PATH"], !existing.isEmpty {
-                env["DYLD_FALLBACK_LIBRARY_PATH"] = "\(resolved):\(existing)"
-            } else {
-                env["DYLD_FALLBACK_LIBRARY_PATH"] = resolved
-            }
-        }
-        if let resourcePath = Bundle.main.resourcePath {
-            let ca = (resourcePath as NSString).appendingPathComponent("php/cacert.pem")
-            if FileManager.default.fileExists(atPath: ca) {
-                env["SSL_CERT_FILE"] = ca
-                env["CURL_CA_BUNDLE"] = ca
-            }
-        }
-        process.environment = env
-
-        let log = FileManager.default.temporaryDirectory.appendingPathComponent("ryanmusic-php.log")
-        FileManager.default.createFile(atPath: log.path, contents: nil)
-        let handle = try FileHandle(forWritingTo: log)
-        process.standardOutput = handle
-        process.standardError = handle
-        process.terminationHandler = { _ in
-            try? handle.close()
-        }
-        try process.run()
-        phpProcess = process
-    }
-
     private func startNode(nodePath: String, serverJs: String, webRoot: String, port: Int) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: nodePath)
@@ -636,11 +574,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
-        phpProcess = process
+        serverProcess = process
     }
 
-    private func stopPHP() {
-        guard let process = phpProcess, process.isRunning else { return }
+    private func stopServer() {
+        guard let process = serverProcess, process.isRunning else { return }
         process.terminate()
         let deadline = Date().addingTimeInterval(1.5)
         while process.isRunning && Date() < deadline {
@@ -649,7 +587,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         if process.isRunning {
             process.interrupt()
         }
-        phpProcess = nil
+        serverProcess = nil
     }
 
     @objc private func copyLanUrl() {
@@ -729,44 +667,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             process.waitUntilExit()
             let path = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !path.isEmpty, FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        } catch {
-            return nil
-        }
-        return nil
-    }
-
-    static func findPHP() -> String? {
-        let bundle = Bundle.main.bundlePath as NSString
-        let bundled = [
-            bundle.appendingPathComponent("Contents/Resources/php/bin/php"),
-            bundle.appendingPathComponent("Contents/Resources/runtime/php/bin/php"),
-            bundle.appendingPathComponent("Contents/Resources/php/php")
-        ]
-        for path in bundled where FileManager.default.isExecutableFile(atPath: path) {
-            return path
-        }
-
-        let candidates = [
-            "/opt/homebrew/bin/php",
-            "/usr/local/bin/php"
-        ]
-        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
-            return path
-        }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = ["php"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if !path.isEmpty, FileManager.default.isExecutableFile(atPath: path) {
                 return path
             }

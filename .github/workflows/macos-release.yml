@@ -30,16 +30,10 @@ jobs:
           npm ci
           npm run build
 
-      - name: Install PHP (Homebrew)
-        run: |
-          brew update
-          brew install php
-          php -v
-
       - name: Build app + DMG
         run: |
           chmod +x macos/build-app.sh
-          ./macos/build-app.sh --bundle-php --dmg
+          ./macos/build-app.sh --dmg
           ls -lh dist/RyanMusic-mac-*.dmg
 
       - name: Upload artifact

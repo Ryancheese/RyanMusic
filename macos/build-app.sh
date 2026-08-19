@@ -2,7 +2,7 @@
 # RyanMusic macOS packager
 # Usage:
 #   ./macos/build-app.sh
-#   ./macos/build-app.sh --bundle-php --dmg
+#   ./macos/build-app.sh --dmg
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -15,7 +15,6 @@ RESOURCES_DIR="$CONTENTS/Resources"
 SRC_MUSIC="$ROOT/maicong-music"
 SRC_SWIFT="$ROOT/macos/AppMain.swift"
 
-BUNDLE_PHP=0
 BUNDLE_NODE=1
 MAKE_DMG=0
 # 与官方 Node LTS 对齐；安装包内嵌后用户无需系统安装 Node
@@ -30,12 +29,11 @@ DMG_PATH="$DIST_DIR/${APP_NAME}-mac-${ARCH_LABEL}.dmg"
 
 for arg in "$@"; do
   case "$arg" in
-    --bundle-php) BUNDLE_PHP=1 ;;
     --bundle-node) BUNDLE_NODE=1 ;;
     --no-bundle-node) BUNDLE_NODE=0 ;;
     --dmg) MAKE_DMG=1 ;;
     -h|--help)
-      echo "Usage: $0 [--bundle-php] [--bundle-node|--no-bundle-node] [--dmg]"
+      echo "Usage: $0 [--bundle-node|--no-bundle-node] [--dmg]"
       exit 0
       ;;
   esac
@@ -155,43 +153,6 @@ resolve_missing_libs() {
   done
 }
 
-rewrite_absolute_refs() {
-  local dest_root="$1"
-  local libdir="$dest_root/lib"
-  local bindir="$dest_root/bin"
-  local f dep base
-
-  for f in "$libdir"/*.dylib; do
-    [[ -f "$f" ]] || continue
-    while IFS= read -r dep; do
-      [[ "$dep" == /* ]] || continue
-      is_system_lib "$dep" && continue
-      base="$(basename "$dep")"
-      [[ -f "$libdir/$base" ]] || continue
-      install_name_tool -change "$dep" "@loader_path/$base" "$f" 2>/dev/null || true
-    done < <(otool -L "$f" 2>/dev/null | tail -n +2 | awk '{print $1}')
-  done
-
-  if [[ -f "$bindir/php" ]]; then
-    while IFS= read -r dep; do
-      [[ "$dep" == /* ]] || continue
-      is_system_lib "$dep" && continue
-      base="$(basename "$dep")"
-      [[ -f "$libdir/$base" ]] || continue
-      install_name_tool -change "$dep" "@loader_path/../lib/$base" "$bindir/php" 2>/dev/null || true
-    done < <(otool -L "$bindir/php" 2>/dev/null | tail -n +2 | awk '{print $1}')
-  fi
-}
-
-resign_php_bundle() {
-  local dest_root="$1"
-  local f
-  for f in "$dest_root"/lib/*.dylib "$dest_root"/bin/php; do
-    [[ -e "$f" ]] || continue
-    codesign --force --sign - "$f" >/dev/null 2>&1 || true
-  done
-}
-
 bundle_official_node() {
   local dest_root="$1"
   local ver="$NODE_BUNDLE_VERSION"
@@ -233,62 +194,14 @@ bundle_official_node() {
   fi
 }
 
-bundle_homebrew_php() {
-  local dest_root="$1"
-  local php_bin bin_dir lib_dir ca_dest ver src_dir
-
-  php_bin="$(command -v php || true)"
-  if [[ -z "$php_bin" || ! -x "$php_bin" ]]; then
-    echo "php not found. Install with: brew install php" >&2
-    exit 1
-  fi
-
-  echo "==> bundle portable PHP: ${php_bin}"
-  bin_dir="$dest_root/bin"
-  lib_dir="$dest_root/lib"
-  mkdir -p "$bin_dir" "$lib_dir"
-
-  php_bin="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$php_bin")"
-  src_dir="$(cd "$(dirname "$php_bin")" && pwd)"
-  cp -f "$php_bin" "$bin_dir/php"
-  chmod u+w "$bin_dir/php"
-  chmod +x "$bin_dir/php"
-
-  bundle_deps_for "$bin_dir/php" "$lib_dir" "bin" "$src_dir"
-  resolve_missing_libs "$lib_dir"
-  rewrite_absolute_refs "$dest_root"
-  resign_php_bundle "$dest_root"
-
-  ca_dest="$dest_root/cacert.pem"
-  if [[ ! -f "$ca_dest" ]]; then
-    echo "    download cacert.pem"
-    curl -fsSL "https://curl.se/ca/cacert.pem" -o "$ca_dest" || true
-  fi
-
-  cat > "$dest_root/php.ini" <<'EOF'
-; RyanMusic portable PHP (macOS)
-date.timezone=Asia/Shanghai
-memory_limit=256M
-max_execution_time=60
-display_errors=0
-EOF
-
-  if DYLD_FALLBACK_LIBRARY_PATH="$lib_dir" "$bin_dir/php" -c "$dest_root/php.ini" -v >/dev/null 2>&1; then
-    ver="$(DYLD_FALLBACK_LIBRARY_PATH="$lib_dir" "$bin_dir/php" -c "$dest_root/php.ini" -r 'echo PHP_VERSION;')"
-    echo "    bundled PHP OK: ${ver}"
-  else
-    echo "warn: bundled php -v failed" >&2
-    DYLD_FALLBACK_LIBRARY_PATH="$lib_dir" "$bin_dir/php" -c "$dest_root/php.ini" -v 2>&1 | head -n 20 >&2 || true
-    exit 1
-  fi
-}
-
 make_dmg() {
   local app="$1"
   local out_dmg="$2"
   local stage="$DIST_DIR/dmg-stage-${ARCH_LABEL}"
   local rw_dmg="$DIST_DIR/dmg-rw-${ARCH_LABEL}.dmg"
   local bg_src="$ROOT/macos/dmg-background.png"
+  local attach_output=""
+  local mount_dev=""
   local mount_dir=""
   local win_w=660
   local win_h=400
@@ -326,7 +239,9 @@ make_dmg() {
     sleep 1
   fi
 
-  mount_dir="$(hdiutil attach -readwrite -noverify -noautoopen "$rw_dmg" | awk '/\/Volumes\//{print $3; exit}')"
+  attach_output="$(hdiutil attach -readwrite -noverify -noautoopen "$rw_dmg")"
+  mount_dev="$(printf '%s\n' "$attach_output" | awk '/\/Volumes\//{print $1; exit}')"
+  mount_dir="$(printf '%s\n' "$attach_output" | awk '/\/Volumes\//{print $3; exit}')"
   if [[ -z "$mount_dir" || ! -d "$mount_dir" ]]; then
     echo "error: failed to mount RW DMG" >&2
     exit 1
@@ -365,7 +280,19 @@ EOF
   fi
 
   sync
-  hdiutil detach "$mount_dir" || hdiutil detach "$mount_dir" -force
+  local detach_target="${mount_dev:-$mount_dir}"
+  local detached=0
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if hdiutil detach "$detach_target" >/dev/null 2>&1; then
+      detached=1
+      break
+    fi
+    sleep 2
+  done
+  if [[ "$detached" -ne 1 ]]; then
+    hdiutil detach "$detach_target" -force >/dev/null 2>&1 || true
+  fi
   sleep 1
 
   hdiutil convert "$rw_dmg" -format UDZO -imagekey zlib-level=9 -o "$out_dmg"
@@ -432,10 +359,6 @@ cp -f "$ROOT/server/dist/server.mjs" "$RESOURCES_DIR/server.mjs"
 
 if [[ "$BUNDLE_NODE" -eq 1 ]]; then
   bundle_official_node "$RESOURCES_DIR/node"
-fi
-
-if [[ "$BUNDLE_PHP" -eq 1 ]]; then
-  bundle_homebrew_php "$RESOURCES_DIR/php"
 fi
 
 echo "==> ad-hoc codesign"

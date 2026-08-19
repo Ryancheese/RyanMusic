@@ -1,6 +1,6 @@
 # RyanMusic
 
-基于 [maicong/music](https://github.com/maicong/music) 二次开发的音乐搜索与播放站点（网易云、QQ）。界面为沉浸式歌词播放器。搜索、歌词与取流由 **TypeScript / Hono** 后端完成（`server/`）；安卓本机仍可回退内嵌 PHP。
+基于 [maicong/music](https://github.com/maicong/music) 二次开发的音乐搜索与播放站点（网易云、QQ）。界面为沉浸式歌词播放器。搜索、歌词与取流统一由 **TypeScript / Hono** 后端完成（`server/`）。
 
 ## 仓库结构
 
@@ -8,10 +8,10 @@
 |------|------|
 | `web/` | React 前端（Vite） |
 | `server/` | TypeScript + Hono 后端（搜索、签名代理、账号） |
-| `maicong-music/` | 前端静态资源、历史 PHP 实现（安卓本机仍用） |
+| `maicong-music/` | 前端静态资源与兼容旧路由资源 |
 | `macos/` | macOS 原生窗口 App（WKWebView）与一键安装脚本 |
 | `windows/` | Windows 原生窗口 App（WebView2）与一键安装脚本 |
-| `android/` | Android 独立 APK（内嵌 PHP + WebView；失败时自动连线上站点） |
+| `android/` | Android 独立 APK（WebView；默认连接线上站点） |
 | `shared/cloud-origin.txt` | 各端共用的在线服务地址 |
 | `shared/releases-repo.txt` | 公开安装包仓（应用内更新指向此处） |
 
@@ -31,20 +31,20 @@
 
 > 若源码仓已设为 Private，详见 [docs/private-repo-and-releases.md](docs/private-repo-and-releases.md)。
 
-搜索、歌词、取流走同一套后端：电脑 / Docker / Vercel 默认是 `server/`（Node）。手机优先用 APK 内嵌 PHP；被系统拦截时自动连线上站点 [ryanmusic.vercel.app](https://ryanmusic.vercel.app)。若希望手机走家里电脑的代理，电脑版已监听局域网：托盘 / 菜单里「复制手机访问地址」。
+搜索、歌词、取流走同一套后端：电脑 / Docker / Vercel / 手机统一使用 `server/`（Node）。Android 默认连线上站点 [ryanmusic.vercel.app](https://ryanmusic.vercel.app)。若希望手机走家里电脑的代理，电脑版已监听局域网：托盘 / 菜单里「复制手机访问地址」。
 
 也可在 **Actions** 里下载对应 Artifact。
 
 本地打包：
 
 ```powershell
-# Windows（生成安装向导 exe；需 Node 22+ 构建后端，可选 -BundlePhp 作为回退）
+# Windows（生成安装向导 exe；需 Node 22+ 构建后端）
 powershell -ExecutionPolicy Bypass -File windows\build-app.ps1
 # 产物：dist/RyanMusic-Setup-x64.exe
 ```
 
 ```bash
-# macOS（需 Node 22+；可选 --bundle-php 作为回退）
+# macOS（需 Node 22+）
 ./macos/build-app.sh --dmg
 # 产物：dist/RyanMusic-mac-arm64.dmg 或 dist/RyanMusic-mac-x64.dmg
 ```
@@ -52,7 +52,6 @@ powershell -ExecutionPolicy Bypass -File windows\build-app.ps1
 ```bash
 # Android（需 Android SDK / JDK 17）
 cd web && npm ci && npm run build
-bash android/scripts/fetch-php.sh
 cd android && ./gradlew assembleRelease
 # 产物：android/app/build/outputs/apk/release/app-release.apk
 ```
@@ -69,7 +68,7 @@ curl -fsSL https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/macos/ins
 
 安装后双击 **应用程序 / RyanMusic** 即可（独立窗口，关掉窗口即停止服务）。
 
-依赖：本机 Node 22+（可用 Homebrew）、Xcode Command Line Tools（`xcode-select --install`）。PHP 仅作找不到 Node 时的回退。
+依赖：本机 Node 22+（可用 Homebrew）、Xcode Command Line Tools（`xcode-select --install`）。
 
 ### 更新
 
@@ -105,7 +104,7 @@ iex ((irm https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/windows/in
 
 脚本会：检测/安装 Node.js 与 .NET 8 SDK → 拉取源码 → 编译 WebView2 窗口程序 → 安装到 `%LOCALAPPDATA%\RyanMusic` 并创建桌面快捷方式。
 
-依赖：Windows 10/11、Node 22+、.NET 8 SDK（脚本可用 winget 自动装）、系统自带的 WebView2（Win11 通常已有）。PHP 仅作找不到 Node 时的回退。
+依赖：Windows 10/11、Node 22+、.NET 8 SDK（脚本可用 winget 自动装）、系统自带的 WebView2（Win11 通常已有）。
 
 本地已有仓库时也可：
 
@@ -113,8 +112,8 @@ iex ((irm https://raw.githubusercontent.com/Ryancheese/RyanMusic/main/windows/in
 powershell -ExecutionPolicy Bypass -File windows\install.ps1
 # 或只打包目录（不含安装向导）：
 powershell -ExecutionPolicy Bypass -File windows\build-app.ps1 -SkipInstaller
-# 完整安装包（内嵌 Node 后端 + 可选 PHP 回退 + Setup.exe）：
-powershell -ExecutionPolicy Bypass -File windows\build-app.ps1 -BundlePhp
+# 完整安装包（内嵌 Node 后端 + Setup.exe）：
+powershell -ExecutionPolicy Bypass -File windows\build-app.ps1
 ```
 
 若 `irm` / GitHub raw 连不上，可改用：
