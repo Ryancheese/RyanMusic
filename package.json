@@ -6,7 +6,9 @@
     "vercel-build": "node scripts/vercel-build.mjs"
   },
   "dependencies": {
-    "esbuild": "^0.25.5",
     "hono": "^4.7.11"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.5"
   }
 }
