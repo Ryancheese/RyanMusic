@@ -10,6 +10,38 @@ test('isNeteaseDelisted ignores playable songs', () => {
   assert.equal(isNeteaseDelisted({}, { st: 0, pl: 320000, dl: 320000 }), false);
 });
 
+test('isNeteaseDelisted ignores cloudsearch false gray st=-100 with maxbr', () => {
+  assert.equal(
+    isNeteaseDelisted({}, {
+      st: -100,
+      pl: 0,
+      dl: 0,
+      maxbr: 999000,
+      playMaxbr: 999000,
+      fee: 0,
+    }),
+    false,
+  );
+});
+
+test('isNeteaseDelisted ignores VIP unplayable-for-guest (st=0 pl=0 with maxbr)', () => {
+  assert.equal(
+    isNeteaseDelisted({}, {
+      st: 0,
+      pl: 0,
+      dl: 0,
+      maxbr: 999000,
+      playMaxbr: 999000,
+      fee: 1,
+    }),
+    false,
+  );
+});
+
+test('isNeteaseDelisted detects gray with no bitrate', () => {
+  assert.equal(isNeteaseDelisted({}, { st: -100, pl: 0, dl: 0, maxbr: 0, playMaxbr: 0 }), true);
+});
+
 test('isQqDelisted detects action.play=0', () => {
   assert.equal(isQqDelisted({ action: { play: 0 } }), true);
 });

@@ -5,7 +5,7 @@ import { NeteaseService } from './netease.ts';
 import { QqService } from './qq.ts';
 import { fetchKugouLyricText, searchKugouSongs } from './kugouLyrics.ts';
 import { request } from './http.ts';
-import { decodeEntities, effectiveTimedLyricScore, isPlaceholderLyricText, neteaseLyricText, pickRicherLyric, timedLyricScore } from './util.ts';
+import { decodeEntities, effectiveTimedLyricScore, hasNeteasePureMusicFlag, isPlaceholderLyricText, isPureMusicLyricText, neteaseLyricText, pickRicherLyric, timedLyricScore } from './util.ts';
 
 const AMLL_DB_BASE = 'https://amll-ttml-db.stevexmh.net';
 export type AmllPlatform = 'ncm' | 'qq';
@@ -339,6 +339,16 @@ export class LyricsService {
       this.netease.fetchLyric(songid, cookie),
     ]);
     if (officialRes?.json && (officialRes.json.lrc || officialRes.json.yrc)) official = officialRes.json;
+
+    // Folia：纯音乐不落地占位文案，前端歌词区保持空态
+    if (
+      hasNeteasePureMusicFlag(official)
+      || hasNeteasePureMusicFlag(anonymous)
+      || isPureMusicLyricText(neteaseLyricText(official, 'lrc'))
+      || isPureMusicLyricText(neteaseLyricText(anonymous, 'lrc'))
+    ) {
+      return { lrc: '', yrc: '', tlyric: '' };
+    }
 
     const lyrics: LyricBundle = {
       lrc: pickRicherLyric(neteaseLyricText(official, 'lrc'), neteaseLyricText(anonymous, 'lrc')),

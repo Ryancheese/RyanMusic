@@ -39,8 +39,9 @@ export function applyLyricLineFilter(lines: Line[], pattern?: string | null): Li
   if (!lines.length) return lines;
   const regex = compileLyricFilterPattern(pattern);
   if (!regex) return lines;
+  // Folia：过滤后允许为空。若全被滤掉却回退原文，纯音乐会把「纯音乐，请欣赏」又显示出来。
   const filtered = stripInterludes(lines).filter((line) => !regex.test(String(line.fullText || '')));
-  return filtered.length ? finalizeParsedLyricLines(filtered, { includeInterludes: true }) : lines;
+  return finalizeParsedLyricLines(filtered, { includeInterludes: true });
 }
 
 export function applyLyricDisplayFilter(

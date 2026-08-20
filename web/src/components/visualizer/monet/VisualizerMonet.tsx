@@ -168,7 +168,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                 <div className="flex h-full w-full max-w-[1520px] flex-row items-center overflow-hidden">
                     {showText && (
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-center px-5 py-5 sm:px-8 sm:py-6 lg:px-14 lg:py-8">
-                            <div className="mb-3 space-y-1.5">
+                            <div className="mb-3 space-y-1.5 select-none">
                                 <motion.div
                                     key={`artist-${introKey}`}
                                     initial={{ opacity: 0, x: -30, y: -10 }}

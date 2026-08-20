@@ -66,7 +66,7 @@ const LegalModal: React.FC<LegalModalProps> = ({
         <div
           key={tab}
           ref={bodyRef}
-          className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 text-sm leading-relaxed"
+          className="ryan-allow-select min-h-0 flex-1 overflow-y-auto px-5 pb-6 text-sm leading-relaxed"
         >
           {doc.sections.map((section, index) => (
             <section key={`${tab}-${index}`} className="mb-5">

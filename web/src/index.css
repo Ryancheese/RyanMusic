@@ -30,6 +30,19 @@ body,
   transition:
     background-color 0.5s cubic-bezier(0.22, 1, 0.36, 1),
     color 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  user-select: none;
+  -webkit-user-select: none;
+  caret-color: transparent;
+}
+
+/* 输入与可编辑区域仍允许选中/复制 */
+input,
+textarea,
+[contenteditable="true"],
+.ryan-allow-select {
+  user-select: text;
+  -webkit-user-select: text;
+  caret-color: auto;
 }
 
 #root {

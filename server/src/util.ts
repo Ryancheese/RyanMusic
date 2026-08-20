@@ -20,7 +20,20 @@ export function timedLyricScore(text?: string | null): number {
   return word * 10 + lrc;
 }
 
-const PLACEHOLDER_LYRIC_RE = /^(?:暂无歌词|无歌词|纯音乐|此歌曲为没有填词的纯音乐|instrumental|not\s*available|no\s*lyrics?)[\s.…]*$/iu;
+const PLACEHOLDER_LYRIC_RE = /^(?:暂无歌词|无歌词|纯音乐(?:[，,]?\s*请欣赏)?|此歌曲为没有填词的纯音乐|instrumental|not\s*available|no\s*lyrics?)[\s.…]*$/iu;
+const PURE_MUSIC_NOTICE = '纯音乐，请欣赏';
+
+/** Folia：正文含「纯音乐，请欣赏」即视为纯音乐占位 */
+export function isPureMusicLyricText(text?: string | null): boolean {
+  const raw = String(text || '')
+    .replace(/\[[^\]]+\]/g, '')
+    .replace(/\(\d+,\d+(?:,\d+)?\)/g, '')
+    .replace(/<\d+,\d+[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!raw) return false;
+  return raw.includes(PURE_MUSIC_NOTICE) || raw.includes('纯音乐,请欣赏');
+}
 
 /** 去掉时间轴后是否仅为「暂无歌词」等占位 */
 export function isPlaceholderLyricText(text?: string | null): boolean {
@@ -31,7 +44,25 @@ export function isPlaceholderLyricText(text?: string | null): boolean {
     .replace(/\s+/g, ' ')
     .trim();
   if (!raw) return true;
+  if (isPureMusicLyricText(text)) return true;
   return PLACEHOLDER_LYRIC_RE.test(raw);
+}
+
+export function hasNeteasePureMusicFlag(source?: {
+  pureMusic?: boolean;
+  lrc?: { pureMusic?: boolean };
+  yrc?: { pureMusic?: boolean };
+  ytlrc?: { pureMusic?: boolean };
+  tlyric?: { pureMusic?: boolean };
+} | null): boolean {
+  if (!source) return false;
+  return Boolean(
+    source.pureMusic
+    || source.lrc?.pureMusic
+    || source.yrc?.pureMusic
+    || source.ytlrc?.pureMusic
+    || source.tlyric?.pureMusic,
+  );
 }
 
 export function effectiveTimedLyricScore(text?: string | null): number {
@@ -158,13 +189,23 @@ export function isBadMediaUrl(url?: string | null): boolean {
   return false;
 }
 
-/** 网易云无版权/下架（st=-200 等） */
+/**
+ * 网易云无版权/下架。
+ * cloudsearch 常把可播曲误标 st=-100（仍带 maxbr/playMaxbr），不能单凭 st<0 或 -100 判下架。
+ * 仅 st=-200（明确无版权），或灰色且完全无可播/可下载码率时标记。
+ */
 export function isNeteaseDelisted(song: any, privilege?: any): boolean {
   const priv = privilege || song?.privilege || song?.priv;
   if (priv) {
     const st = Number(priv.st);
-    if (st === -200 || st === -100) return true;
-    if (Number(priv.pl) <= 0 && Number(priv.dl) <= 0 && st < 0) return true;
+    if (st === -200) return true;
+    const playBr = Math.max(
+      Number(priv.playMaxbr || 0),
+      Number(priv.maxbr || 0),
+      Number(priv.pl || 0),
+    );
+    const dlBr = Math.max(Number(priv.dl || 0), Number(priv.downloadMaxbr || 0));
+    if (st < 0 && playBr <= 0 && dlBr <= 0) return true;
   }
   return Number(song?.st) === -200;
 }

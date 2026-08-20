@@ -48,6 +48,8 @@ test('placeholder lyric text is treated as empty', () => {
   assert.equal(isPlaceholderLyricText('[00:00.00]暂无歌词'), true);
   assert.equal(effectiveTimedLyricScore('[00:00.00]暂无歌词'), 0);
   assert.ok(timedLyricScore('[00:00.00]暂无歌词') > 0);
+  assert.equal(isPlaceholderLyricText('[00:00.00]纯音乐，请欣赏'), true);
+  assert.equal(isPlaceholderLyricText('[00:00.00]作词：灰澈\n[00:01.00]纯音乐，请欣赏'), true);
   assert.equal(isPlaceholderLyricText('[00:01.00]真实歌词'), false);
 });
 
