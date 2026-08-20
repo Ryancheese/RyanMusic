@@ -71,17 +71,23 @@ body {
   }
 }
 
-html.platform-macos-app {
+html.platform-macos-app,
+html.platform-windows-app {
   --safe-top: 0px;
   --safe-bottom: 0px;
 }
 
 /* WKWebView / WebView2 在缩放后的窗口边缘偶尔会留下一个设备像素的底色缝隙。 */
+/* WebView2 下中文字体行高更紧，省略号容易顶到上一行文字 */
+.platform-windows-app .truncate.leading-snug {
+  line-height: 1.45;
+}
+
 html.platform-macos-app .app-shell,
 html.platform-windows-app .app-shell {
-  inset: -1px;
-  width: calc(100% + 2px);
-  height: calc(100% + 2px);
+  inset: -2px;
+  width: calc(100% + 4px);
+  height: calc(100% + 4px);
 }
 
 :root {

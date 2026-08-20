@@ -22,6 +22,21 @@ public sealed class MainForm : Form
     private const int DwmwaBorderColor = 34;
     private const int DwmwaCaptionColor = 35;
     private const int DwmwaTextColor = 36;
+    private const int DwmwaWindowCornerPreference = 33;
+    private const int DwmwaColorNone = unchecked((int)0xFFFFFFFE);
+    private const int WmNcCalcSize = 0x0083;
+    private const int DwmWcpDonotround = 1;
+    private const int DwmWcpRound = 2;
+    private const int WmNcLButtonDown = 0xA1;
+    private const int HtCaption = 2;
+    private const int HtLeft = 10;
+    private const int HtRight = 11;
+    private const int HtTop = 12;
+    private const int HtTopLeft = 13;
+    private const int HtTopRight = 14;
+    private const int HtBottom = 15;
+    private const int HtBottomLeft = 16;
+    private const int HtBottomRight = 17;
     private const string ReleasesRepo = "Ryancheese/RyanMusic-Releases";
     private const string ReleasesPageUrl = "https://github.com/Ryancheese/RyanMusic-Releases/releases/latest";
     private const string ReleasesApiUrl = "https://api.github.com/repos/Ryancheese/RyanMusic-Releases/releases/latest";
@@ -37,6 +52,9 @@ public sealed class MainForm : Form
     private NotifyIcon? _tray;
     private bool _forceExit;
     private bool _balloonShown;
+    private bool _trueFullscreen;
+    private bool _restoreMaximized;
+    private Rectangle _restoreBounds;
 
     public MainForm()
     {
@@ -45,8 +63,10 @@ public sealed class MainForm : Form
         Height = 860;
         MinimumSize = new Size(980, 700);
         StartPosition = FormStartPosition.CenterScreen;
+        FormBorderStyle = FormBorderStyle.None;
         BackColor = Color.FromArgb(8, 8, 14);
         ForeColor = Color.White;
+        KeyPreview = true;
         TrySetAppIcon();
         InitTray();
 
@@ -58,17 +78,217 @@ public sealed class MainForm : Form
             ApplyTitleBarTheme(_daylight);
             await BootstrapAsync();
         };
+        Resize += (_, _) => RefreshWindowChrome();
         FormClosing += OnFormClosingGuard;
         FormClosed += (_, _) =>
         {
             StopServer();
             DisposeTray();
         };
-        HandleCreated += (_, _) => ApplyTitleBarTheme(_daylight);
+        HandleCreated += (_, _) =>
+        {
+            ApplyTitleBarTheme(_daylight);
+            ApplyWindowCorners(true);
+        };
     }
+
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            const int wsThickFrame = 0x00040000;
+            const int wsMinimizeBox = 0x00020000;
+            const int wsMaximizeBox = 0x00010000;
+            const int wsSysMenu = 0x00080000;
+            const int csDropShadow = 0x00020000;
+            var cp = base.CreateParams;
+            cp.Style |= wsThickFrame | wsMinimizeBox | wsMaximizeBox | wsSysMenu;
+            cp.ClassStyle |= csDropShadow;
+            return cp;
+        }
+    }
+
+    /// <summary>
+    /// 无边框窗口：最大化铺工作区；F11 才是盖住任务栏的真全屏。
+    /// </summary>
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WmNcCalcSize && m.WParam != IntPtr.Zero)
+        {
+            // 去掉 WS_THICKFRAME 留下的非客户区描边，避免顶/底出现白边
+            m.Result = IntPtr.Zero;
+            return;
+        }
+
+        const int wmSysCommand = 0x0112;
+        const int scMaximize = 0xF030;
+        const int scRestore = 0xF120;
+        if (m.Msg == wmSysCommand)
+        {
+            var cmd = m.WParam.ToInt32() & 0xFFF0;
+            if (cmd == scMaximize)
+            {
+                ApplyMaximizedBounds(_trueFullscreen);
+                base.WndProc(ref m);
+                RefreshWindowChrome();
+                return;
+            }
+
+            if (cmd == scRestore && _trueFullscreen)
+            {
+                ExitTrueFullscreen();
+                return;
+            }
+        }
+
+        base.WndProc(ref m);
+    }
+
+    private void ToggleTrueFullscreen()
+    {
+        if (_trueFullscreen)
+        {
+            ExitTrueFullscreen();
+        }
+        else
+        {
+            EnterTrueFullscreen();
+        }
+    }
+
+    private void ToggleWorkAreaMaximize()
+    {
+        if (_trueFullscreen)
+        {
+            ExitTrueFullscreen();
+            return;
+        }
+
+        if (WindowState == FormWindowState.Maximized)
+        {
+            WindowState = FormWindowState.Normal;
+        }
+        else
+        {
+            ApplyMaximizedBounds(false);
+            WindowState = FormWindowState.Maximized;
+        }
+
+        RefreshWindowChrome();
+    }
+
+    private void EnterTrueFullscreen()
+    {
+        if (_trueFullscreen)
+        {
+            return;
+        }
+
+        _restoreBounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+        _restoreMaximized = WindowState == FormWindowState.Maximized;
+        _trueFullscreen = true;
+        ApplyMaximizedBounds(true);
+        WindowState = FormWindowState.Maximized;
+        RefreshWindowChrome();
+    }
+
+    private void ExitTrueFullscreen()
+    {
+        if (!_trueFullscreen)
+        {
+            return;
+        }
+
+        _trueFullscreen = false;
+        if (_restoreMaximized)
+        {
+            ApplyMaximizedBounds(false);
+            WindowState = FormWindowState.Maximized;
+        }
+        else
+        {
+            WindowState = FormWindowState.Normal;
+            Bounds = _restoreBounds;
+        }
+
+        RefreshWindowChrome();
+        ApplyTitleBarTheme(_daylight);
+    }
+
+    private void ApplyMaximizedBounds(bool exclusiveFullscreen)
+    {
+        var screen = Screen.FromHandle(IsHandleCreated ? Handle : IntPtr.Zero);
+        MaximizedBounds = exclusiveFullscreen ? screen.Bounds : screen.WorkingArea;
+    }
+
+    private void BeginNcDrag(int hitTest)
+    {
+        if (_trueFullscreen)
+        {
+            return;
+        }
+
+        if (WindowState == FormWindowState.Maximized && hitTest != HtCaption)
+        {
+            return;
+        }
+
+        ReleaseCapture();
+        _ = SendMessage(Handle, WmNcLButtonDown, hitTest, 0);
+    }
+
+    private void RefreshWindowChrome()
+    {
+        ApplyWindowCorners(!_trueFullscreen && WindowState != FormWindowState.Maximized);
+        NotifyWindowState();
+    }
+
+    private void NotifyWindowState()
+    {
+        if (_webView.CoreWebView2 == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var maximized = !_trueFullscreen && WindowState == FormWindowState.Maximized;
+            var json =
+                $"{{\"type\":\"windowState\",\"maximized\":{(maximized ? "true" : "false")},\"fullscreen\":{(_trueFullscreen ? "true" : "false")}}}";
+            _webView.CoreWebView2.PostWebMessageAsJson(json);
+        }
+        catch
+        {
+            // 页面尚未就绪
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    private void ApplyWindowCorners(bool round)
+    {
+        if (!IsHandleCreated)
+        {
+            return;
+        }
+
+        try
+        {
+            var pref = round ? DwmWcpRound : DwmWcpDonotround;
+            _ = DwmSetWindowAttribute(Handle, DwmwaWindowCornerPreference, ref pref, sizeof(int));
+        }
+        catch
+        {
+            // 旧系统忽略
+        }
+    }
 
     private void ApplyTitleBarTheme(bool daylight)
     {
@@ -90,7 +310,8 @@ public sealed class MainForm : Form
             // COLORREF: 0x00BBGGRR
             var caption = daylight ? 0x00F4F5F5 : 0x000B0909;
             _ = DwmSetWindowAttribute(hwnd, DwmwaCaptionColor, ref caption, sizeof(int));
-            _ = DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref caption, sizeof(int));
+            var noBorder = DwmwaColorNone;
+            _ = DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref noBorder, sizeof(int));
             var text = daylight ? 0x001C1917 : 0x00F5F4F4;
             _ = DwmSetWindowAttribute(hwnd, DwmwaTextColor, ref text, sizeof(int));
         }
@@ -331,6 +552,8 @@ public sealed class MainForm : Form
             _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
             _webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             _webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+            // 禁用浏览器自带 F11 全屏（只铺满 WebView，标题栏/任务栏仍在）
+            _webView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
             _webView.CoreWebView2.Settings.UserAgent =
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -338,12 +561,80 @@ public sealed class MainForm : Form
 
             await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 "document.documentElement.classList.add('platform-windows-app');");
+            await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                """
+                (() => {
+                  if (window.__ryanWindowChrome) return;
+                  window.__ryanWindowChrome = true;
+                  window.__ryanWindowState = window.__ryanWindowState || { maximized: false, fullscreen: false };
+                  const post = (payload) => {
+                    try { window.chrome.webview.postMessage(payload); } catch (e) {}
+                  };
+                  const applyState = (data) => {
+                    if (!data || data.type !== 'windowState') return;
+                    window.__ryanWindowState = {
+                      maximized: Boolean(data.maximized),
+                      fullscreen: Boolean(data.fullscreen),
+                    };
+                    window.dispatchEvent(new CustomEvent('ryan-window-state', { detail: window.__ryanWindowState }));
+                  };
+                  try {
+                    window.chrome.webview.addEventListener('message', (event) => applyState(event.data));
+                  } catch (e) {}
+                  document.addEventListener('keydown', (e) => {
+                    if (e.key === 'F11') {
+                      e.preventDefault();
+                      post({ action: 'toggleFullscreen' });
+                    }
+                  }, true);
+                  const EDGE = 6;
+                  const hit = (e) => {
+                    const state = window.__ryanWindowState || {};
+                    if (state.maximized || state.fullscreen) return null;
+                    const w = window.innerWidth, h = window.innerHeight;
+                    const x = e.clientX, y = e.clientY;
+                    if (y < 40 && x > w - 190) return null;
+                    const l = x < EDGE, r = x > w - EDGE, t = y < EDGE, b = y > h - EDGE;
+                    if (t && l) return 'resizeTopLeft';
+                    if (t && r) return 'resizeTopRight';
+                    if (b && l) return 'resizeBottomLeft';
+                    if (b && r) return 'resizeBottomRight';
+                    if (l) return 'resizeLeft';
+                    if (r) return 'resizeRight';
+                    if (t) return 'resizeTop';
+                    if (b) return 'resizeBottom';
+                    return null;
+                  };
+                  const cursors = {
+                    resizeLeft: 'ew-resize',
+                    resizeRight: 'ew-resize',
+                    resizeTop: 'ns-resize',
+                    resizeBottom: 'ns-resize',
+                    resizeTopLeft: 'nwse-resize',
+                    resizeBottomRight: 'nwse-resize',
+                    resizeTopRight: 'nesw-resize',
+                    resizeBottomLeft: 'nesw-resize',
+                  };
+                  document.addEventListener('mousemove', (e) => {
+                    const edge = hit(e);
+                    document.documentElement.style.cursor = edge ? cursors[edge] : '';
+                  }, true);
+                  document.addEventListener('mousedown', (e) => {
+                    if (e.button !== 0) return;
+                    const edge = hit(e);
+                    if (!edge) return;
+                    e.preventDefault();
+                    post({ action: edge });
+                  }, true);
+                })();
+                """);
             await InjectNativeBridgesAsync();
             _webView.CoreWebView2.NavigationCompleted += async (_, args) =>
             {
                 if (!args.IsSuccess) return;
                 await Task.Delay(150);
                 await SyncTitleBarFromPageAsync();
+                NotifyWindowState();
             };
             await WaitAndNavigateAsync();
         }
@@ -470,6 +761,55 @@ public sealed class MainForm : Form
             if (string.Equals(action, "install", StringComparison.OrdinalIgnoreCase))
             {
                 await InstallAppUpdateAsync(replyToWeb: true);
+                return;
+            }
+
+            if (string.Equals(action, "toggleFullscreen", StringComparison.OrdinalIgnoreCase))
+            {
+                BeginInvoke(ToggleTrueFullscreen);
+                return;
+            }
+
+            if (string.Equals(action, "toggleMaximize", StringComparison.OrdinalIgnoreCase))
+            {
+                BeginInvoke(ToggleWorkAreaMaximize);
+                return;
+            }
+
+            if (string.Equals(action, "minimize", StringComparison.OrdinalIgnoreCase))
+            {
+                BeginInvoke(() => WindowState = FormWindowState.Minimized);
+                return;
+            }
+
+            if (string.Equals(action, "close", StringComparison.OrdinalIgnoreCase))
+            {
+                BeginInvoke(Close);
+                return;
+            }
+
+            if (string.Equals(action, "drag", StringComparison.OrdinalIgnoreCase))
+            {
+                BeginInvoke(() => BeginNcDrag(HtCaption));
+                return;
+            }
+
+            var resizeHit = action switch
+            {
+                "resizeLeft" => HtLeft,
+                "resizeRight" => HtRight,
+                "resizeTop" => HtTop,
+                "resizeBottom" => HtBottom,
+                "resizeTopLeft" => HtTopLeft,
+                "resizeTopRight" => HtTopRight,
+                "resizeBottomLeft" => HtBottomLeft,
+                "resizeBottomRight" => HtBottomRight,
+                _ => 0,
+            };
+            if (resizeHit != 0)
+            {
+                var hit = resizeHit;
+                BeginInvoke(() => BeginNcDrag(hit));
                 return;
             }
         }

@@ -3,6 +3,7 @@ import CoverArt from './CoverArt';
 import DelistedCoverBadge from './DelistedCoverBadge';
 import RyanLoader from './RyanLoader';
 import type { LibraryCardStyle, LibraryLayoutMode } from '../types';
+import { isWindowsApp } from '../lib/media';
 import { readLibraryScroll, saveLibraryScroll } from '../store/libraryScrollStore';
 import { useLibraryStore } from '../store/libraryStore';
 import {
@@ -181,11 +182,12 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   const isList = layoutMode === 'list';
   const isSquare = layoutMode === 'square';
   const isPlaque = layoutMode === 'honeycomb' && cardStyle === 'plaque';
+  const plaqueNameLineHeight = isWindowsApp() ? '1.5' : undefined;
   const listColumns = useLibraryStore((state) => state.listColumns);
   const listMulti = isList && listColumns === 'multi';
   const layout = layoutForWidth(size.width, isSquare ? 'square' : layoutMode, zoom);
-  // 标题 + 副标题 + 内边距，固定紧凑高度，避免随卡片变大留下大块空白
-  const textReserve = isPlaque ? 52 : 0;
+  // 铭牌需要两行文字，Windows 字体行高更大，防止蜂窝行距不足叠到下一行
+  const textReserve = isPlaque ? (isWindowsApp() ? 68 : 52) : 0;
   const cellHeight = layout.card + textReserve;
   const rowSpacingY = layout.spacingY + textReserve;
   const clipRadius = Math.hypot(size.width, size.height) / 2 + Math.max(layout.card, cellHeight);
@@ -661,7 +663,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                     </div>
                     {showPlaque ? (
                       <div className="min-w-0 px-0.5 pt-2.5 pb-0.5">
-                        <div className="truncate text-[13px] font-semibold leading-snug tracking-tight">
+                        <div className="truncate text-[13px] font-semibold leading-snug tracking-tight" style={{ lineHeight: plaqueNameLineHeight }}>
                           {item.name}
                         </div>
                         {item.description ? (
@@ -860,7 +862,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                     </div>
                     {isPlaque ? (
                       <div className="min-w-0 shrink-0 px-0.5 pt-2 pb-0.5 text-left">
-                        <div className="truncate text-[13px] font-semibold leading-snug tracking-tight">
+                        <div className="truncate text-[13px] font-semibold leading-snug tracking-tight" style={{ lineHeight: plaqueNameLineHeight }}>
                           {item.name}
                         </div>
                         {item.description ? (

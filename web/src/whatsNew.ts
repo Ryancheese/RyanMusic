@@ -1,12 +1,12 @@
 /** 当前应用版本（与 Info.plist / Windows Version / server package 保持一致） */
-export const APP_VERSION = '2.0.1';
+export const APP_VERSION = '2.0.2';
 
 const SEEN_KEY = 'ryanmusic-whats-new-seen';
 
 /** 本版启动后弹窗展示的更新说明 */
-export const WHATS_NEW_NOTES = `• 主题色填充度拉满会更浓，约 50% 接近旧版观感
-• 修复方形歌单滚动时左侧空白偶发闪封面
-• 封面列表改为淡入，减少 WebView 合成层溢出`;
+export const WHATS_NEW_NOTES = `• 海报歌词省略号圆点不再叠在一起
+• 搜索页避开窗口按钮；从歌词舞台返回仍回到搜索列表
+• 修复搜索结果大面积误标下架`;
 
 export function shouldShowWhatsNew(currentVersion = APP_VERSION): boolean {
   try {

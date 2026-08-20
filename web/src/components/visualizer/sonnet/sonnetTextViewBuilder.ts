@@ -13,6 +13,7 @@ import type { SonnetSemanticSegment } from './types';
 import { isSonnetEmphasisRole, type SonnetSegmentRole, type SonnetTypographyPlacement } from './sonnetTypographyLayout';
 import { resolveSonnetRoleFontWeight } from './sonnetTypographyRoles';
 import { isInterludeDotChar } from '../../../utils/lyrics/parserCore';
+import { resolveSonnetDotRadius } from './sonnetDotGlyph';
 
 // src/components/visualizer/sonnet/sonnetTextViewBuilder.ts
 // Creates parser-timed core/halo glyph pairs and their semantic guide view.
@@ -100,6 +101,7 @@ export const buildSonnetTextView = (
     options: SonnetTextViewOptions,
 ): SegmentView => {
     const { Text, TextStyle, Graphics } = pixi;
+    const colorNumber = (value: string) => pixi.Color.shared.setValue(value).toNumber();
     const { segment, placement: originalPlacement } = options;
     const placement = { ...originalPlacement };
 
@@ -237,11 +239,14 @@ export const buildSonnetTextView = (
         },
     ).map(glyph => {
         const isDotGlyph = isInterludeDotChar(glyph.char);
-        const dotRadius = Math.max(2.5, fontSize * 0.16);
+        const dotRadius = resolveSonnetDotRadius(fontSize);
 
         const makeDotGraphic = (fillColor: string, alpha = 1) => {
             const graphic = new Graphics();
-            graphic.circle(0, 0, dotRadius).fill({ color: fillColor, alpha });
+            graphic.circle(0, 0, dotRadius).fill({
+                color: colorNumber(fillColor),
+                alpha,
+            });
             return graphic;
         };
 
@@ -273,10 +278,14 @@ export const buildSonnetTextView = (
             caOffsetValue = offset;
 
             if (isDotGlyph) {
-                const caCyan = makeDotGraphic('#00ffff', isHero ? 0.8 : 0.5);
+                const caCyan = makeDotGraphic('#ffffff');
+                caCyan.tint = 0x00ffff;
                 caCyan.blendMode = 'screen';
-                const caRed = makeDotGraphic('#ff0044', isHero ? 0.8 : 0.5);
+                caCyan.alpha = isHero ? 0.8 : 0.5;
+                const caRed = makeDotGraphic('#ffffff');
+                caRed.tint = 0xff0044;
                 caRed.blendMode = 'screen';
+                caRed.alpha = isHero ? 0.8 : 0.5;
                 wrapper.addChild(caCyan, caRed);
                 caCyanNode = caCyan;
                 caRedNode = caRed;

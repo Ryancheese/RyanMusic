@@ -191,14 +191,20 @@ export function isBadMediaUrl(url?: string | null): boolean {
 
 /**
  * 网易云无版权/下架。
- * cloudsearch 常把可播曲误标 st=-100（仍带 maxbr/playMaxbr），不能单凭 st<0 或 -100 判下架。
- * 仅 st=-200（明确无版权），或灰色且完全无可播/可下载码率时标记。
+ * cloudsearch 常把可播曲误标 st=-100，且 privilege 经常不带 maxbr/playMaxbr，
+ * 不能单凭 st<0 或 pl=0 判下架，否则搜索第一页会大面积误标。
+ * 仅 st=-200（明确无版权），或灰色且接口明确给出码率字段且全为 0 时标记。
  */
 export function isNeteaseDelisted(song: any, privilege?: any): boolean {
   const priv = privilege || song?.privilege || song?.priv;
   if (priv) {
     const st = Number(priv.st);
     if (st === -200) return true;
+    const hasBrHint = priv.playMaxbr != null
+      || priv.maxbr != null
+      || priv.playMaxBrLevel != null
+      || priv.maxBrLevel != null;
+    if (!hasBrHint) return Number(song?.st) === -200;
     const playBr = Math.max(
       Number(priv.playMaxbr || 0),
       Number(priv.maxbr || 0),
@@ -210,12 +216,10 @@ export function isNeteaseDelisted(song: any, privilege?: any): boolean {
   return Number(song?.st) === -200;
 }
 
-/** QQ 官方不可播（仍可走私链） */
+/** QQ 官方不可播（仍可走私链）。VIP 付费（pay_play=0 且有价格）不是下架。 */
 export function isQqDelisted(song: any): boolean {
   const action = song?.action;
   if (action && Number(action.play) === 0) return true;
-  const pay = song?.pay;
-  if (pay && Number(pay.pay_play) === 0 && Number(pay.price_play) > 0) return true;
   return false;
 }
 

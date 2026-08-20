@@ -42,6 +42,14 @@ test('isNeteaseDelisted detects gray with no bitrate', () => {
   assert.equal(isNeteaseDelisted({}, { st: -100, pl: 0, dl: 0, maxbr: 0, playMaxbr: 0 }), true);
 });
 
+test('isNeteaseDelisted ignores cloudsearch stub privilege without bitrate fields', () => {
+  assert.equal(isNeteaseDelisted({}, { st: -100, pl: 0, dl: 0, fee: 0 }), false);
+});
+
+test('isQqDelisted ignores VIP paywall', () => {
+  assert.equal(isQqDelisted({ action: { play: 1 }, pay: { pay_play: 0, price_play: 200 } }), false);
+});
+
 test('isQqDelisted detects action.play=0', () => {
   assert.equal(isQqDelisted({ action: { play: 0 } }), true);
 });

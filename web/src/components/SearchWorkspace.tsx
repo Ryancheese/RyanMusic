@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AlertCircle, Clock3, Play, Plus, Search, X } from 'lucide-react';
 import type { MusicSource, ThemeTokens, Track } from '../types';
 import { useSearchHistoryStore } from '../store/searchHistoryStore';
+import { isWindowsApp } from '../lib/media';
 import CoverArt from './CoverArt';
 import DelistedCoverBadge from './DelistedCoverBadge';
 import RyanLoader from './RyanLoader';
@@ -59,6 +60,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
     { id: 'qq', label: 'QQ 音乐' },
   ];
   const showHistory = !query.trim() && !isSearching && history.length > 0;
+  const windowsChrome = isWindowsApp();
 
   useEffect(() => {
     if (!open) return;
@@ -85,7 +87,8 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
             color: theme.primaryColor,
             backgroundColor: isDaylight ? 'rgba(250,250,250,0.96)' : 'rgba(8,8,10,0.94)',
             backdropFilter: 'blur(24px)',
-            paddingTop: 'max(1rem, var(--safe-top))',
+            paddingTop: windowsChrome ? 'max(2.75rem, var(--safe-top))' : 'max(1rem, var(--safe-top))',
+            paddingRight: windowsChrome ? '11.75rem' : undefined,
             paddingBottom: 'max(1rem, var(--safe-bottom))',
           }}
         >

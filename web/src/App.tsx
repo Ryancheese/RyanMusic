@@ -4,6 +4,8 @@ import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type Tr
 import { buildDownloadUrl, canNativeSave, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type LyricSearchCandidate, type PlayQuality } from './api';
 import { accentWashVars, contrastText, extractAccentFromImage } from './lib/color';
 import { isMobileViewport, isWindowsApp, prefersLightweightVisualizer } from './lib/media';
+import WindowControls from './components/WindowControls';
+import TitlebarDragZone from './components/TitlebarDragZone';
 import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig, writeVisualizerMode } from './lib/visualizer';
 import { useLibraryStore } from './store/libraryStore';
 import { useCloudStore } from './store/cloudStore';
@@ -125,6 +127,7 @@ const App: React.FC = () => {
   const [netease, setNetease] = useState<AccountStatus | null>(null);
   const [qq, setQq] = useState<AccountStatus | null>(null);
   const lastQueryRef = useRef('');
+  const returnToSearchRef = useRef(false);
 
   const [searchSource, setSearchSource] = useState<MusicSource>('netease');
   const queue = usePlayerStore((state) => state.queue);
@@ -294,6 +297,10 @@ const App: React.FC = () => {
     setPanelOpen(false);
     setChromeHidden(false);
     setView('home');
+    if (returnToSearchRef.current) {
+      returnToSearchRef.current = false;
+      setSearchOpen(true);
+    }
   }, []);
 
   const seek = useCallback((time: number) => {
@@ -1052,6 +1059,8 @@ const App: React.FC = () => {
 
   return (
     <div className="app-shell fixed inset-0 flex h-full w-full flex-col overflow-hidden font-sans transition-colors duration-500" style={appStyle}>
+      <TitlebarDragZone />
+      <WindowControls isDaylight={isDaylight} autoHide={view === 'player'} />
       <div className="ryan-accent-wash" aria-hidden />
       <audio
         ref={audioRef}
@@ -1113,6 +1122,7 @@ const App: React.FC = () => {
             } else if (homeTab === 'qq' && qqOpen) {
               touchPlaylistRecent('qq', qqOpen.id);
             }
+            returnToSearchRef.current = false;
             void playLibraryEntry(entry, queueEntries);
             setView('player');
             setChromeHidden(false);
@@ -1200,12 +1210,14 @@ const App: React.FC = () => {
         }}
         onSubmit={() => void runSearch(query)}
         onClose={() => {
+          returnToSearchRef.current = false;
           setQuery('');
           setResults([]);
           setSearchError('');
           setSearchOpen(false);
         }}
         onPlay={(item, playAt) => {
+          returnToSearchRef.current = true;
           playTracks(results, playAt);
           setSearchOpen(false);
           setView('player');

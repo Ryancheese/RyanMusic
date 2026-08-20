@@ -31,7 +31,9 @@ export function useCoarsePointer() {
 }
 
 export function isWindowsApp() {
-  return typeof document !== 'undefined' && document.documentElement.classList.contains('platform-windows-app');
+  if (typeof document === 'undefined') return false;
+  if (document.documentElement.classList.contains('platform-windows-app')) return true;
+  return Boolean(window.chrome?.webview);
 }
 
 export function isMacosApp() {
