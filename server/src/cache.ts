@@ -4,6 +4,30 @@ import { join } from 'node:path';
 /** 登录态目录：清理缓存时保留 */
 const PRESERVE_DIRS = new Set(['netease_auth', 'qq_auth']);
 
+export const CACHE_CATEGORY_IDS = ['lyrics', 'play', 'comments', 'other'] as const;
+export type CacheCategoryId = (typeof CACHE_CATEGORY_IDS)[number];
+
+export interface CacheCategoryUsage {
+  id: CacheCategoryId;
+  bytes: number;
+  entries: number;
+  dirs: string[];
+}
+
+function classifyDir(name: string): CacheCategoryId {
+  const lower = name.toLowerCase();
+  if (lower.includes('lyric')) return 'lyrics';
+  if (lower.includes('comment')) return 'comments';
+  if (
+    lower.includes('play')
+    || lower.includes('quality')
+    || lower.includes('pyq')
+  ) {
+    return 'play';
+  }
+  return 'other';
+}
+
 export class FileCache {
   constructor(private readonly root: string) {
     mkdirSync(root, { recursive: true });
@@ -44,13 +68,19 @@ export class FileCache {
     this.write(subdir, key, { [field]: value, expires: Math.floor(Date.now() / 1000) + ttlSec });
   }
 
-  /** 清理可重建缓存，保留登录 Cookie */
-  clearSafe(): { removedBytes: number; removedEntries: number; preserved: string[] } {
+  /** 清理可重建缓存，保留登录 Cookie；可按分类清理 */
+  clearSafe(category?: CacheCategoryId | 'all'): {
+    removedBytes: number;
+    removedEntries: number;
+    preserved: string[];
+    category: CacheCategoryId | 'all';
+  } {
+    const target = category && category !== 'all' ? category : 'all';
     let removedBytes = 0;
     let removedEntries = 0;
     const preserved: string[] = [];
     if (!existsSync(this.root)) {
-      return { removedBytes: 0, removedEntries: 0, preserved };
+      return { removedBytes: 0, removedEntries: 0, preserved, category: target };
     }
 
     for (const name of readdirSync(this.root)) {
@@ -65,6 +95,7 @@ export class FileCache {
         preserved.push(name);
         continue;
       }
+      if (target !== 'all' && classifyDir(name) !== target) continue;
       try {
         removedBytes += measurePath(full);
         rmSync(full, { recursive: true, force: true });
@@ -74,16 +105,22 @@ export class FileCache {
       }
     }
 
-    return { removedBytes, removedEntries, preserved };
+    return { removedBytes, removedEntries, preserved, category: target };
   }
 
-  /** 当前缓存占用：可清理项 + 保留的登录目录 */
+  /** 当前缓存占用：可清理项 + 保留的登录目录 + 分类明细 */
   usage(): {
     rebuildableBytes: number;
     preservedBytes: number;
     totalBytes: number;
     rebuildableEntries: number;
+    categories: CacheCategoryUsage[];
   } {
+    const buckets = new Map<CacheCategoryId, CacheCategoryUsage>();
+    for (const id of CACHE_CATEGORY_IDS) {
+      buckets.set(id, { id, bytes: 0, entries: 0, dirs: [] });
+    }
+
     let rebuildableBytes = 0;
     let preservedBytes = 0;
     let rebuildableEntries = 0;
@@ -93,6 +130,7 @@ export class FileCache {
         preservedBytes: 0,
         totalBytes: 0,
         rebuildableEntries: 0,
+        categories: [...buckets.values()],
       };
     }
 
@@ -111,6 +149,11 @@ export class FileCache {
       }
       rebuildableBytes += size;
       rebuildableEntries += 1;
+      const id = classifyDir(name);
+      const bucket = buckets.get(id)!;
+      bucket.bytes += size;
+      bucket.entries += 1;
+      bucket.dirs.push(name);
     }
 
     return {
@@ -118,6 +161,7 @@ export class FileCache {
       preservedBytes,
       totalBytes: rebuildableBytes + preservedBytes,
       rebuildableEntries,
+      categories: CACHE_CATEGORY_IDS.map((id) => buckets.get(id)!),
     };
   }
 }

@@ -6,6 +6,8 @@ export type HomeTab = 'netease' | 'qq';
 
 export type LibraryLayoutMode = 'honeycomb' | 'square' | 'list';
 export type LibraryCardStyle = 'cover' | 'plaque';
+/** 列表布局：单列横条 / 多列网格 */
+export type LibraryListColumns = 'single' | 'multi';
 
 export type LoopMode = 'off' | 'all' | 'one';
 

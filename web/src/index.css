@@ -27,6 +27,9 @@ body,
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
   background-color: var(--bg-color, #09090b);
+  transition:
+    background-color 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 #root {
@@ -36,9 +39,23 @@ body,
 }
 
 body {
-  color: #e4e4e7;
+  color: var(--text-primary, #e4e4e7);
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   overflow: hidden;
+}
+
+.app-theme-surface {
+  transition: color 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html,
+  body,
+  #root,
+  .app-theme-surface,
+  .app-shell {
+    transition: none !important;
+  }
 }
 
 html.platform-macos-app {
@@ -64,6 +81,7 @@ html.platform-windows-app .app-shell {
   --accent-ui-mix: 45%;
   --accent-ui-soft: 17%;
   --accent-ui-border: 25%;
+  --accent-wash: 1;
   color-scheme: dark;
   --scrollbar-track: #18181b;
   --scrollbar-thumb: #3f3f46;
@@ -389,6 +407,8 @@ html.platform-windows-app .theme-glass-panel {
   position: absolute;
   inset: 0;
   z-index: 1;
+  opacity: var(--accent-wash, 1);
+  transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
   background:
     radial-gradient(ellipse 90% 70% at 12% 8%, color-mix(in srgb, var(--text-accent) 16%, transparent), transparent 58%),
     radial-gradient(ellipse 80% 60% at 92% 88%, color-mix(in srgb, var(--text-accent) 12%, transparent), transparent 52%),

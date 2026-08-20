@@ -8,6 +8,7 @@ import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizer
 import { useLibraryStore } from './store/libraryStore';
 import { useCloudStore } from './store/cloudStore';
 import { touchPlaylistRecent } from './store/playlistRecentStore';
+import { useSearchHistoryStore } from './store/searchHistoryStore';
 import { usePlayerStore } from './store/playerStore';
 import { useThemeAccentStore } from './store/themeStore';
 import { LYRIC_SOURCE_OPTIONS, useLyricSettingsStore, buildLyricSourceOrder } from './store/lyricSettingsStore';
@@ -205,6 +206,7 @@ const App: React.FC = () => {
   const presetId = useThemeAccentStore((state) => state.presetId);
   const customColor = useThemeAccentStore((state) => state.customColor);
   const uiTint = useThemeAccentStore((state) => state.uiTint);
+  const bgWash = useThemeAccentStore((state) => state.bgWash);
   const userAccent = useMemo(
     () => resolveAccent(isDaylight),
     [customColor, isDaylight, presetId, resolveAccent],
@@ -222,6 +224,7 @@ const App: React.FC = () => {
     root.style.setProperty('--accent-ui-mix', `${uiTint}%`);
     root.style.setProperty('--accent-ui-soft', `${Math.round(uiTint * 0.38)}%`);
     root.style.setProperty('--accent-ui-border', `${Math.round(uiTint * 0.55)}%`);
+    root.style.setProperty('--accent-wash', String(Math.max(0, Math.min(1, bgWash / 100))));
     root.style.colorScheme = isDaylight ? 'light' : 'dark';
     root.classList.toggle('theme-daylight', isDaylight);
     root.style.backgroundColor = theme.backgroundColor;
@@ -231,7 +234,7 @@ const App: React.FC = () => {
     } catch {
       // non-mac / no bridge
     }
-  }, [isDaylight, onAccent, theme.backgroundColor, theme.primaryColor, theme.secondaryColor, uiTint, userAccent]);
+  }, [bgWash, isDaylight, onAccent, theme.backgroundColor, theme.primaryColor, theme.secondaryColor, uiTint, userAccent]);
 
   const appStyle = useMemo(
     () =>
@@ -244,10 +247,11 @@ const App: React.FC = () => {
         '--accent-ui-mix': `${uiTint}%`,
         '--accent-ui-soft': `${Math.round(uiTint * 0.38)}%`,
         '--accent-ui-border': `${Math.round(uiTint * 0.55)}%`,
+        '--accent-wash': String(Math.max(0, Math.min(1, bgWash / 100))),
         backgroundColor: theme.backgroundColor,
         color: theme.primaryColor,
       }) as React.CSSProperties,
-    [onAccent, theme, uiTint, userAccent],
+    [bgWash, onAccent, theme, uiTint, userAccent],
   );
 
   const preferredQualityRef = useRef(preferredQuality);
@@ -452,6 +456,9 @@ const App: React.FC = () => {
         setResults((prev) => (append ? [...prev, ...result.data] : result.data));
         setHasMore(Boolean(result.has_more) && filter === 'name');
         setSearchPage(page);
+        if (!append && page === 1 && filter === 'name') {
+          useSearchHistoryStore.getState().push(input, activeSource);
+        }
         const url = filter === 'url'
           ? `?url=${encodeURIComponent(input)}`
           : `?name=${encodeURIComponent(input)}&type=${activeSource}`;
@@ -707,10 +714,30 @@ const App: React.FC = () => {
       }
 
       if (autoUseBestLyrics) {
-        const current = usePlayerStore.getState().queue[usePlayerStore.getState().index];
-        const nativeWordByWord = current
-          && (isWordByWordLyricText(current.yrc) || isWordByWordLyricText(current.lrc));
-        if (nativeExactApplied && nativeWordByWord && preferred === type) {
+        if (nativeExactApplied) {
+          const current = usePlayerStore.getState().queue[usePlayerStore.getState().index];
+          const nativeIsWordByWord = Boolean(
+            current && isWordByWordLyricText(current.yrc),
+          );
+          // 原生已有逐字：守住，不再跨平台覆盖
+          if (nativeIsWordByWord) return true;
+          // 原生只有行词：允许服务端在「≥75 + 时长很近 + 逐字」时升级
+          const upgraded = await fetchTrackLyrics({
+            type,
+            songid: id,
+            title,
+            artist,
+            preferred,
+            autoUseBest: true,
+            durationMs,
+          });
+          if (
+            upgraded
+            && isWordByWordLyricText(upgraded.yrc)
+            && applyLyrics(upgraded, upgraded.lyricSource || preferred)
+          ) {
+            return true;
+          }
           return true;
         }
         const best = await fetchTrackLyrics({
@@ -723,7 +750,7 @@ const App: React.FC = () => {
           durationMs,
         });
         if (applyLyrics(best, preferred)) return true;
-        return nativeExactApplied;
+        return false;
       }
 
       const preferredFirst = await fetchTrackLyrics({
@@ -1100,6 +1127,7 @@ const App: React.FC = () => {
             localStorage.setItem(THEME_KEY, next ? 'daylight' : 'midnight');
           }}
           onOpenAccount={() => setAccountOpen(true)}
+          onAccountsChanged={refreshAccounts}
           onOpenLegal={openLegal}
           onCheckUpdate={() => void openUpdate()}
           netease={netease}
@@ -1167,7 +1195,12 @@ const App: React.FC = () => {
           if (query.trim()) void runSearch(query, 1, false, next);
         }}
         onSubmit={() => void runSearch(query)}
-        onClose={() => setSearchOpen(false)}
+        onClose={() => {
+          setQuery('');
+          setResults([]);
+          setSearchError('');
+          setSearchOpen(false);
+        }}
         onPlay={(item, playAt) => {
           playTracks(results, playAt);
           setSearchOpen(false);
@@ -1181,6 +1214,11 @@ const App: React.FC = () => {
         onLoadMore={() => {
           if (hasMore && !loadingMore) void runSearch(lastQueryRef.current, searchPage + 1, true);
         }}
+        onHistorySelect={(text, nextSource) => {
+          setQuery(text);
+          setSearchSource(nextSource);
+          void runSearch(text, 1, false, nextSource);
+        }}
       />
 
       <AccountModal
@@ -1189,6 +1227,7 @@ const App: React.FC = () => {
         theme={theme}
         netease={netease}
         qq={qq}
+        initialProvider={homeTab}
         onClose={() => setAccountOpen(false)}
         onChanged={refreshAccounts}
         onLoggedIn={(provider) => {
@@ -1280,6 +1319,7 @@ const App: React.FC = () => {
         }}
         onTogglePanel={() => setPanelOpen((open) => !open)}
         trackTitle={track?.title || ''}
+        track={track}
       >
         {view === 'player' ? (
           <SidePanel

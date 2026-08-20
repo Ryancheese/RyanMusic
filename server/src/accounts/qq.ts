@@ -20,6 +20,7 @@ interface QqAuth {
   cookie: string;
   uin: string;
   nickname: string;
+  avatar?: string;
   vip?: number;
   updatedAt?: number;
 }
@@ -59,6 +60,7 @@ export class QqAccount {
       loggedIn: true,
       uin: auth.uin,
       nickname: auth.nickname,
+      avatar: auth.avatar || '',
       vip: auth.vip ?? 0,
       updatedAt: auth.updatedAt || 0,
     };
@@ -110,6 +112,97 @@ export class QqAccount {
     return Boolean(map.qm_keyst || map.qqmusic_key);
   }
 
+  /** 统一把头像 URL 收成 https */
+  private normalizeAvatarUrl(...candidates: unknown[]): string {
+    for (const candidate of candidates) {
+      const raw = String(candidate || '').trim();
+      if (!raw || raw === 'null' || raw === 'undefined') continue;
+      if (raw.startsWith('//')) return `https:${raw}`;
+      if (raw.startsWith('http://')) return `https://${raw.slice(7)}`;
+      if (raw.startsWith('https://')) return raw;
+    }
+    return '';
+  }
+
+  private avatarFromProfilePayload(data: Record<string, any> | null | undefined): string {
+    if (!data || typeof data !== 'object') return '';
+    const creator = data.creator || {};
+    const userinfo = data.userinfo || data.userInfo || {};
+    const info = data.info || data.profile?.info || {};
+    const profile = data.profile || {};
+    return this.normalizeAvatarUrl(
+      creator.headurl,
+      creator.headpic,
+      creator.avatarUrl,
+      creator.logo,
+      creator.avatar,
+      userinfo.headurl,
+      userinfo.headpic,
+      userinfo.avatarUrl,
+      userinfo.logo,
+      info.logo,
+      info.headurl,
+      info.headpic,
+      info.avatarUrl,
+      profile.avatarUrl,
+      profile.logo,
+      data.headurl,
+      data.headpic,
+      data.logo,
+      data.avatarUrl,
+    );
+  }
+
+  /** Folia 同源：GetLoginUserInfo 的 info.logo 是完整头像 URL */
+  private async fetchLoginUserAvatar(uin: string, cookie: string): Promise<{ nickname?: string; avatar?: string }> {
+    const attempts = [
+      {
+        module: 'userInfo.BaseUserInfoServer',
+        method: 'GetLoginUserInfo',
+        param: {},
+      },
+      {
+        module: 'userInfo.BaseUserInfoServer',
+        method: 'get_user_baseinfo_v2',
+        param: { vec_uin: [uin] },
+      },
+    ];
+    for (const attempt of attempts) {
+      try {
+        const payload = {
+          comm: { ct: 24, cv: 0, uin, format: 'json' },
+          req: attempt,
+        };
+        const res = await request('POST', 'https://u.y.qq.com/cgi-bin/musicu.fcg', {
+          headers: {
+            Cookie: cookie,
+            Referer: 'https://y.qq.com/',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          timeoutMs: 6000,
+        });
+        const root = res.json?.req?.data || res.json?.req_0?.data || res.json?.data || {};
+        const map = root.map || root.infos || root;
+        const byUin = map?.[uin] || map?.[String(uin)] || {};
+        const avatar = this.avatarFromProfilePayload(root)
+          || this.avatarFromProfilePayload(byUin)
+          || this.normalizeAvatarUrl(byUin.headurl, byUin.logo, byUin.headpic);
+        const nickname = String(
+          root?.profile?.info?.nick
+          || root?.info?.nick
+          || byUin.nick
+          || byUin.nickname
+          || '',
+        ).trim();
+        if (avatar || nickname) return { ...(nickname ? { nickname } : {}), ...(avatar ? { avatar } : {}) };
+      } catch {
+        // try next shape
+      }
+    }
+    return {};
+  }
+
   private async profileValidate(cookie: string, allowFallback = false) {
     const uin = this.extractUin(cookie);
     if (!uin || !this.hasMusicKey(cookie)) return null;
@@ -131,11 +224,30 @@ export class QqAccount {
       },
     );
     if (!res.json || Number(res.json.code) === 1000) {
-      return allowFallback ? { uin, nickname: `QQ ${uin}`, cookie } : null;
+      if (!allowFallback) return null;
+      const login = await this.fetchLoginUserAvatar(uin, cookie);
+      return {
+        uin,
+        nickname: login.nickname || `QQ ${uin}`,
+        avatar: login.avatar || '',
+        cookie,
+      };
     }
-    const nickname =
-      res.json.data?.creator?.nick || res.json.data?.userinfo?.nick || `QQ ${uin}`;
-    return { uin, nickname: String(nickname), cookie };
+    const data = res.json.data || {};
+    let nickname =
+      data?.creator?.nick || data?.userinfo?.nick || data?.userInfo?.nick || `QQ ${uin}`;
+    let avatar = this.avatarFromProfilePayload(data);
+    if (!avatar) {
+      const login = await this.fetchLoginUserAvatar(uin, cookie);
+      if (login.avatar) avatar = login.avatar;
+      if (login.nickname && String(nickname).startsWith('QQ ')) nickname = login.nickname;
+    }
+    return {
+      uin,
+      nickname: String(nickname),
+      avatar: avatar || '',
+      cookie,
+    };
   }
 
   private async fetchVip(uin: string, cookie: string): Promise<number> {
@@ -170,16 +282,51 @@ export class QqAccount {
     return Number.isFinite(value) && value > 0 ? value : 0;
   }
 
-  private async withVip(account: { uin: string; nickname: string; cookie: string }): Promise<QqAuth> {
-    return { ...account, vip: await this.fetchVip(account.uin, account.cookie) };
+  private async withVip(account: {
+    uin: string;
+    nickname: string;
+    cookie: string;
+    avatar?: string;
+  }): Promise<QqAuth> {
+    return {
+      ...account,
+      avatar: account.avatar || '',
+      vip: await this.fetchVip(account.uin, account.cookie),
+    };
   }
 
   private async statusFresh() {
     const auth = this.read();
     if (!auth) return { loggedIn: false as const };
+    let next = auth;
+    let dirty = false;
     if (auth.vip == null) {
-      this.write({ ...auth, vip: await this.fetchVip(auth.uin, auth.cookie) });
+      next = { ...next, vip: await this.fetchVip(auth.uin, auth.cookie) };
+      dirty = true;
     }
+    // 旧会话没存头像：补拉一次（与 Folia 的 info.logo / 主页 headurl 对齐）
+    if (!next.avatar) {
+      const profile = await this.profileValidate(auth.cookie, true);
+      if (profile?.avatar) {
+        next = {
+          ...next,
+          avatar: profile.avatar,
+          nickname: profile.nickname || next.nickname,
+        };
+        dirty = true;
+      } else {
+        const login = await this.fetchLoginUserAvatar(auth.uin, auth.cookie);
+        if (login.avatar) {
+          next = {
+            ...next,
+            avatar: login.avatar,
+            nickname: login.nickname || next.nickname,
+          };
+          dirty = true;
+        }
+      }
+    }
+    if (dirty) this.write(next);
     return this.status();
   }
 

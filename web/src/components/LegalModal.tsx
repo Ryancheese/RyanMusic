@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { CircleHelp, X } from 'lucide-react';
 import type { ThemeTokens } from '../types';
 import { LEGAL_DOCS, LEGAL_TABS, type LegalTab } from '../legal';
@@ -20,6 +20,14 @@ const LegalModal: React.FC<LegalModalProps> = ({
   onClose,
   onTabChange,
 }) => {
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const el = bodyRef.current;
+    if (el) el.scrollTop = 0;
+  }, [open, tab]);
+
   if (!open) return null;
   const doc = LEGAL_DOCS[tab];
   const panel = isDaylight ? 'bg-white/95 text-stone-900' : 'bg-zinc-900/95 text-zinc-100';
@@ -55,7 +63,11 @@ const LegalModal: React.FC<LegalModalProps> = ({
             </button>
           ))}
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 text-sm leading-relaxed">
+        <div
+          key={tab}
+          ref={bodyRef}
+          className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 text-sm leading-relaxed"
+        >
           {doc.sections.map((section, index) => (
             <section key={`${tab}-${index}`} className="mb-5">
               {section.title ? (

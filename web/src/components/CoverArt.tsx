@@ -16,6 +16,11 @@ interface CoverArtProps {
 /** 会话内已成功翻开过的封面，避免滚动复用时反复翻转 */
 const revealedCoverKeys = new Set<string>();
 
+/** 清理封面会话记忆（不占磁盘；下次加载会重新播放翻转动画） */
+export function clearCoverSessionMemory() {
+  revealedCoverKeys.clear();
+}
+
 function DefaultCover({ className = '' }: { className?: string }) {
   return (
     <div

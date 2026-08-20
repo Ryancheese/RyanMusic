@@ -424,6 +424,16 @@ export function fetchNeteaseComments(options: {
   });
 }
 
+export type CacheCategoryId = 'lyrics' | 'play' | 'comments' | 'other';
+
+export interface CacheCategoryUsage {
+  id: CacheCategoryId;
+  bytes: number;
+  entries: number;
+  dirs: string[];
+  mb: number;
+}
+
 export interface CacheUsage {
   rebuildableBytes: number;
   preservedBytes: number;
@@ -432,6 +442,7 @@ export interface CacheUsage {
   totalMB: number;
   rebuildableMB: number;
   preservedMB: number;
+  categories?: CacheCategoryUsage[];
 }
 
 export interface ClearCacheResult {
@@ -439,6 +450,7 @@ export interface ClearCacheResult {
   removedEntries: number;
   removedMB: number;
   preserved: string[];
+  category?: CacheCategoryId | 'all';
   usage?: CacheUsage;
 }
 
@@ -447,7 +459,7 @@ export async function fetchCacheUsage() {
   return postAction<CacheUsage>('cache_usage');
 }
 
-/** 清理可重建缓存（保留登录态） */
-export async function clearAppCache() {
-  return postAction<ClearCacheResult>('clear_cache');
+/** 清理可重建缓存（保留登录态）；可指定分类 */
+export async function clearAppCache(category: CacheCategoryId | 'all' = 'all') {
+  return postAction<ClearCacheResult>('clear_cache', { category });
 }

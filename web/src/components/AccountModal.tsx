@@ -1,11 +1,20 @@
-import React, { useEffect, useState } from 'react';
-import { LogOut, RefreshCw, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ChevronDown, LogOut, RefreshCw, X } from 'lucide-react';
 import type { ThemeTokens } from '../types';
-import { postAction, type AccountStatus } from '../api';
+import { coverImageUrl, postAction, type AccountStatus } from '../api';
 import { useCloudStore } from '../store/cloudStore';
 import RyanLoader from './RyanLoader';
-
-type Provider = 'netease' | 'qq';
+import {
+  ACCOUNT_PROVIDERS,
+  accountOf,
+  capsuleDisplayName,
+  membershipHeadline,
+  membershipHint,
+  platformStatusLine,
+  providerMeta,
+  type AccountProviderId,
+} from '../lib/accountProviders';
 
 interface AccountModalProps {
   open: boolean;
@@ -13,10 +22,12 @@ interface AccountModalProps {
   theme: ThemeTokens;
   netease: AccountStatus | null;
   qq: AccountStatus | null;
+  /** 打开时优先选中的平台 */
+  initialProvider?: AccountProviderId;
   onClose: () => void;
   onChanged: () => void;
-  onLoggedIn?: (provider: Provider) => void;
-  onSync?: (provider: Provider) => Promise<void> | void;
+  onLoggedIn?: (provider: AccountProviderId) => void;
+  onSync?: (provider: AccountProviderId) => Promise<void> | void;
   syncing?: boolean;
   syncMessage?: string;
 }
@@ -27,6 +38,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
   theme,
   netease,
   qq,
+  initialProvider = 'netease',
   onClose,
   onChanged,
   onLoggedIn,
@@ -34,18 +46,30 @@ const AccountModal: React.FC<AccountModalProps> = ({
   syncing = false,
   syncMessage = '',
 }) => {
-  const [tab, setTab] = useState<Provider>('netease');
+  const [tab, setTab] = useState<AccountProviderId>(initialProvider);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [status, setStatus] = useState('');
   const [qr, setQr] = useState('');
   const [cookie, setCookie] = useState('');
   const [busy, setBusy] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const panel = isDaylight ? 'bg-white/90 text-black' : 'bg-zinc-900/95 text-white';
+  const idle = isDaylight ? 'bg-black/6' : 'bg-white/8';
+  const soft = isDaylight ? 'bg-black/4' : 'bg-white/6';
+
+  useEffect(() => {
+    if (!open) {
+      setMenuOpen(false);
+      return;
+    }
+    setTab(initialProvider);
+    setCookie('');
+    setStatus('');
+  }, [open, initialProvider]);
 
   useEffect(() => {
     if (!open) return;
-    setCookie('');
-    setStatus('');
-    const current = tab === 'netease' ? netease : qq;
+    const current = accountOf(tab, netease, qq);
     if (current?.loggedIn) {
       setQr('');
       return;
@@ -115,11 +139,32 @@ const AccountModal: React.FC<AccountModalProps> = ({
       stop = true;
       if (timer) window.clearInterval(timer);
     };
-  }, [open, tab, netease?.loggedIn, qq?.loggedIn, onChanged]);
+  }, [open, tab, netease?.loggedIn, qq?.loggedIn, onChanged, onLoggedIn]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   if (!open) return null;
-  const current = tab === 'netease' ? netease : qq;
+
+  const current = accountOf(tab, netease, qq);
   const loggedIn = Boolean(current?.loggedIn);
+  const activeMeta = providerMeta(tab);
+  const capsuleAvatar = loggedIn && current?.avatar
+    ? (coverImageUrl(current.avatar, 96) || current.avatar)
+    : '';
 
   const saveCookie = async () => {
     setBusy(true);
@@ -136,45 +181,191 @@ const AccountModal: React.FC<AccountModalProps> = ({
     onLoggedIn?.(tab);
   };
 
-  const logout = async () => {
-    const action = tab === 'netease' ? 'netease_logout' : 'qq_logout';
-    useCloudStore.getState().clearProvider(tab);
+  const logout = async (provider: AccountProviderId) => {
+    const meta = providerMeta(provider);
+    useCloudStore.getState().clearProvider(provider);
     onChanged();
-    await postAction(action);
+    await postAction(meta.logoutAction);
     onChanged();
+  };
+
+  const selectProvider = (provider: AccountProviderId) => {
+    setTab(provider);
+    setMenuOpen(false);
   };
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-label="关闭" />
-      <div className={`relative z-10 w-full max-w-md overflow-hidden rounded-3xl border border-white/10 p-5 shadow-2xl ${panel}`} style={{ color: theme.primaryColor }}>
+      <div
+        className={`app-theme-surface relative z-10 w-full max-w-md overflow-visible rounded-3xl border border-white/10 p-5 shadow-2xl transition-[background-color,color,border-color] duration-500 ${panel}`}
+        style={{ color: theme.primaryColor }}
+      >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold">账号登录</h2>
           <button type="button" className="rounded-full p-1.5 opacity-60 hover:opacity-100" onClick={onClose}>
             <X size={16} />
           </button>
         </div>
-        <div className={`mb-4 flex rounded-full p-1 ${isDaylight ? 'bg-black/5' : 'bg-white/8'}`}>
-          {(['netease', 'qq'] as Provider[]).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setTab(item)}
-              className={`flex-1 rounded-full py-1.5 text-sm ${tab === item ? (isDaylight ? 'bg-white shadow-sm' : 'bg-white text-black') : 'opacity-60'}`}
+
+        <div className="relative mb-4" ref={menuRef}>
+          <button
+            type="button"
+            aria-expanded={menuOpen}
+            aria-haspopup="listbox"
+            onClick={() => setMenuOpen((openMenu) => !openMenu)}
+            className={`flex h-12 w-full min-w-0 items-center gap-3 rounded-full px-3 text-left transition-[background-color,box-shadow,color] duration-500 ${idle}`}
+            style={{
+              boxShadow: menuOpen
+                ? (isDaylight ? '0 10px 28px rgba(0,0,0,0.12)' : '0 12px 32px rgba(0,0,0,0.45)')
+                : undefined,
+            }}
+          >
+            {capsuleAvatar ? (
+              <img
+                src={capsuleAvatar}
+                alt=""
+                className="h-8 w-8 shrink-0 rounded-full object-cover"
+                onError={(event) => {
+                  event.currentTarget.style.display = 'none';
+                  const fallback = event.currentTarget.nextElementSibling as HTMLElement | null;
+                  if (fallback) fallback.hidden = false;
+                }}
+              />
+            ) : null}
+            <span
+              hidden={Boolean(capsuleAvatar)}
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${activeMeta.markClass}`}
             >
-              {item === 'netease' ? '网易云' : 'QQ 音乐'}
-            </button>
-          ))}
+              {activeMeta.mark}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold leading-tight">
+                {loggedIn ? capsuleDisplayName(current, activeMeta.shortLabel) : activeMeta.label}
+              </span>
+              <span className="mt-0.5 block truncate text-[11px] leading-tight opacity-55">
+                {loggedIn ? activeMeta.label : platformStatusLine(current)}
+              </span>
+            </span>
+            <motion.span
+              animate={{ rotate: menuOpen ? 180 : 0 }}
+              transition={{ duration: 0.22 }}
+              className="shrink-0 opacity-50"
+            >
+              <ChevronDown size={16} />
+            </motion.span>
+          </button>
+
+          <AnimatePresence>
+            {menuOpen ? (
+              <motion.div
+                role="listbox"
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                className={`absolute inset-x-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-white/10 p-1.5 shadow-2xl ${
+                  isDaylight ? 'bg-white text-black' : 'bg-zinc-900 text-white'
+                }`}
+              >
+                {ACCOUNT_PROVIDERS.map((provider) => {
+                  const account = accountOf(provider.id, netease, qq);
+                  const active = tab === provider.id;
+                  const avatar = account?.loggedIn && account.avatar
+                    ? (coverImageUrl(account.avatar, 72) || account.avatar)
+                    : '';
+                  const rowName = capsuleDisplayName(account, provider.shortLabel);
+                  return (
+                    <div
+                      key={provider.id}
+                      className={`flex h-12 items-center gap-2 rounded-xl px-2 ${
+                        active ? soft : (isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/5')
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        onClick={() => selectProvider(provider.id)}
+                        className="flex h-full min-w-0 flex-1 items-center gap-2.5 text-left"
+                      >
+                        {avatar ? (
+                          <img
+                            src={avatar}
+                            alt=""
+                            className="h-8 w-8 shrink-0 rounded-full object-cover"
+                            onError={(event) => {
+                              event.currentTarget.style.display = 'none';
+                              const fallback = event.currentTarget.nextElementSibling as HTMLElement | null;
+                              if (fallback) fallback.hidden = false;
+                            }}
+                          />
+                        ) : null}
+                        <span
+                          hidden={Boolean(avatar)}
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${provider.markClass}`}
+                        >
+                          {provider.mark}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium leading-tight">{rowName}</span>
+                          <span className="mt-0.5 block truncate text-[11px] leading-tight opacity-50">
+                            {account?.loggedIn ? provider.label : platformStatusLine(account)}
+                          </span>
+                        </span>
+                      </button>
+                      {account?.loggedIn ? (
+                        <button
+                          type="button"
+                          title={`退出 ${provider.label}`}
+                          aria-label={`退出 ${provider.label}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void logout(provider.id);
+                          }}
+                          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full opacity-60 transition hover:opacity-100 ${idle}`}
+                        >
+                          <LogOut size={14} />
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
+
         {loggedIn ? (
           <div className="space-y-3 text-sm">
-            <p>
-              已登录：<strong>{current?.nickname || '已登录'}</strong>
-              {current?.vip ? ' · 会员' : ' · 非会员将走 RyanMusic 音源'}
-            </p>
-            <p className="text-xs opacity-60">
-              会员曲目优先走官方播放。非会员或官方无地址时，自动回退 RyanMusic。
-            </p>
+            <div
+              className={`flex h-14 items-center gap-3 rounded-full px-3 transition-[background-color,color] duration-500 ${soft}`}
+            >
+              {capsuleAvatar ? (
+                <img
+                  src={capsuleAvatar}
+                  alt=""
+                  className="h-9 w-9 shrink-0 rounded-full object-cover"
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                    const fallback = event.currentTarget.nextElementSibling as HTMLElement | null;
+                    if (fallback) fallback.hidden = false;
+                  }}
+                />
+              ) : null}
+              <div
+                hidden={Boolean(capsuleAvatar)}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs opacity-50 ${idle}`}
+              >
+                {(current?.nickname || '?').slice(0, 1)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold leading-tight">{membershipHeadline(current)}</p>
+                <p className="mt-0.5 text-[11px] leading-snug opacity-55">
+                  {membershipHint(current)}
+                </p>
+              </div>
+            </div>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -184,7 +375,11 @@ const AccountModal: React.FC<AccountModalProps> = ({
                 {syncing ? <RyanLoader size={16} /> : <RefreshCw size={14} />}
                 同步歌单
               </button>
-              <button type="button" onClick={() => void logout()} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-sm">
+              <button
+                type="button"
+                onClick={() => void logout(tab)}
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-sm"
+              >
                 <LogOut size={14} />
                 退出登录
               </button>
@@ -193,9 +388,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
           </div>
         ) : (
           <div className="space-y-3 text-sm">
-            <p className="text-xs opacity-60">
-              登录后会员曲目走官方播放与逐字歌词；非会员仍用 RyanMusic 播放。
-            </p>
+            <p className="text-xs leading-relaxed opacity-60">{membershipHint(null)}</p>
             <div className="flex flex-col items-center gap-2">
               {qr ? <img src={qr} alt="登录二维码" width={180} height={180} className="rounded-xl bg-white p-2" /> : (
                 <div className="flex h-[180px] w-[180px] items-center justify-center rounded-xl bg-white/5">

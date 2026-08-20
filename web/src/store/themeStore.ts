@@ -25,11 +25,13 @@ interface PersistedAccent {
   presetId: string;
   customColor: string;
   uiTint: number;
+  /** 背景主题色晕染填充度 0–100 */
+  bgWash: number;
 }
 
-function clampTint(value: unknown): number {
+function clampTint(value: unknown, fallback = 45): number {
   const next = Number(value);
-  if (!Number.isFinite(next)) return 45;
+  if (!Number.isFinite(next)) return fallback;
   return Math.min(100, Math.max(0, Math.round(next)));
 }
 
@@ -42,9 +44,14 @@ function readAccent(): PersistedAccent {
     const customColor = /^#[0-9a-fA-F]{6}$/.test(String(parsed.customColor || ''))
       ? String(parsed.customColor)
       : '#7c3aed';
-    return { presetId, customColor, uiTint: clampTint(parsed.uiTint) };
+    return {
+      presetId,
+      customColor,
+      uiTint: clampTint(parsed.uiTint, 45),
+      bgWash: clampTint(parsed.bgWash, 100),
+    };
   } catch {
-    return { presetId: 'default', customColor: '#7c3aed', uiTint: 45 };
+    return { presetId: 'default', customColor: '#7c3aed', uiTint: 45, bgWash: 100 };
   }
 }
 
@@ -52,9 +59,11 @@ interface ThemeAccentState {
   presetId: string;
   customColor: string;
   uiTint: number;
+  bgWash: number;
   setPreset: (id: string) => void;
   setCustomColor: (color: string) => void;
   setUiTint: (value: number) => void;
+  setBgWash: (value: number) => void;
   resolveAccent: (isDaylight: boolean) => string;
 }
 
@@ -64,9 +73,11 @@ export const useThemeAccentStore = create<ThemeAccentState>((set, get) => ({
   presetId: initial.presetId,
   customColor: initial.customColor,
   uiTint: initial.uiTint,
+  bgWash: initial.bgWash,
   setPreset: (presetId) => set({ presetId }),
   setCustomColor: (customColor) => set({ presetId: 'custom', customColor }),
-  setUiTint: (uiTint) => set({ uiTint: clampTint(uiTint) }),
+  setUiTint: (uiTint) => set({ uiTint: clampTint(uiTint, 45) }),
+  setBgWash: (bgWash) => set({ bgWash: clampTint(bgWash, 100) }),
   resolveAccent: (isDaylight) => {
     const { presetId, customColor } = get();
     if (presetId === 'custom') return customColor;
@@ -83,5 +94,6 @@ useThemeAccentStore.subscribe((state) => {
     presetId: state.presetId,
     customColor: state.customColor,
     uiTint: state.uiTint,
+    bgWash: state.bgWash,
   }));
 });

@@ -67,15 +67,26 @@ function resolvePreferredProviderSongId(
   manual: ManualLyricSelection | null,
 ): string | null {
   if (manual?.provider === source) return String(manual.providerSongId);
+  // 优先对齐舞台已应用的歌词来源，而不是「正在播放曲目的原生 ID」
   if (track.lyricSource === source && track.lyricProviderSongId) {
     return String(track.lyricProviderSongId);
   }
-  if (track.type === source) return String(track.songid);
+  if (track.lyricSource === source && track.type === source) {
+    return String(track.songid);
+  }
+  // 尚未写入 lyricSource / 仍是自带时，才用原生曲目 ID
+  if (
+    (!track.lyricSource || track.lyricSource === 'native')
+    && track.type === source
+  ) {
+    return String(track.songid);
+  }
   return null;
 }
 
 function buildPlayingCandidate(track: Track, source: LyricProviderSource): LyricSearchCandidate | null {
   if (track.type !== source) return null;
+  // 分数表示「曲目是否对上」，不是「歌词质量」；同曲目身份分通常很高
   return {
     provider: source,
     providerSongId: String(track.songid),
@@ -97,10 +108,16 @@ function mergePlayingCandidate(
 ): LyricSearchCandidate[] {
   const playing = buildPlayingCandidate(track, source);
   if (!playing) return list;
-  const exists = list.some(
+  const idx = list.findIndex(
     (item) => item.provider === source && String(item.providerSongId) === playing.providerSongId,
   );
-  if (exists) return list;
+  if (idx >= 0) {
+    const [exact] = list.splice(idx, 1);
+    // 置顶「正在播放」，保留接口真实匹配分（不再强行改成 100%）
+    return [exact, ...list];
+  }
+  // 舞台歌词已来自其他源时，仍展示并置顶正在播放曲目（身份分可仍为 100%），
+  // 默认勾选由 pickBestCandidate 跳过，避免抢走选择；用户仍可手动点选。
   return [playing, ...list];
 }
 
@@ -119,6 +136,8 @@ function pickBestCandidate(
       (item) => item.provider === source && String(item.providerSongId) === preferId,
     );
     if (exact) {
+      // 舞台已经用了这个源：面板勾选应对齐，不受 75% 阈值影响
+      if (track.lyricSource === source) return exact;
       if (!autoUseBest && exact.matchScore < 60) return exact;
       if (autoUseBest && exact.matchScore < AUTO_PICK_MIN_SCORE) return exact;
       return exact;
@@ -126,10 +145,26 @@ function pickBestCandidate(
   }
 
   const ranked = [...list].sort((a, b) => b.matchScore - a.matchScore);
-  const best = ranked[0];
-  if (autoUseBest && best.matchScore < AUTO_PICK_MIN_SCORE) return null;
-  if (!autoUseBest && best.matchScore < 60) return null;
-  return best;
+  const stageUsesOtherSource = Boolean(
+    track.lyricSource
+    && track.lyricSource !== 'native'
+    && track.lyricSource !== source,
+  );
+
+  for (const best of ranked) {
+    // 舞台已是别的歌词源时，不要因为「正在播放的网易云曲目」身份分高就默认勾上
+    if (
+      stageUsesOtherSource
+      && track.type === source
+      && String(best.providerSongId) === String(track.songid)
+    ) {
+      continue;
+    }
+    if (autoUseBest && best.matchScore < AUTO_PICK_MIN_SCORE) return null;
+    if (!autoUseBest && best.matchScore < 60) return null;
+    return best;
+  }
+  return null;
 }
 
 const LyricMatchModal: React.FC<LyricMatchModalProps> = ({
@@ -273,6 +308,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({
           amllPlatform: picked.amllPlatform,
           forceSource: true,
         });
+        if (gen !== previewGen.current) return;
         if (gen !== previewGen.current) return;
         if (!lyrics || !hasUsableTrackLyrics(lyrics)) {
           setPreviewBundle(null);
@@ -495,7 +531,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({
                 </p>
               ) : autoUseBest ? (
                 <p className="mt-3 text-center text-[11px] opacity-45">
-                  已开自动最佳歌词，低于 {AUTO_PICK_MIN_SCORE}% 不会默认勾选
+                  已开自动最佳歌词：匹配分是歌名/歌手相似度，不是歌词质量；无可用歌词的候选不会用于舞台。低于 {AUTO_PICK_MIN_SCORE}% 不会默认勾选。
                 </p>
               ) : null}
             </div>

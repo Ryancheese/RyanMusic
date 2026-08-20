@@ -1,6 +1,6 @@
-import type { LibraryCardStyle, LibraryLayoutMode } from '../types';
+import type { LibraryCardStyle, LibraryLayoutMode, LibraryListColumns } from '../types';
 
-export type { LibraryCardStyle };
+export type { LibraryCardStyle, LibraryListColumns };
 
 /** 歌单 / 歌曲库布局（蜂窝 / 方形 / 列表） */
 export const LIBRARY_LAYOUT_MODE_IDS: LibraryLayoutMode[] = [
@@ -13,6 +13,13 @@ export const LIBRARY_LAYOUT_MODE_LABELS: Record<LibraryLayoutMode, string> = {
   honeycomb: '蜂窝',
   square: '方形',
   list: '列表',
+};
+
+export const LIBRARY_LIST_COLUMNS_IDS: LibraryListColumns[] = ['single', 'multi'];
+
+export const LIBRARY_LIST_COLUMNS_LABELS: Record<LibraryListColumns, string> = {
+  single: '单列',
+  multi: '多列',
 };
 
 /** 叠在蜂窝/方形上的卡片外观 */

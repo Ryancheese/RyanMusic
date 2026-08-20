@@ -3,6 +3,8 @@ import CoverArt from './CoverArt';
 import DelistedCoverBadge from './DelistedCoverBadge';
 import RyanLoader from './RyanLoader';
 import type { LibraryCardStyle, LibraryLayoutMode } from '../types';
+import { readLibraryScroll, saveLibraryScroll } from '../store/libraryScrollStore';
+import { useLibraryStore } from '../store/libraryStore';
 import {
   areIndexListsEqual,
   pixelToCubeCenter,
@@ -28,13 +30,17 @@ interface AlbumWaterfallProps {
   emptyMessage?: string;
   hasFloatingPlayer?: boolean;
   layoutMode?: LibraryLayoutMode;
-  /** å å¨èçª/æ¹å½¢ä¸ï¼çº¯å°é¢æé­çï¼ä¸æ¹å¸¸é©»åç§°ï¼ */
+  /** 叠在蜂窝/方形上：纯封面或铭牌（下方常驻名称） */
   cardStyle?: LibraryCardStyle;
+  /** 用于进出歌单后恢复滚动位置 */
+  scrollKey?: string;
 }
 
 const CARD_GAP = 18;
 const ZOOM_MIN = 0.55;
 const ZOOM_MAX = 1.9;
+const PAN_RUBBER = 0.32;
+const PAN_BOUNCE_MS = 280;
 
 function libraryCardSurface(isDaylight: boolean, plaque = false) {
   if (plaque) {
@@ -75,20 +81,79 @@ function layoutForWidth(width: number, mode: LibraryLayoutMode, zoom = 1) {
   return scale({ card: 228, spacingX: 264, spacingY: 264, maxDistance: 540 });
 }
 
+type PanLimits = { minX: number; maxX: number; minY: number; maxY: number };
+
+function computePanLimits(
+  coords: HexGridCoord[],
+  card: number,
+  cellHeight: number,
+  viewW: number,
+  viewH: number,
+): PanLimits {
+  if (!coords.length || viewW < 8 || viewH < 8) {
+    return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+  }
+  let minBX = Infinity;
+  let maxBX = -Infinity;
+  let minBY = Infinity;
+  let maxBY = -Infinity;
+  for (const coord of coords) {
+    minBX = Math.min(minBX, coord.baseX - card / 2);
+    maxBX = Math.max(maxBX, coord.baseX + card / 2);
+    minBY = Math.min(minBY, coord.baseY - cellHeight / 2);
+    maxBY = Math.max(maxBY, coord.baseY + cellHeight / 2);
+  }
+  // 边缘卡片至少还能靠近视口中心一带，避免拖进大片空白
+  const marginX = Math.min(viewW * 0.38, card * 1.35);
+  const marginY = Math.min(viewH * 0.38, cellHeight * 1.35);
+  let minX = -viewW / 2 - maxBX + marginX;
+  let maxX = viewW / 2 - minBX - marginX;
+  let minY = -viewH / 2 - maxBY + marginY;
+  let maxY = viewH / 2 - minBY - marginY;
+  if (minX > maxX) {
+    const mid = (minX + maxX) / 2;
+    minX = mid;
+    maxX = mid;
+  }
+  if (minY > maxY) {
+    const mid = (minY + maxY) / 2;
+    minY = mid;
+    maxY = mid;
+  }
+  return { minX, maxX, minY, maxY };
+}
+
+function rubberBand(value: number, min: number, max: number, factor = PAN_RUBBER): number {
+  if (value < min) return min - (min - value) * factor;
+  if (value > max) return max + (value - max) * factor;
+  return value;
+}
+
+function clampPan(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function easeOutCubic(t: number): number {
+  return 1 - ((1 - t) ** 3);
+}
+
 export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   items,
   onSelect,
   isDaylight,
   isLoading = false,
-  emptyMessage = 'è¿æ²¡æåå®¹',
+  emptyMessage = '还没有内容',
   hasFloatingPlayer = false,
   layoutMode = 'square',
   cardStyle = 'plaque',
+  scrollKey = '',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const coordsRef = useRef<HexGridCoord[]>([]);
   const offsetRef = useRef({ x: 0, y: 0 });
+  const scrollKeyRef = useRef(scrollKey);
+  const restoredKeyRef = useRef('');
   const dragRef = useRef({
     active: false,
     captured: false,
@@ -103,6 +168,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   const lastVisibleAtRef = useRef(0);
   const lastVisibleOffsetRef = useRef({ x: 0, y: 0 });
   const forceVisibleRef = useRef(false);
+  const bounceRafRef = useRef(0);
   const [size, setSize] = useState(() => ({
     width: typeof window !== 'undefined' ? window.innerWidth : 0,
     height: typeof window !== 'undefined' ? window.innerHeight : 0,
@@ -110,9 +176,13 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   const [zoom, setZoom] = useState(1);
   const [visible, setVisible] = useState<number[]>([0]);
 
+  scrollKeyRef.current = scrollKey;
+
   const isList = layoutMode === 'list';
   const isSquare = layoutMode === 'square';
   const isPlaque = layoutMode === 'honeycomb' && cardStyle === 'plaque';
+  const listColumns = useLibraryStore((state) => state.listColumns);
+  const listMulti = isList && listColumns === 'multi';
   const layout = layoutForWidth(size.width, isSquare ? 'square' : layoutMode, zoom);
   // 标题 + 副标题 + 内边距，固定紧凑高度，避免随卡片变大留下大块空白
   const textReserve = isPlaque ? 52 : 0;
@@ -126,6 +196,13 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
     coordsRef.current = resizeHexGridCoords(coordsRef.current, items.length, layout.spacingX, rowSpacingY);
     return coordsRef.current;
   }, [items.length, layout.spacingX, rowSpacingY]);
+
+  const panLimits = useMemo(
+    () => computePanLimits(coords, layout.card, cellHeight, size.width, size.height),
+    [coords, layout.card, cellHeight, size.width, size.height],
+  );
+  const panLimitsRef = useRef(panLimits);
+  panLimitsRef.current = panLimits;
 
   const coordByKey = useMemo(() => {
     const map = new Map<string, number>();
@@ -197,10 +274,40 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
     });
   }, [flushVisible, paint]);
 
+  const cancelBounce = useCallback(() => {
+    if (bounceRafRef.current) {
+      window.cancelAnimationFrame(bounceRafRef.current);
+      bounceRafRef.current = 0;
+    }
+  }, []);
+
+  const applyPanOffset = useCallback((x: number, y: number, mode: 'drag' | 'wheel' | 'hard' = 'drag') => {
+    const limits = panLimitsRef.current;
+    let nextX = x;
+    let nextY = y;
+    if (mode === 'hard') {
+      nextX = clampPan(x, limits.minX, limits.maxX);
+      nextY = clampPan(y, limits.minY, limits.maxY);
+    } else {
+      nextX = rubberBand(x, limits.minX, limits.maxX);
+      nextY = rubberBand(y, limits.minY, limits.maxY);
+    }
+    offsetRef.current = { x: nextX, y: nextY };
+    scheduleFrame(nextX, nextY, mode === 'hard' ? { forceVisible: true } : undefined);
+  }, [scheduleFrame]);
+
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
-    const update = () => setSize({ width: element.clientWidth, height: element.clientHeight });
+    const update = () => {
+      const width = element.clientWidth;
+      const height = element.clientHeight;
+      // home 切到播放器时会被 display:none，尺寸会变成 0；忽略以免清掉滚动/平移
+      if (width < 8 || height < 8) return;
+      setSize((prev) => (
+        prev.width === width && prev.height === height ? prev : { width, height }
+      ));
+    };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(element);
@@ -212,24 +319,171 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       window.cancelAnimationFrame(rafPaintRef.current);
       rafPaintRef.current = 0;
     }
+    if (bounceRafRef.current) {
+      window.cancelAnimationFrame(bounceRafRef.current);
+      bounceRafRef.current = 0;
+    }
   }, []);
+
+  const persistScroll = useCallback(() => {
+    const key = scrollKeyRef.current;
+    if (!key) return;
+    if (isList || isSquare) {
+      const top = containerRef.current?.scrollTop || 0;
+      saveLibraryScroll(key, { kind: 'scroll', top });
+      return;
+    }
+    saveLibraryScroll(key, {
+      kind: 'pan',
+      x: offsetRef.current.x,
+      y: offsetRef.current.y,
+      zoom,
+    });
+  }, [isList, isSquare, zoom]);
+
+  const bounceToBounds = useCallback(() => {
+    cancelBounce();
+    const limits = panLimitsRef.current;
+    const from = { ...offsetRef.current };
+    const to = {
+      x: clampPan(from.x, limits.minX, limits.maxX),
+      y: clampPan(from.y, limits.minY, limits.maxY),
+    };
+    if (Math.hypot(to.x - from.x, to.y - from.y) < 0.5) {
+      offsetRef.current = to;
+      scheduleFrame(to.x, to.y, { forceVisible: true });
+      return;
+    }
+    const started = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - started) / PAN_BOUNCE_MS);
+      const e = easeOutCubic(t);
+      const x = from.x + (to.x - from.x) * e;
+      const y = from.y + (to.y - from.y) * e;
+      offsetRef.current = { x, y };
+      scheduleFrame(x, y, t >= 1 ? { forceVisible: true } : undefined);
+      if (t < 1) {
+        bounceRafRef.current = window.requestAnimationFrame(step);
+        return;
+      }
+      bounceRafRef.current = 0;
+      offsetRef.current = to;
+      persistScroll();
+    };
+    bounceRafRef.current = window.requestAnimationFrame(step);
+  }, [cancelBounce, persistScroll, scheduleFrame]);
 
   useEffect(() => {
     if (isList || isSquare) return;
+    // 尺寸尚未就绪时不要清零，避免从播放器返回时丢位置
+    if (size.width < 8 || size.height < 8) return;
+
+    const saved = scrollKey ? readLibraryScroll(scrollKey) : undefined;
+    const needsRestore = Boolean(
+      scrollKey
+      && saved
+      && saved.kind === 'pan'
+      && restoredKeyRef.current !== scrollKey,
+    );
+
+    if (needsRestore && saved && saved.kind === 'pan') {
+      const limits = panLimitsRef.current;
+      const x = clampPan(saved.x, limits.minX, limits.maxX);
+      const y = clampPan(saved.y, limits.minY, limits.maxY);
+      offsetRef.current = { x, y };
+      lastVisibleOffsetRef.current = { x, y };
+      lastVisibleAtRef.current = 0;
+      if (typeof saved.zoom === 'number' && Number.isFinite(saved.zoom)) {
+        const nextZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, saved.zoom));
+        if (Math.abs(nextZoom - zoom) > 0.001) setZoom(nextZoom);
+      }
+      restoredKeyRef.current = scrollKey;
+      refreshVisible(x, y);
+      requestAnimationFrame(() => paint(x, y));
+      return;
+    }
+
+    // 已初始化过本页：间距/缩放变化时只重绘，不清零
+    if (restoredKeyRef.current === scrollKey) {
+      refreshVisible(offsetRef.current.x, offsetRef.current.y);
+      requestAnimationFrame(() => paint(offsetRef.current.x, offsetRef.current.y));
+      return;
+    }
+
     offsetRef.current = { x: 0, y: 0 };
     lastVisibleOffsetRef.current = { x: 0, y: 0 };
     lastVisibleAtRef.current = 0;
+    restoredKeyRef.current = scrollKey;
     refreshVisible(0, 0);
     requestAnimationFrame(() => paint(0, 0));
-  }, [items.length, layout.spacingX, rowSpacingY, layoutMode, paint, refreshVisible, isList, isSquare, isPlaque, zoom]);
+  }, [
+    items.length,
+    layout.spacingX,
+    rowSpacingY,
+    layoutMode,
+    paint,
+    refreshVisible,
+    isList,
+    isSquare,
+    isPlaque,
+    zoom,
+    size.width,
+    size.height,
+    scrollKey,
+  ]);
 
   useEffect(() => {
     if (isList || isSquare) return;
     paint(offsetRef.current.x, offsetRef.current.y);
   }, [paint, visible, isList, isSquare]);
 
+  // 列表/方形：挂载或曲目就绪后恢复 scrollTop（多帧重试，避开进场动画）
+  useEffect(() => {
+    if (!(isList || isSquare) || !scrollKey) return;
+    if (isLoading && items.length === 0) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const saved = readLibraryScroll(scrollKey);
+    if (!saved || saved.kind !== 'scroll') return;
+    if (restoredKeyRef.current === scrollKey) return;
+    const top = saved.top;
+    let tries = 0;
+    let raf = 0;
+    let timer = 0;
+    const apply = () => {
+      el.scrollTop = top;
+      tries += 1;
+      if (Math.abs(el.scrollTop - top) < 4 || tries >= 12) {
+        restoredKeyRef.current = scrollKey;
+        return;
+      }
+      raf = requestAnimationFrame(apply);
+    };
+    apply();
+    timer = window.setTimeout(apply, 320);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
+  }, [isList, isSquare, scrollKey, items.length, isLoading]);
+
+  // 卸载前落盘当前位置
+  useEffect(() => () => {
+    persistScroll();
+  }, [persistScroll]);
+
+  // 仅在同实例切换 scrollKey 时允许再次恢复；首挂不清空
+  const prevScrollKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevScrollKeyRef.current !== null && prevScrollKeyRef.current !== scrollKey) {
+      restoredKeyRef.current = '';
+    }
+    prevScrollKeyRef.current = scrollKey;
+  }, [scrollKey]);
+
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (isList || isSquare || event.button !== 0) return;
+    cancelBounce();
     dragRef.current = {
       active: true,
       captured: false,
@@ -253,8 +507,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
     event.preventDefault();
     const dx = dragRef.current.originX + (event.clientX - dragRef.current.startX);
     const dy = dragRef.current.originY + (event.clientY - dragRef.current.startY);
-    offsetRef.current = { x: dx, y: dy };
-    scheduleFrame(dx, dy);
+    applyPanOffset(dx, dy, 'drag');
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -269,7 +522,8 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       } catch {
         // ignore
       }
-      scheduleFrame(offsetRef.current.x, offsetRef.current.y, { forceVisible: true });
+      bounceToBounds();
+      persistScroll();
     }
     if (dragged || showSkeleton || !items.length) return;
     const hit = (event.target as HTMLElement | null)?.closest?.('[data-waterfall-index]')
@@ -283,16 +537,19 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   const endDrag = () => {
     dragRef.current.active = false;
     dragRef.current.captured = false;
-    scheduleFrame(offsetRef.current.x, offsetRef.current.y, { forceVisible: true });
+    bounceToBounds();
+    persistScroll();
   };
 
   useEffect(() => {
     if (isList || isSquare) return;
     const element = containerRef.current;
     if (!element) return;
+    let wheelBounceTimer = 0;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
-      // è§¦æ§æ¿æåå¨ macOS ä¸è¡¨ç°ä¸º ctrl+wheelï¼Cmd+æ»è½®ä¹å¯ç¼©æ¾
+      cancelBounce();
+      // 触控板捏合在 macOS 上表现为 ctrl+wheel；Cmd+滚轮也可缩放
       if (event.ctrlKey || event.metaKey) {
         const factor = Math.exp(-event.deltaY * 0.008);
         setZoom((prev) => {
@@ -301,15 +558,23 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         });
         return;
       }
-      offsetRef.current = {
-        x: offsetRef.current.x - event.deltaX,
-        y: offsetRef.current.y - event.deltaY,
-      };
-      scheduleFrame(offsetRef.current.x, offsetRef.current.y);
+      applyPanOffset(
+        offsetRef.current.x - event.deltaX,
+        offsetRef.current.y - event.deltaY,
+        'wheel',
+      );
+      persistScroll();
+      window.clearTimeout(wheelBounceTimer);
+      wheelBounceTimer = window.setTimeout(() => {
+        bounceToBounds();
+      }, 90);
     };
     element.addEventListener('wheel', onWheel, { passive: false });
-    return () => element.removeEventListener('wheel', onWheel);
-  }, [scheduleFrame, isList, isSquare]);
+    return () => {
+      window.clearTimeout(wheelBounceTimer);
+      element.removeEventListener('wheel', onWheel);
+    };
+  }, [applyPanOffset, bounceToBounds, cancelBounce, isList, isSquare, persistScroll]);
 
   // åæ¢èçª/æ¹å½¢æ¶éç½®ç¼©æ¾ï¼é¿åé´è·éä¹±æ®ç
   useEffect(() => {
@@ -330,6 +595,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         ref={containerRef}
         className="app-scroll hide-scrollbar relative min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto"
         style={{ paddingBottom: hasFloatingPlayer ? 'var(--player-dock-safe)' : '1.5rem' }}
+        onScroll={persistScroll}
       >
         <div
           className="mx-auto grid w-full gap-4 px-4 pb-4 sm:gap-5 sm:px-6 md:gap-6 md:px-8"
@@ -412,14 +678,21 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   if (isList) {
     return (
       <div
-        key="library-list"
+        key={`library-list-${listColumns}`}
         ref={containerRef}
-        className="relative min-h-0 w-full flex-1 overflow-y-auto"
-        style={{ paddingBottom: hasFloatingPlayer ? '5.5rem' : '1.5rem' }}
+        className="app-scroll hide-scrollbar relative min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto"
+        style={{ paddingBottom: hasFloatingPlayer ? 'var(--player-dock-safe)' : '1.5rem' }}
+        onScroll={persistScroll}
       >
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-2 px-4 pb-4 md:px-8">
+        <div
+          className={
+            listMulti
+              ? 'mx-auto grid w-full max-w-6xl grid-cols-1 gap-2 px-4 pb-4 sm:grid-cols-2 sm:gap-3 md:px-8 xl:grid-cols-3'
+              : 'mx-auto flex w-full max-w-3xl flex-col gap-2 px-4 pb-4 md:px-8'
+          }
+        >
           {showSkeleton
-            ? Array.from({ length: 8 }, (_, index) => (
+            ? Array.from({ length: listMulti ? 12 : 8 }, (_, index) => (
                 <div
                   key={`sk-list-${index}`}
                   className="flex items-center gap-3 rounded-2xl px-3 py-2.5"
@@ -436,7 +709,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
               ))
             : items.length === 0
               ? (
-                  <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+                  <div className={`${listMulti ? 'col-span-full' : ''} flex flex-col items-center justify-center gap-4 py-16 text-center`}>
                     {isLoading ? <RyanLoader size={56} label={emptyMessage} /> : (
                       <p className="text-sm opacity-40">{emptyMessage}</p>
                     )}
@@ -447,7 +720,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                     key={`list-${item.id}`}
                     type="button"
                     onClick={() => onSelect(item, index)}
-                    className={`relative flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition ${
+                    className={`relative flex w-full min-w-0 items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition ${
                       isDaylight ? 'hover:bg-black/6' : 'hover:bg-white/8'
                     }`}
                     style={{
@@ -477,7 +750,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         </div>
         {showRefreshOverlay ? (
           <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/10 backdrop-blur-[1px]">
-            <RyanLoader size={52} label="åæ­¥ä¸­â¦" />
+            <RyanLoader size={52} label="同步中…" />
           </div>
         ) : null}
       </div>

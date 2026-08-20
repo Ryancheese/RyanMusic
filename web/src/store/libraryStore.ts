@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { HomeTab, LibraryCardStyle, LibraryLayoutMode } from '../types';
+import type { HomeTab, LibraryCardStyle, LibraryLayoutMode, LibraryListColumns } from '../types';
 
 export interface LibraryEntry {
   type: import('../types').MusicSource;
@@ -30,6 +30,7 @@ function readPersistedUi(): {
   homeTab: HomeTab;
   layoutMode: LibraryLayoutMode;
   cardStyle: LibraryCardStyle;
+  listColumns: LibraryListColumns;
 } {
   try {
     const rawV4 = localStorage.getItem(UI_KEY);
@@ -38,6 +39,7 @@ function readPersistedUi(): {
       homeTab?: string;
       layoutMode?: string;
       cardStyle?: string;
+      listColumns?: string;
     };
     const homeTab: HomeTab = parsed.homeTab === 'qq' ? 'qq' : 'netease';
 
@@ -60,9 +62,11 @@ function readPersistedUi(): {
       }
     }
 
-    return { homeTab, layoutMode, cardStyle };
+    const listColumns: LibraryListColumns = parsed.listColumns === 'multi' ? 'multi' : 'single';
+
+    return { homeTab, layoutMode, cardStyle, listColumns };
   } catch {
-    return { homeTab: 'netease', layoutMode: 'square', cardStyle: 'plaque' };
+    return { homeTab: 'netease', layoutMode: 'square', cardStyle: 'plaque', listColumns: 'single' };
   }
 }
 
@@ -78,18 +82,22 @@ interface LibraryState {
   homeTab: HomeTab;
   layoutMode: LibraryLayoutMode;
   cardStyle: LibraryCardStyle;
+  listColumns: LibraryListColumns;
   setHomeTab: (tab: HomeTab) => void;
   setLayoutMode: (mode: LibraryLayoutMode) => void;
   setCardStyle: (style: LibraryCardStyle) => void;
+  setListColumns: (columns: LibraryListColumns) => void;
 }
 
 export const useLibraryStore = create<LibraryState>((set) => ({
   homeTab: initial.homeTab,
   layoutMode: initial.layoutMode,
   cardStyle: initial.cardStyle,
+  listColumns: initial.listColumns,
   setHomeTab: (homeTab) => set({ homeTab }),
   setLayoutMode: (layoutMode) => set({ layoutMode }),
   setCardStyle: (cardStyle) => set({ cardStyle }),
+  setListColumns: (listColumns) => set({ listColumns }),
 }));
 
 useLibraryStore.subscribe((state) => {
@@ -97,5 +105,6 @@ useLibraryStore.subscribe((state) => {
     homeTab: state.homeTab,
     layoutMode: state.layoutMode,
     cardStyle: state.cardStyle,
+    listColumns: state.listColumns,
   }));
 });

@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, Play, Plus, Search, X } from 'lucide-react';
+import { AlertCircle, Clock3, Play, Plus, Search, X } from 'lucide-react';
 import type { MusicSource, ThemeTokens, Track } from '../types';
+import { useSearchHistoryStore } from '../store/searchHistoryStore';
 import CoverArt from './CoverArt';
 import DelistedCoverBadge from './DelistedCoverBadge';
 import RyanLoader from './RyanLoader';
@@ -25,6 +26,7 @@ interface SearchWorkspaceProps {
   onPrefetch?: (track: Track) => void;
   onAddQueue: (track: Track) => void;
   onLoadMore: () => void;
+  onHistorySelect: (query: string, source: MusicSource) => void;
 }
 
 const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
@@ -46,24 +48,30 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
   onPrefetch,
   onAddQueue,
   onLoadMore,
+  onHistorySelect,
 }) => {
   const listRef = useRef<HTMLDivElement>(null);
+  const history = useSearchHistoryStore((state) => state.items);
+  const clearHistory = useSearchHistoryStore((state) => state.clear);
+  const removeHistory = useSearchHistoryStore((state) => state.remove);
   const sources: { id: MusicSource; label: string }[] = [
     { id: 'netease', label: '网易云' },
     { id: 'qq', label: 'QQ 音乐' },
   ];
+  const showHistory = !query.trim() && !isSearching && history.length > 0;
 
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
+        onQueryChange('');
         onClose();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open, onClose, onQueryChange]);
 
   return (
     <AnimatePresence>
@@ -102,14 +110,17 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                 <input
                   value={query}
                   onChange={(event) => onQueryChange(event.target.value)}
-                  placeholder="搜索歌曲、歌手，或粘贴网易云 / QQ 链接"
+                  placeholder="搜索歌曲、歌手"
                   className="w-full bg-transparent py-3.5 pr-4 pl-11 text-base outline-none md:text-sm"
                   autoFocus
                 />
               </form>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={() => {
+                  onQueryChange('');
+                  onClose();
+                }}
                 className={`rounded-full p-3 ${isDaylight ? 'bg-black/5 hover:bg-black/10' : 'bg-white/10 hover:bg-white/15'}`}
                 aria-label="关闭搜索"
               >
@@ -150,7 +161,54 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
               if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) onLoadMore();
             }}
           >
-            {isSearching && tracks.length === 0 ? (
+            {showHistory ? (
+              <div className="px-1 pb-[max(6rem,calc(var(--safe-bottom)+4rem))] pt-2">
+                <div className="mb-3 flex items-center justify-between px-2">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-medium opacity-55">
+                    <Clock3 size={13} />
+                    搜索记录
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearHistory}
+                    className="text-[11px] opacity-45 transition hover:opacity-80"
+                  >
+                    清空
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1">
+                  {history.map((item) => (
+                    <div
+                      key={`${item.source}-${item.q}-${item.at}`}
+                      className={`group flex items-center gap-2 rounded-2xl px-3 py-2.5 transition ${
+                        isDaylight ? 'hover:bg-black/[0.05]' : 'hover:bg-white/[0.07]'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => onHistorySelect(item.q, item.source)}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <div className="truncate text-sm font-medium">{item.q}</div>
+                        <div className="mt-0.5 text-[11px] opacity-40">
+                          {item.source === 'qq' ? 'QQ 音乐' : '网易云'}
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="删除这条记录"
+                        onClick={() => removeHistory(item.q, item.source)}
+                        className={`rounded-full p-1.5 opacity-0 transition group-hover:opacity-60 hover:!opacity-100 ${
+                          isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/12'
+                        }`}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : isSearching && tracks.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <RyanLoader size={64} label="搜索中…" />
               </div>

@@ -32,6 +32,10 @@ export interface LyricBundle {
   yrc: string;
   tlyric: string;
   source?: LyricProviderSource | 'native';
+  /** 搜索命中的身份匹配分（歌名/歌手/时长），仅用于自动选用决策 */
+  matchScore?: number;
+  /** 候选曲目时长，用于跨平台升级时的时长接近判断 */
+  durationMs?: number;
 }
 
 const EMPTY_LYRICS: LyricBundle = { lrc: '', yrc: '', tlyric: '' };
@@ -39,6 +43,8 @@ const BASE_LYRIC_SOURCE_ORDER: readonly LyricProviderSource[] = ['netease', 'aml
 const AUTO_MATCH_MIN_SCORE = 75;
 const AUTO_MATCH_SEARCH_LIMIT = 8;
 const LYRIC_MODAL_SEARCH_LIMIT = 20;
+/** 跨平台升级到逐字时，时长差须在此范围内（毫秒） */
+const CROSS_PLATFORM_UPGRADE_MAX_DURATION_DIFF_MS = 3000;
 
 function stripSearchMarkup(value: string): string {
   return String(value || '')
@@ -74,6 +80,11 @@ function isWordByWord(lyrics: LyricBundle): boolean {
   return timedLyricScore(lyrics.yrc) > 0;
 }
 
+function durationCloseEnough(a?: number, b?: number): boolean {
+  if (!a || a <= 0 || !b || b <= 0) return false;
+  return Math.abs(a - b) <= CROSS_PLATFORM_UPGRADE_MAX_DURATION_DIFF_MS;
+}
+
 function pickBetterLyrics(a: LyricBundle, b: LyricBundle): LyricBundle {
   const aWord = isWordByWord(a);
   const bWord = isWordByWord(b);
@@ -89,26 +100,44 @@ function pickBetterLyrics(a: LyricBundle, b: LyricBundle): LyricBundle {
   return aCov >= bCov ? a : b;
 }
 
-/** 正在播放曲目的原生逐字歌词优先，避免搜索命中另一首同名片段后时间轴错乱 */
+/**
+ * 自动最佳选用：
+ * - 原生无词 → 用候选
+ * - 原生已有逐字 → 守住（同平台才允许明显更完整的升级）
+ * - 原生只有行词 → 仅当跨平台候选是逐字、身份分≥75、时长很近时才升级
+ */
 function pickAutoMatchedLyrics(
   native: LyricBundle,
   candidate: LyricBundle,
-  nativeType?: 'netease' | 'qq',
+  options?: {
+    nativeType?: 'netease' | 'qq';
+    nativeDurationMs?: number;
+  },
 ): LyricBundle {
   if (!hasUsableLyrics(candidate)) return native;
   if (!hasUsableLyrics(native)) return candidate;
+
+  const nativeType = options?.nativeType;
+  const samePlatform = Boolean(
+    nativeType
+    && (candidate.source === nativeType || candidate.source === 'native'),
+  );
 
   const nativeWord = isWordByWord(native);
   const candidateWord = isWordByWord(candidate);
   const nativeCov = coverageScore(native);
   const candidateCov = coverageScore(candidate);
 
+  if (!samePlatform) {
+    // 跨平台：原生已有逐字绝不换；只有「行词 → 高置信逐字」才允许
+    if (nativeWord) return native;
+    if (!candidateWord) return native;
+    if ((candidate.matchScore || 0) < AUTO_MATCH_MIN_SCORE) return native;
+    if (!durationCloseEnough(options?.nativeDurationMs, candidate.durationMs)) return native;
+    return candidate;
+  }
+
   if (nativeWord) {
-    const samePlatform = nativeType
-      && (candidate.source === nativeType || candidate.source === 'native');
-    if (samePlatform) {
-      return pickBetterLyrics(native, candidate);
-    }
     if (!candidateWord || candidateCov < nativeCov * 1.35) {
       return native;
     }
@@ -194,9 +223,9 @@ function scoreCandidate(
 
 function pickBestSearchTrack(
   target: { title: string; artist: string; durationMs?: number },
-  tracks: Array<{ songid: string; title: string; author: string }>,
+  tracks: Array<{ songid: string; title: string; author: string; durationMs?: number }>,
   mode: 'strict' | 'titleOnly' = 'strict',
-): { songid: string; title: string; author: string } | null {
+): { songid: string; title: string; author: string; durationMs?: number } | null {
   const scored = tracks
     .slice(0, AUTO_MATCH_SEARCH_LIMIT)
     .map((track) => ({ track, details: scoreCandidate(target, track) }))
@@ -391,7 +420,10 @@ export class LyricsService {
       const nativeTagged = taggedNative(native);
       if (best && hasUsableLyrics(best)) {
         const picked = hasUsableLyrics(native)
-          ? pickAutoMatchedLyrics(nativeTagged, best, options.nativeType)
+          ? pickAutoMatchedLyrics(nativeTagged, best, {
+              nativeType: options.nativeType,
+              nativeDurationMs: options.durationMs,
+            })
           : best;
         if (hasUsableLyrics(picked)) {
           return picked.source ? picked : withSource(picked, options.preferred);
@@ -444,9 +476,17 @@ export class LyricsService {
 
     let best: LyricBundle | null = null;
     let bestScore = 0;
-    const consider = (lyrics: LyricBundle, source: LyricProviderSource | 'native') => {
+    const consider = (
+      lyrics: LyricBundle,
+      source: LyricProviderSource | 'native',
+      meta?: { matchScore?: number; durationMs?: number },
+    ) => {
       if (scoreBundle(lyrics) <= 0) return;
-      const tagged = withSource(lyrics, source);
+      const tagged: LyricBundle = {
+        ...withSource(lyrics, source),
+        matchScore: meta?.matchScore,
+        durationMs: meta?.durationMs,
+      };
       // 覆盖度为主；明显偏好逐字
       const score = coverageScore(tagged) + (isWordByWord(tagged) ? 80 : 0);
       if (score > bestScore) {
@@ -459,13 +499,23 @@ export class LyricsService {
       if (source === 'netease' || source === 'qq') {
         if (options.nativeType === source && options.nativeId) {
           const exact = await this.fetch(source, options.nativeId).catch(() => EMPTY_LYRICS);
-          consider(exact, source);
+          consider(exact, source, {
+            matchScore: 100,
+            durationMs: options.durationMs,
+          });
           return;
         }
         const found = source === 'qq'
           ? await this.qq.searchByName(query, 1).catch(() => null)
           : await this.netease.searchByName(query, 1).catch(() => null);
         let hit = pickBestSearchTrack(target, found?.tracks || []);
+        let hitScore = hit
+          ? scoreCandidate(target, {
+              title: hit.title || '',
+              author: hit.author || '',
+              durationMs: hit.durationMs,
+            }).score
+          : 0;
         if (!hit?.songid && options.artist.trim()) {
           const titleOnlyFound = source === 'qq'
             ? await this.qq.searchByName(options.title, 1).catch(() => null)
@@ -475,10 +525,24 @@ export class LyricsService {
             titleOnlyFound?.tracks || [],
             'titleOnly',
           );
+          hitScore = hit
+            ? scoreCandidate(
+              { ...target, artist: '' },
+              {
+                title: hit.title || '',
+                author: hit.author || '',
+                durationMs: hit.durationMs,
+              },
+            ).score
+            : 0;
         }
         if (hit?.songid) {
           const lyrics = await this.fetch(source, String(hit.songid)).catch(() => EMPTY_LYRICS);
-          consider(lyrics, source);
+          consider(lyrics, source, {
+            matchScore: hitScore,
+            // 只用候选自身时长；缺时长则跨平台升级时 durationCloseEnough 会拒绝
+            durationMs: hit.durationMs && hit.durationMs > 0 ? hit.durationMs : undefined,
+          });
         }
         return;
       }
@@ -488,7 +552,10 @@ export class LyricsService {
           ...options,
           searchQuery: query,
         }).catch(() => EMPTY_LYRICS);
-        consider(amll, 'amll');
+        // AMLL 多为精确 ID / 高相关；无独立搜分时给接近阈值的保守分
+        consider(amll, 'amll', {
+          matchScore: hasUsableLyrics(amll) ? AUTO_MATCH_MIN_SCORE : 0,
+        });
         return;
       }
 
@@ -499,7 +566,9 @@ export class LyricsService {
           durationMs: options.durationMs,
           searchQuery: query,
         }).catch(() => EMPTY_LYRICS);
-        consider(kugou, 'kugou');
+        consider(kugou, 'kugou', {
+          matchScore: hasUsableLyrics(kugou) ? AUTO_MATCH_MIN_SCORE : 0,
+        });
       }
     });
     await Promise.all(jobs);
@@ -792,7 +861,7 @@ export class LyricsService {
     const [exact] = results.splice(idx, 1);
     return [{
       ...exact,
-      matchScore: Math.max(exact.matchScore, 100),
+      // 置顶正在播放曲目，保留真实歌名/歌手匹配分（不强行改成 100%）
       titleMatched: true,
       artistMatched: true,
     }, ...results];

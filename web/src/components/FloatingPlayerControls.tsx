@@ -1,11 +1,15 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, type MotionValue } from 'framer-motion';
 import { ArrowLeft, ListMusic, Pause, Play, Repeat, Repeat1, SkipBack, SkipForward } from 'lucide-react';
 import ProgressBar from './ProgressBar';
 import RyanLoader from './RyanLoader';
 import { useCoarsePointer } from '../lib/media';
+import { chromeButtonStyle, chromeCapsuleStyle } from '../lib/controlGlass';
+import { findLatestActiveLineIndex, resolveVisualizerLyrics } from '../lib/lyrics';
 import { useControlAppearanceStore } from '../store/controlAppearanceStore';
-import type { LoopMode, PlayerStatus } from '../types';
+import { useLyricSettingsStore } from '../store/lyricSettingsStore';
+import type { LoopMode, PlayerStatus, Track } from '../types';
+import { isInterludeLine } from '../utils/lyrics/parserCore';
 
 const CONTROL_LAYOUT_SPRING = {
   type: 'spring' as const,
@@ -17,6 +21,143 @@ const CONTROL_HOVER_SPRING = {
   type: 'spring' as const,
   stiffness: 380,
   damping: 26,
+};
+
+/** 间奏时回退到最近一句实词；开头无词则空串 */
+function dockLineText(lines: ReturnType<typeof resolveVisualizerLyrics>['lines'], time: number): string {
+  const index = findLatestActiveLineIndex(lines, time);
+  if (index < 0) return '';
+  for (let i = index; i >= 0; i -= 1) {
+    const line = lines[i];
+    if (!line || isInterludeLine(line)) continue;
+    const text = (line.fullText || '').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+interface HomeDockNowPlayingProps {
+  title: string;
+  track?: Pick<Track, 'lrc' | 'yrc' | 'tlyric'> | null;
+  currentTime: MotionValue<number>;
+  color: string;
+  className?: string;
+  asButton?: boolean;
+  onNavigate?: () => void;
+}
+
+const HomeDockNowPlaying: React.FC<HomeDockNowPlayingProps> = ({
+  title,
+  track,
+  currentTime,
+  color,
+  className = '',
+  asButton = false,
+  onNavigate,
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const lyricFilterPattern = useLyricSettingsStore((state) => (
+    state.filterEnabled ? state.filterPattern : ''
+  ));
+  const lines = useMemo(
+    () => resolveVisualizerLyrics(track, lyricFilterPattern).lines,
+    [lyricFilterPattern, track],
+  );
+  const [lyric, setLyric] = useState(() => dockLineText(lines, currentTime.get()));
+  const [showTitle, setShowTitle] = useState(false);
+
+  useEffect(() => {
+    setLyric(dockLineText(lines, currentTime.get()));
+    let frame = 0;
+    let last = dockLineText(lines, currentTime.get());
+    const tick = () => {
+      const next = dockLineText(lines, currentTime.get());
+      if (next !== last) {
+        last = next;
+        setLyric(next);
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [currentTime, lines]);
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    const measure = measureRef.current;
+    if (!el || !measure) return;
+
+    const sync = () => {
+      const width = el.clientWidth;
+      if (width <= 0) {
+        setShowTitle(false);
+        return;
+      }
+      if (!title.trim() || !lyric.trim()) {
+        setShowTitle(false);
+        return;
+      }
+      measure.textContent = title;
+      const titleWidth = measure.offsetWidth;
+      // 歌名完整露出 + 分隔 + 至少约 6 字歌词空间，才并排
+      const minLyricSlot = 72;
+      const sep = 18;
+      setShowTitle(width >= titleWidth + sep + minLyricSlot);
+    };
+
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [title, lyric]);
+
+  const primary = (lyric || title || '未播放').trim() || '未播放';
+  const body = (
+    <div
+      ref={containerRef}
+      className={`relative flex w-full min-w-0 items-center justify-center gap-1.5 overflow-hidden text-center ${className}`}
+    >
+      <span
+        ref={measureRef}
+        className="pointer-events-none absolute left-0 top-0 -z-10 whitespace-nowrap text-[12px] font-semibold opacity-0"
+        aria-hidden
+      />
+      {showTitle ? (
+        <>
+          <span
+            className="max-w-[38%] shrink-0 truncate text-[12px] font-semibold opacity-55"
+            style={{ color }}
+          >
+            {title}
+          </span>
+          <span className="shrink-0 text-[12px] opacity-30" style={{ color }} aria-hidden>
+            ·
+          </span>
+        </>
+      ) : null}
+      <span className="min-w-0 truncate text-sm font-semibold" style={{ color }}>
+        {primary}
+      </span>
+    </div>
+  );
+
+  if (asButton) {
+    return (
+      <button
+        type="button"
+        className="block w-full min-w-0"
+        onClick={(event) => {
+          event.stopPropagation();
+          onNavigate?.();
+        }}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return body;
 };
 
 interface FloatingPlayerControlsProps {
@@ -41,21 +182,9 @@ interface FloatingPlayerControlsProps {
   onBack?: () => void;
   onTogglePanel?: () => void;
   trackTitle?: string;
+  track?: Pick<Track, 'lrc' | 'yrc' | 'tlyric'> | null;
   children?: React.ReactNode;
 }
-
-const glassFill = (opacity: number, extra = 0) => (
-  `color-mix(in srgb, var(--text-accent) var(--accent-ui-soft, 18%), color-mix(in srgb, var(--bg-color) ${Math.min(90, Math.max(12, opacity + extra))}%, transparent))`
-);
-
-const chromeButtonStyle = (opacity: number, blur: number, active = false): React.CSSProperties => ({
-  backgroundColor: glassFill(opacity, active ? 8 : 0),
-  color: 'color-mix(in srgb, var(--text-accent) var(--accent-ui-mix, 45%), var(--text-primary))',
-  border: '1px solid color-mix(in srgb, var(--text-accent) var(--accent-ui-border, 25%), transparent)',
-  boxShadow: '0 16px 36px rgba(0, 0, 0, 0.22)',
-  backdropFilter: `blur(${blur}px)`,
-  WebkitBackdropFilter: `blur(${blur}px)`,
-});
 
 const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   status,
@@ -79,6 +208,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   onBack,
   onTogglePanel,
   trackTitle = '',
+  track = null,
   children,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -91,11 +221,13 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const opacity = useControlAppearanceStore((state) => state.opacity);
   const blur = useControlAppearanceStore((state) => state.blur);
   const hoverBoost = useControlAppearanceStore((state) => state.hoverBoost);
-  // 左右与中间用同一放大倍率，观感一致
+  // 中间胶囊悬停放大
   const hoverScale = 1 + hoverBoost / 100;
+  // 左右小圆钮面积更小，同一滑杆下提高倍率，观感与中间同步
+  const sideHoverScale = hoverBoost <= 0 ? 1 : 1 + (hoverBoost / 100) * 2.5;
   const SIDE_BTN_SIZE = 48;
   // 悬停侧钮时，把邻居往外挤开（约等于放大后伸出的半径 + 一点间距）
-  const sidePush = (SIDE_BTN_SIZE * (hoverScale - 1)) / 2 + 8;
+  const sidePush = (SIDE_BTN_SIZE * (sideHoverScale - 1)) / 2 + 8;
   // 默认与暂停保持缩小；悬停/触摸/缓冲加载时才展开
   const showExpanded =
     isHovered
@@ -104,16 +236,12 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const trackColor = isDaylight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.1)';
   const primaryColor = 'color-mix(in srgb, var(--text-accent) var(--accent-ui-mix, 45%), var(--text-primary))';
   const secondaryColor = 'var(--text-secondary)';
-  const glassStyle: React.CSSProperties = {
-    backgroundColor: glassFill(opacity, showExpanded ? 4 : -6),
-    boxShadow: '0 16px 36px rgba(0, 0, 0, 0.28)',
-    backdropFilter: `blur(${blur}px)`,
-    WebkitBackdropFilter: `blur(${blur}px)`,
-    isolation: 'isolate',
-    border: '1px solid color-mix(in srgb, var(--text-accent) var(--accent-ui-border, 25%), transparent)',
-  };
-  const skipClass = `flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-transform duration-200 ${
-    isDaylight ? 'hover:scale-125 hover:bg-black/10' : 'hover:scale-125 hover:bg-white/12'
+  const glassStyle: React.CSSProperties = chromeCapsuleStyle(opacity, blur, showExpanded);
+  const dockHoverScaleStyle = {
+    '--dock-hover-scale': String(sideHoverScale),
+  } as React.CSSProperties;
+  const skipClass = `flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-transform duration-200 hover:[transform:scale(var(--dock-hover-scale))] ${
+    isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/12'
   }`;
   const showSideChrome = currentView === 'player' && Boolean(onBack || onTogglePanel);
   const hideDock = isHidden || !canTogglePlay;
@@ -208,9 +336,9 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
             initial={false}
             animate={{
               x: leftX,
-              scale: sideHover === 'left' ? hoverScale : 1,
+              scale: sideHover === 'left' ? sideHoverScale : 1,
             }}
-            whileTap={{ scale: Math.max(0.94, hoverScale - 0.08) }}
+            whileTap={{ scale: Math.max(0.92, sideHoverScale - 0.1) }}
             transition={CONTROL_HOVER_SPRING}
             onMouseEnter={() => setSideHover('left')}
             onMouseLeave={() => setSideHover((prev) => (prev === 'left' ? null : prev))}
@@ -258,7 +386,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
             className={`relative cursor-pointer overflow-hidden rounded-full border-0 outline-none ring-0 transition-[background-color] duration-300 ${
               showExpanded ? 'w-full p-3' : 'w-full px-4 py-2'
             }`}
-            style={glassStyle}
+            style={{ ...glassStyle, ...dockHoverScaleStyle }}
             initial={false}
             animate={{ scale: isHovered && !sideHover ? hoverScale : 1 }}
             whileTap={{ scale: Math.max(0.96, hoverScale - 0.055) }}
@@ -266,7 +394,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
           >
             <div className="w-full">
             {showExpanded ? (
-              <div className="flex w-full items-center gap-1.5 sm:gap-2">
+              <div className="flex w-full items-center gap-1.5 sm:gap-2" style={dockHoverScaleStyle}>
                 <button
                   type="button"
                   onClick={(event) => {
@@ -275,7 +403,9 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                   }}
                   disabled={!canTogglePlay}
                   className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-none shadow-lg outline-none ring-0 transition-transform duration-200 ${
-                    canTogglePlay ? 'hover:scale-125' : 'cursor-not-allowed opacity-45'
+                    canTogglePlay
+                      ? 'hover:[transform:scale(var(--dock-hover-scale))]'
+                      : 'cursor-not-allowed opacity-45'
                   }`}
                   style={{
                     backgroundColor: primaryColor,
@@ -306,17 +436,14 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                 <div className="flex min-w-0 flex-[1.65] items-center gap-1.5 px-0.5">
                   <div className="min-w-[10rem] flex-1">
                     {showSongTitle ? (
-                      <button
-                        type="button"
-                        className="block w-full truncate text-center text-sm font-semibold"
-                        style={{ color: primaryColor }}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onNavigateToPlayer();
-                        }}
-                      >
-                        {trackTitle || '未播放'}
-                      </button>
+                      <HomeDockNowPlaying
+                        title={trackTitle}
+                        track={track}
+                        currentTime={currentTime}
+                        color={primaryColor}
+                        asButton
+                        onNavigate={onNavigateToPlayer}
+                      />
                     ) : (
                       <ProgressBar
                         currentTime={currentTime}
@@ -349,12 +476,12 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                     event.stopPropagation();
                     onToggleLoop();
                   }}
-                  className={`rounded-full p-2 outline-none ring-0 transition-transform duration-200 ${
+                  className={`rounded-full p-2 outline-none ring-0 transition-transform duration-200 hover:[transform:scale(var(--dock-hover-scale))] ${
                     loopMode !== 'off'
                       ? isDaylight
-                        ? 'bg-black/10 text-black hover:scale-125'
-                        : 'bg-white/20 hover:scale-125'
-                      : 'opacity-40 hover:scale-125 hover:opacity-100'
+                        ? 'bg-black/10 text-black'
+                        : 'bg-white/20'
+                      : 'opacity-40 hover:opacity-100'
                   }`}
                   style={{ color: primaryColor }}
                 >
@@ -369,9 +496,12 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
               <div className="flex h-8 w-full items-center gap-2 px-2">
                 <div className="min-w-0 flex-1">
                   {showSongTitle ? (
-                    <div className="truncate text-center text-sm font-medium" style={{ color: primaryColor }}>
-                      {trackTitle || '未播放'}
-                    </div>
+                    <HomeDockNowPlaying
+                      title={trackTitle}
+                      track={track}
+                      currentTime={currentTime}
+                      color={primaryColor}
+                    />
                   ) : (
                     <ProgressBar
                       currentTime={currentTime}
@@ -406,8 +536,8 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
               className="relative z-20 flex h-12 w-12 items-center justify-center rounded-full outline-none ring-0"
               style={chromeButtonStyle(opacity, blur, panelOpen)}
               initial={false}
-              animate={{ scale: sideHover === 'right' ? hoverScale : 1 }}
-              whileTap={{ scale: Math.max(0.94, hoverScale - 0.08) }}
+              animate={{ scale: sideHover === 'right' ? sideHoverScale : 1 }}
+              whileTap={{ scale: Math.max(0.92, sideHoverScale - 0.1) }}
               transition={CONTROL_HOVER_SPRING}
               onMouseEnter={() => setSideHover('right')}
               onMouseLeave={() => setSideHover((prev) => (prev === 'right' ? null : prev))}

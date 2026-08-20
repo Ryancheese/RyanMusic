@@ -37,6 +37,7 @@ function isAllowedCoverUrl(url: string): boolean {
       host.endsWith('126.net')
       || host.endsWith('163.com')
       || host.endsWith('gtimg.cn')
+      || host.endsWith('qlogo.cn')
       || host.endsWith('qq.com')
       || host.endsWith('myqcloud.com')
       || host.endsWith('music.126.net')
@@ -425,26 +426,33 @@ export function createApp(options: AppOptions) {
       if (action === 'cache_usage' || action === 'clear_cache') {
         try {
           const bytesToMB = (bytes: number) => Math.round((bytes / (1024 * 1024)) * 10) / 10;
+          const withMb = (usage: ReturnType<typeof cache.usage>) => ({
+            ...usage,
+            totalMB: bytesToMB(usage.totalBytes),
+            rebuildableMB: bytesToMB(usage.rebuildableBytes),
+            preservedMB: bytesToMB(usage.preservedBytes),
+            categories: usage.categories.map((item) => ({
+              ...item,
+              mb: bytesToMB(item.bytes),
+            })),
+          });
           if (action === 'cache_usage') {
-            const usage = cache.usage();
-            return jsonResponse({
-              ...usage,
-              totalMB: bytesToMB(usage.totalBytes),
-              rebuildableMB: bytesToMB(usage.rebuildableBytes),
-              preservedMB: bytesToMB(usage.preservedBytes),
-            }, 200, '');
+            return jsonResponse(withMb(cache.usage()), 200, '');
           }
-          const result = cache.clearSafe();
+          const rawCategory = String(post.category || 'all').trim();
+          const category = (
+            rawCategory === 'lyrics'
+            || rawCategory === 'play'
+            || rawCategory === 'comments'
+            || rawCategory === 'other'
+            || rawCategory === 'all'
+          ) ? rawCategory : 'all';
+          const result = cache.clearSafe(category);
           const usage = cache.usage();
           return jsonResponse({
             ...result,
             removedMB: bytesToMB(result.removedBytes),
-            usage: {
-              ...usage,
-              totalMB: bytesToMB(usage.totalBytes),
-              rebuildableMB: bytesToMB(usage.rebuildableBytes),
-              preservedMB: bytesToMB(usage.preservedBytes),
-            },
+            usage: withMb(usage),
           }, 200, '');
         } catch (err) {
           return jsonResponse('', 500, err instanceof Error ? err.message : '清理失败');

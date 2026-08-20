@@ -17,6 +17,7 @@ import InterludeDots from './InterludeDots';
 import WordByWordBadge from './WordByWordBadge';
 import SongComments from './SongComments';
 import AddToPlaylistModal from './AddToPlaylistModal';
+import GlassChromeButton from './GlassChromeButton';
 import { isInterludeLine } from '../utils/lyrics/parserCore';
 import { resolveLyricAlternateText } from '../utils/lyrics/alternateText';
 import { AUTO_AUDIO_QUALITY, audioQualityLabel, pickPreferredLevel } from '../lib/audioQuality';
@@ -212,29 +213,29 @@ const SidePanel: React.FC<SidePanelProps> = ({
               </div>
             )}
             <div className="titlebar-no-drag flex items-center justify-between px-5 py-3">
-              <button
-                type="button"
+              <GlassChromeButton
+                size="sm"
+                className="titlebar-no-drag relative z-10"
                 onClick={(event) => {
                   event.stopPropagation();
                   onHome();
                 }}
-                className="titlebar-no-drag relative z-10 rounded-full p-2.5 hover:bg-white/10"
                 aria-label="返回主页"
               >
                 <Home size={17} />
-              </button>
+              </GlassChromeButton>
               <span className="text-sm opacity-50">正在播放</span>
-              <button
-                type="button"
+              <GlassChromeButton
+                size="sm"
+                className="titlebar-no-drag relative z-10"
                 onClick={(event) => {
                   event.stopPropagation();
                   onClose();
                 }}
-                className="titlebar-no-drag relative z-10 rounded-full p-2.5 hover:bg-white/10"
                 aria-label="收起"
               >
                 <X size={17} />
-              </button>
+              </GlassChromeButton>
             </div>
 
             <div className={`flex gap-4 px-5 pb-3 ${isMobile ? '' : 'px-6'}`}>
