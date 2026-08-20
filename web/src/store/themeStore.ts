@@ -48,10 +48,10 @@ function readAccent(): PersistedAccent {
       presetId,
       customColor,
       uiTint: clampTint(parsed.uiTint, 45),
-      bgWash: clampTint(parsed.bgWash, 100),
+      bgWash: clampTint(parsed.bgWash, 50),
     };
   } catch {
-    return { presetId: 'default', customColor: '#7c3aed', uiTint: 45, bgWash: 100 };
+    return { presetId: 'default', customColor: '#7c3aed', uiTint: 45, bgWash: 50 };
   }
 }
 
@@ -77,7 +77,7 @@ export const useThemeAccentStore = create<ThemeAccentState>((set, get) => ({
   setPreset: (presetId) => set({ presetId }),
   setCustomColor: (customColor) => set({ presetId: 'custom', customColor }),
   setUiTint: (uiTint) => set({ uiTint: clampTint(uiTint, 45) }),
-  setBgWash: (bgWash) => set({ bgWash: clampTint(bgWash, 100) }),
+  setBgWash: (bgWash) => set({ bgWash: clampTint(bgWash, 50) }),
   resolveAccent: (isDaylight) => {
     const { presetId, customColor } = get();
     if (presetId === 'custom') return customColor;

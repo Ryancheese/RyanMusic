@@ -594,7 +594,11 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         key="library-square"
         ref={containerRef}
         className="app-scroll hide-scrollbar relative min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto"
-        style={{ paddingBottom: hasFloatingPlayer ? 'var(--player-dock-safe)' : '1.5rem' }}
+        style={{
+          paddingBottom: hasFloatingPlayer ? 'var(--player-dock-safe)' : '1.5rem',
+          isolation: 'isolate',
+          contain: 'paint',
+        }}
         onScroll={persistScroll}
       >
         <div
@@ -636,14 +640,18 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                     type="button"
                     onClick={() => onSelect(item, index)}
                     title={item.name}
-                    className="app-scroll-item group flex w-full flex-col rounded-2xl p-2.5 text-left transition hover:brightness-110"
-                    style={libraryCardSurface(isDaylight, showPlaque)}
+                    className="app-scroll-item group flex w-full flex-col overflow-hidden rounded-2xl p-2.5 text-left transition hover:brightness-110"
+                    style={{
+                      isolation: 'isolate',
+                      contain: 'paint',
+                      ...libraryCardSurface(isDaylight, showPlaque),
+                    }}
                   >
                     <div
                       className="relative aspect-square w-full overflow-hidden rounded-xl"
                       style={{ backgroundColor: isDaylight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}
                     >
-                      <CoverArt src={item.coverUrl} lazy={false} />
+                      <CoverArt src={item.coverUrl} lazy={false} flipOnLoad={false} />
                       {item.delisted ? <DelistedCoverBadge /> : null}
                       {!showPlaque ? (
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-3 pt-10 pb-2.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
@@ -681,7 +689,11 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         key={`library-list-${listColumns}`}
         ref={containerRef}
         className="app-scroll hide-scrollbar relative min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto"
-        style={{ paddingBottom: hasFloatingPlayer ? 'var(--player-dock-safe)' : '1.5rem' }}
+        style={{
+          paddingBottom: hasFloatingPlayer ? 'var(--player-dock-safe)' : '1.5rem',
+          isolation: 'isolate',
+          contain: 'paint',
+        }}
         onScroll={persistScroll}
       >
         <div
@@ -736,7 +748,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                       className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl"
                       style={{ backgroundColor: isDaylight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}
                     >
-                      <CoverArt src={item.coverUrl} />
+                      <CoverArt src={item.coverUrl} flipOnLoad={false} />
                       {item.delisted ? <DelistedCoverBadge /> : null}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -762,7 +774,11 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       key={`library-grid-${layoutMode}`}
       ref={containerRef}
       className="relative min-h-0 w-full flex-1 cursor-grab overflow-hidden touch-none select-none active:cursor-grabbing"
-      style={{ paddingBottom: hasFloatingPlayer ? '5.5rem' : '1.5rem' }}
+      style={{
+        paddingBottom: hasFloatingPlayer ? '5.5rem' : '1.5rem',
+        isolation: 'isolate',
+        contain: 'paint',
+      }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -815,7 +831,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                       marginTop: -cellHeight / 2,
                       willChange: 'transform, opacity',
                       isolation: 'isolate',
-                      contain: 'layout style',
+                      contain: 'paint',
                       ...libraryCardSurface(isDaylight, isPlaque),
                     }}
                     onClick={(event) => event.preventDefault()}
@@ -834,7 +850,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
                           : undefined,
                       }}
                     >
-                      <CoverArt src={item.coverUrl} />
+                      <CoverArt src={item.coverUrl} flipOnLoad={false} />
                       {item.delisted ? <DelistedCoverBadge /> : null}
                       {!isPlaque ? (
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-3 pt-10 pb-2.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">

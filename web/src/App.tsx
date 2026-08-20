@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMotionValue } from 'framer-motion';
 import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type Track, type VisualizerMode } from './types';
 import { buildDownloadUrl, canNativeSave, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type LyricSearchCandidate, type PlayQuality } from './api';
-import { contrastText, extractAccentFromImage } from './lib/color';
+import { accentWashVars, contrastText, extractAccentFromImage } from './lib/color';
 import { isMobileViewport, isWindowsApp, prefersLightweightVisualizer } from './lib/media';
 import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig, writeVisualizerMode } from './lib/visualizer';
 import { useLibraryStore } from './store/libraryStore';
@@ -213,6 +213,7 @@ const App: React.FC = () => {
   );
 
   const onAccent = useMemo(() => contrastText(userAccent), [userAccent]);
+  const washVars = useMemo(() => accentWashVars(bgWash), [bgWash]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -224,7 +225,10 @@ const App: React.FC = () => {
     root.style.setProperty('--accent-ui-mix', `${uiTint}%`);
     root.style.setProperty('--accent-ui-soft', `${Math.round(uiTint * 0.38)}%`);
     root.style.setProperty('--accent-ui-border', `${Math.round(uiTint * 0.55)}%`);
-    root.style.setProperty('--accent-wash', String(Math.max(0, Math.min(1, bgWash / 100))));
+    root.style.setProperty('--accent-wash-a', washVars['--accent-wash-a']);
+    root.style.setProperty('--accent-wash-b', washVars['--accent-wash-b']);
+    root.style.setProperty('--accent-wash-c', washVars['--accent-wash-c']);
+    root.style.setProperty('--accent-wash-d', washVars['--accent-wash-d']);
     root.style.colorScheme = isDaylight ? 'light' : 'dark';
     root.classList.toggle('theme-daylight', isDaylight);
     root.style.backgroundColor = theme.backgroundColor;
@@ -234,7 +238,7 @@ const App: React.FC = () => {
     } catch {
       // non-mac / no bridge
     }
-  }, [bgWash, isDaylight, onAccent, theme.backgroundColor, theme.primaryColor, theme.secondaryColor, uiTint, userAccent]);
+  }, [bgWash, isDaylight, onAccent, theme.backgroundColor, theme.primaryColor, theme.secondaryColor, uiTint, userAccent, washVars]);
 
   const appStyle = useMemo(
     () =>
@@ -247,11 +251,11 @@ const App: React.FC = () => {
         '--accent-ui-mix': `${uiTint}%`,
         '--accent-ui-soft': `${Math.round(uiTint * 0.38)}%`,
         '--accent-ui-border': `${Math.round(uiTint * 0.55)}%`,
-        '--accent-wash': String(Math.max(0, Math.min(1, bgWash / 100))),
+        ...washVars,
         backgroundColor: theme.backgroundColor,
         color: theme.primaryColor,
       }) as React.CSSProperties,
-    [bgWash, onAccent, theme, uiTint, userAccent],
+    [bgWash, onAccent, theme, uiTint, userAccent, washVars],
   );
 
   const preferredQualityRef = useRef(preferredQuality);

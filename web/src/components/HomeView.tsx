@@ -496,13 +496,13 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </div>
 
-      <div className="relative min-h-0 w-full flex-1 overflow-hidden">
+      <div className="relative z-[2] min-h-0 w-full flex-1 overflow-hidden" style={{ isolation: 'isolate' }}>
         {/* 歌单列表：平台切换带动画；进详情时隐藏保活层由下方 tracks 覆盖 */}
         <AnimatePresence mode="wait" initial={false} custom={tabDir}>
           {!openPlaylist ? (
             <motion.div
               key={`playlists-${homeTab}`}
-              className="absolute inset-0 flex flex-col"
+              className="absolute inset-0 flex flex-col overflow-hidden"
               custom={tabDir}
               variants={LIBRARY_SLIDE}
               initial="enter"
@@ -534,7 +534,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           {openPlaylist ? (
             <motion.div
               key={`tracks-${homeTab}-${openPlaylist.id}`}
-              className="absolute inset-0 flex flex-col"
+              className="absolute inset-0 flex flex-col overflow-hidden"
               custom={tabDir}
               variants={LIBRARY_SLIDE}
               initial="enter"

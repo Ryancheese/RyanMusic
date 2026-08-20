@@ -727,7 +727,7 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                 <div>
                   <div className="text-sm font-semibold">主题背景</div>
                   <div className="mt-1 text-[11px] leading-relaxed opacity-50">
-                    调整首页背景上主题色晕染的填充程度，越高越明显。
+                    约 50% 接近原先默认；拉到 100% 会明显更浓、铺得更满。
                   </div>
                 </div>
                 <div className={`rounded-2xl px-3 py-3 ${card}`}>

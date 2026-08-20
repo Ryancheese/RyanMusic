@@ -37,6 +37,26 @@ function parseRgb(color: string): { r: number; g: number; b: number } | null {
   return { r, g, b };
 }
 
+/**
+ * 背景主题色晕染强度。
+ * 约 50% ≈ 旧版固定效果；100% ≈ 两倍更浓并多一层铺底。
+ */
+export function accentWashVars(bgWash: number): {
+  '--accent-wash-a': string;
+  '--accent-wash-b': string;
+  '--accent-wash-c': string;
+  '--accent-wash-d': string;
+} {
+  const t = Math.min(1, Math.max(0, bgWash / 100));
+  const scale = t * 2;
+  return {
+    '--accent-wash-a': `${Math.round(16 * scale)}%`,
+    '--accent-wash-b': `${Math.round(12 * scale)}%`,
+    '--accent-wash-c': `${Math.round(7 * scale)}%`,
+    '--accent-wash-d': `${Math.round(5 * Math.max(0, scale - 1))}%`,
+  };
+}
+
 export async function extractAccentFromImage(src: string): Promise<string | null> {
   if (!src) return null;
   return new Promise((resolve) => {

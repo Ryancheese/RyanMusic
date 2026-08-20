@@ -326,7 +326,12 @@ html.platform-windows-app .theme-glass-panel {
 
 .ryan-cover-flip-scene {
   perspective: 980px;
-  transform-style: preserve-3d;
+  overflow: hidden;
+  isolation: isolate;
+  contain: paint;
+  border-radius: inherit;
+  /* 避免滚动时 3D 层溅到相邻空白区域 */
+  transform: translateZ(0);
 }
 
 .ryan-cover-flip-card {
@@ -335,7 +340,6 @@ html.platform-windows-app .theme-glass-panel {
   height: 100%;
   transform-style: preserve-3d;
   transition: transform 0.62s cubic-bezier(0.22, 0.82, 0.2, 1);
-  will-change: transform;
 }
 
 .ryan-cover-flip-card.is-flipped {
@@ -407,11 +411,30 @@ html.platform-windows-app .theme-glass-panel {
   position: absolute;
   inset: 0;
   z-index: 1;
-  opacity: var(--accent-wash, 1);
-  transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  /* 强度由 --accent-wash-a/b/c 控制：约 50%≈旧默认，100%≈两倍更浓 */
   background:
-    radial-gradient(ellipse 90% 70% at 12% 8%, color-mix(in srgb, var(--text-accent) 16%, transparent), transparent 58%),
-    radial-gradient(ellipse 80% 60% at 92% 88%, color-mix(in srgb, var(--text-accent) 12%, transparent), transparent 52%),
-    radial-gradient(ellipse 55% 45% at 70% 20%, color-mix(in srgb, var(--text-accent) 7%, transparent), transparent 60%);
+    radial-gradient(
+      ellipse 110% 85% at 10% 6%,
+      color-mix(in srgb, var(--text-accent) var(--accent-wash-a, 16%), transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 95% 75% at 94% 90%,
+      color-mix(in srgb, var(--text-accent) var(--accent-wash-b, 12%), transparent),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 72% 18%,
+      color-mix(in srgb, var(--text-accent) var(--accent-wash-c, 7%), transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 40% 70%,
+      color-mix(in srgb, var(--text-accent) var(--accent-wash-d, 0%), transparent),
+      transparent 65%
+    );
 }
 
