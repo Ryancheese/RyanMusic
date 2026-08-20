@@ -11,7 +11,7 @@ export default defineVisualizerBackground({
     mode: 'nomand',
     order: 30,
     labelKey: 'options.visualizerBackgroundModeNomand',
-    labelFallback: 'Nomand',
+    labelFallback: '纸纹',
     render: ({ config, coverUrl, theme, isDaylight }) => (
         <NomandBackgroundLayer
             coverUrl={coverUrl}

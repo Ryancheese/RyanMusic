@@ -12,7 +12,7 @@ export default defineVisualizerBackground({
     mode: 'common',
     order: 10,
     labelKey: 'options.visualizerBackgroundModeCommon',
-    labelFallback: 'Common',
+    labelFallback: '通用',
     render: ({
         config,
         theme,

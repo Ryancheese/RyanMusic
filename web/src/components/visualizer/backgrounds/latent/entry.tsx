@@ -11,7 +11,7 @@ export default defineVisualizerBackground({
     mode: 'latent',
     order: 35,
     labelKey: 'options.visualizerBackgroundModeLatent',
-    labelFallback: 'Latent',
+    labelFallback: '流光',
     render: ({ config, theme, coverUrl, audioPower, audioBands, staticMode, paused }) => (
         <LatentBackground
             theme={theme}

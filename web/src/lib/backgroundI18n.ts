@@ -10,7 +10,13 @@ const BG_I18N: Record<string, string> = {
   'options.coverColorBackgroundDesc': '根据封面生成流体底色',
   'options.previewCoverBackgroundOpacity': '背景透明度',
 
-  'options.monetBackgroundSettings': 'Monet 背景',
+  'options.visualizerBackgroundModeCommon': '通用',
+  'options.visualizerBackgroundModeMonet': '封面图',
+  'options.visualizerBackgroundModeNomand': '纸纹',
+  'options.visualizerBackgroundModeLatent': '流光',
+  'options.visualizerBackgroundModeSora': '星空',
+
+  'options.monetBackgroundSettings': '封面图背景',
   'options.monetBackgroundSettingsDesc': '用歌曲封面或自定义图片作为舞台背景',
   'options.monetGroupBackgroundSource': '背景来源',
   'options.monetBackgroundSource': '图片来源',
@@ -35,7 +41,7 @@ const BG_I18N: Record<string, string> = {
   'options.monetBackgroundWashCustom': '自定义',
   'options.monetBackgroundWashCustomColor': '自定义色洗颜色',
 
-  'options.nomandBackgroundSettings': 'Nomand 背景',
+  'options.nomandBackgroundSettings': '纸纹背景',
   'options.nomandBackgroundSettingsDesc': '纸感抖动风格的封面背景',
   'options.nomandBackgroundSource': '图片来源',
   'options.nomandBackgroundUploadSuccess': '上传成功',
@@ -49,7 +55,7 @@ const BG_I18N: Record<string, string> = {
   'options.nomandBackgroundOriginalColors': '保留原色',
   'options.nomandBackgroundInverted': '反相',
 
-  'options.latentBackgroundSettings': 'Latent 背景',
+  'options.latentBackgroundSettings': '流光背景',
   'options.latentBackgroundSettingsDesc': '抽象抖动与网格动态背景',
   'options.latentDisplayMode': '显示模式',
   'options.latentDisplayDithering': '抖动',

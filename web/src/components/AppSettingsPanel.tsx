@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowDownUp, AudioLines, Columns2, Gauge, HardDrive, Hexagon, Keyboard, LayoutGrid, Link2, List, MessageCircleHeart, Palette, Rows2, SlidersHorizontal, SquareStack, Trash2, Users, X } from 'lucide-react';
+import { ALargeSmall, ArrowDownUp, AudioLines, Clock3, Columns2, Flame, Gauge, HardDrive, Hexagon, Keyboard, LayoutGrid, Link2, List, MessageCircleHeart, Palette, Rows2, SlidersHorizontal, SquareStack, Trash2, Users, X } from 'lucide-react';
 import {
   LYRIC_SOURCE_OPTIONS,
   useLyricSettingsStore,
@@ -10,7 +10,7 @@ import {
 } from '../utils/lyrics/filtering';
 import { useControlAppearanceStore } from '../store/controlAppearanceStore';
 import { usePlaybackSettingsStore } from '../store/playbackSettingsStore';
-import { COMMENT_READ_ORDER_OPTIONS, CROWD_COUNT_OPTIONS, useCommentAtmosphereStore } from '../store/commentAtmosphereStore';
+import { COMMENT_FONT_SCALE_MAX, COMMENT_FONT_SCALE_MIN, COMMENT_MIX_OPTIONS, COMMENT_READ_ORDER_OPTIONS, CROWD_COUNT_OPTIONS, useCommentAtmosphereStore } from '../store/commentAtmosphereStore';
 import { useLibraryStore } from '../store/libraryStore';
 import { useThemeAccentStore } from '../store/themeStore';
 import {
@@ -195,6 +195,10 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
   const setCommentCrowdMode = useCommentAtmosphereStore((state) => state.setCrowdMode);
   const commentCrowdCount = useCommentAtmosphereStore((state) => state.crowdCount);
   const setCommentCrowdCount = useCommentAtmosphereStore((state) => state.setCrowdCount);
+  const commentFontScale = useCommentAtmosphereStore((state) => state.fontScale);
+  const setCommentFontScale = useCommentAtmosphereStore((state) => state.setFontScale);
+  const commentMixBias = useCommentAtmosphereStore((state) => state.mixBias);
+  const setCommentMixBias = useCommentAtmosphereStore((state) => state.setMixBias);
   const opacity = useControlAppearanceStore((state) => state.opacity);
   const blur = useControlAppearanceStore((state) => state.blur);
   const hoverBoost = useControlAppearanceStore((state) => state.hoverBoost);
@@ -444,12 +448,75 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                 <div className={`rounded-2xl px-3 py-3 ${card}`}>
                   <div className="flex items-start gap-3">
                     <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${idle}`}>
+                      <ALargeSmall size={15} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold">评论大小</div>
+                      <div className="mt-1 text-[11px] leading-relaxed opacity-50">
+                        只放大歌词舞台上飘出的评论气泡。正在播放卡片里的评论保持自适应，不受这项控制。
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <SettingSlider
+                      label="字号"
+                      value={commentFontScale}
+                      display={`${commentFontScale}%`}
+                      min={COMMENT_FONT_SCALE_MIN}
+                      max={COMMENT_FONT_SCALE_MAX}
+                      step={5}
+                      onChange={setCommentFontScale}
+                    />
+                  </div>
+                </div>
+
+                <div className={`rounded-2xl px-3 py-3 ${card}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${idle}`}>
+                      {commentMixBias === 'latest' ? <Clock3 size={15} /> : <Flame size={15} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold">评论来源偏好</div>
+                      <div className="mt-1 text-[11px] leading-relaxed opacity-50">
+                        最近优先约 70% 最新评论；热度优先约 70% 热评。热评数量少时会循环出现，最新评论会持续往后翻页。
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {COMMENT_MIX_OPTIONS.map((item) => {
+                      const active = item.id === commentMixBias;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setCommentMixBias(item.id)}
+                          className={`rounded-2xl px-3 py-2.5 text-sm transition ${active ? '' : idle}`}
+                          style={
+                            active
+                              ? {
+                                  background: 'color-mix(in srgb, var(--text-accent) 16%, transparent)',
+                                  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--text-accent) 55%, transparent)',
+                                }
+                              : undefined
+                          }
+                        >
+                          <div>{item.label}</div>
+                          <div className="mt-0.5 text-[10px] leading-snug opacity-45">{item.hint}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className={`rounded-2xl px-3 py-3 ${card}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${idle}`}>
                       <ArrowDownUp size={15} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold">评论读取顺序</div>
                       <div className="mt-1 text-[11px] leading-relaxed opacity-50">
-                        舞台气泡按此顺序读评论。热评约占 70%、最新约占 30%；没有热评时只用最新评论。同一首歌内每条评论最多出现一次。
+                        舞台气泡按此顺序读已经抽到的评论。没有热评时只用最新评论。
                       </div>
                     </div>
                   </div>

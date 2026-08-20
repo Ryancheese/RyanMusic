@@ -11,7 +11,7 @@ export default defineVisualizerBackground({
     mode: 'monet',
     order: 20,
     labelKey: 'options.visualizerBackgroundModeMonet',
-    labelFallback: 'Monet',
+    labelFallback: '封面图',
     render: ({ config, coverUrl, theme, isDaylight }) => (
         <MonetBackgroundLayer
             coverUrl={coverUrl}

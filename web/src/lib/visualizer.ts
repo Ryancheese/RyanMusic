@@ -4,6 +4,7 @@ import type { VisualizerBackgroundConfig } from '../components/visualizer/backgr
 import {
   hasVisualizerBackgroundMode,
 } from '../components/visualizer/backgrounds/registry';
+import { saveCustomBackgroundImage, stripCustomImageUrl } from './customBackgroundImage';
 
 export const VISUALIZER_MODE_KEY = 'ryanmusic-visualizer-mode';
 export const VISUALIZER_BG_KEY = 'ryanmusic-visualizer-bg-v1';
@@ -80,7 +81,16 @@ export function readBackgroundConfig(lightweight = false): VisualizerBackgroundC
 }
 
 export function writeBackgroundConfig(config: VisualizerBackgroundConfig) {
-  localStorage.setItem(VISUALIZER_BG_KEY, JSON.stringify(config));
+  const persistable: VisualizerBackgroundConfig = {
+    ...config,
+    customImage: stripCustomImageUrl(config.customImage),
+  };
+  try {
+    localStorage.setItem(VISUALIZER_BG_KEY, JSON.stringify(persistable));
+  } catch {
+    // 大图可能撑爆 localStorage，图片走 IndexedDB
+  }
+  void saveCustomBackgroundImage(config.customImage ?? null);
 }
 
 let analyserBuffer: Uint8Array | null = null;

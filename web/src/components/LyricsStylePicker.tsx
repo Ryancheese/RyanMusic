@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Image, Palette, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -11,7 +11,6 @@ import {
 import type { VisualizerBackgroundConfig } from './visualizer/backgrounds/definition';
 import type {
   LatentBackgroundTuning,
-  MonetBackgroundImage,
   MonetBackgroundTuning,
   NomandBackgroundTuning,
   Theme,
@@ -27,16 +26,16 @@ import {
 import { useIsMobile } from '../lib/media';
 import { toFoliaTheme } from '../lib/visualizer';
 import { translateBackgroundOption } from '../lib/backgroundI18n';
+import { fileToBackgroundImage } from '../lib/customBackgroundImage';
 
 export type StageSettingsTab = 'lyrics' | 'background';
 
 const BG_LABELS: Record<string, string> = {
   common: '通用',
-  monet: 'Monet',
-  nomand: 'Nomand',
-  latent: 'Latent',
-  url: '网页嵌入',
-  sora: 'Sora 星空',
+  monet: '封面图',
+  nomand: '纸纹',
+  latent: '流光',
+  sora: '星空',
 };
 
 interface LyricsStylePickerProps {
@@ -49,20 +48,6 @@ interface LyricsStylePickerProps {
   onClose: () => void;
   onChange: (mode: VisualizerMode) => void;
   onBackgroundChange: (config: VisualizerBackgroundConfig) => void;
-}
-
-async function fileToBackgroundImage(file: File): Promise<MonetBackgroundImage> {
-  const url = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('读取图片失败'));
-    reader.readAsDataURL(file);
-  });
-  return {
-    id: `bg-${Date.now()}`,
-    name: file.name || 'background',
-    url,
-  };
 }
 
 const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
@@ -81,6 +66,8 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
   const [tab, setTab] = useState<StageSettingsTab>(initialTab);
   const [uploading, setUploading] = useState(false);
   const foliaTheme = useMemo(() => toFoliaTheme(theme), [theme]);
+  const backgroundRef = useRef(background);
+  backgroundRef.current = background;
 
   useEffect(() => {
     if (open) setTab(initialTab);
@@ -105,21 +92,24 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
   };
 
   const patchBackground = (patch: Partial<VisualizerBackgroundConfig>) => {
-    onBackgroundChange({
-      ...background,
+    const current = backgroundRef.current;
+    const next: VisualizerBackgroundConfig = {
+      ...current,
       ...patch,
-      common: { ...background.common, ...patch.common },
+      common: { ...current.common, ...patch.common },
       monet: patch.monet
-        ? { tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, ...background.monet?.tuning, ...patch.monet.tuning } }
-        : background.monet,
+        ? { tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, ...current.monet?.tuning, ...patch.monet.tuning } }
+        : current.monet,
       nomand: patch.nomand
-        ? { tuning: { ...DEFAULT_NOMAND_BACKGROUND_TUNING, ...background.nomand?.tuning, ...patch.nomand.tuning } }
-        : background.nomand,
+        ? { tuning: { ...DEFAULT_NOMAND_BACKGROUND_TUNING, ...current.nomand?.tuning, ...patch.nomand.tuning } }
+        : current.nomand,
       latent: patch.latent
-        ? { tuning: { ...DEFAULT_LATENT_BACKGROUND_TUNING, ...background.latent?.tuning, ...patch.latent.tuning } }
-        : background.latent,
-      customImage: patch.customImage !== undefined ? patch.customImage : background.customImage,
-    });
+        ? { tuning: { ...DEFAULT_LATENT_BACKGROUND_TUNING, ...current.latent?.tuning, ...patch.latent.tuning } }
+        : current.latent,
+      customImage: patch.customImage !== undefined ? patch.customImage : current.customImage,
+    };
+    backgroundRef.current = next;
+    onBackgroundChange(next);
   };
 
   const bgActions = {
@@ -128,16 +118,16 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
     },
     common: {
       onCoverColorChange: (enabled: boolean) => {
-        patchBackground({ common: { ...background.common, useCoverColorBg: enabled } });
+        patchBackground({ common: { ...backgroundRef.current.common, useCoverColorBg: enabled } });
       },
       onOpacityChange: (opacity: number) => {
-        patchBackground({ common: { ...background.common, opacity } });
+        patchBackground({ common: { ...backgroundRef.current.common, opacity } });
       },
       onDisableGeometricChange: (disabled: boolean) => {
-        patchBackground({ common: { ...background.common, disableGeometricBackground: disabled } });
+        patchBackground({ common: { ...backgroundRef.current.common, disableGeometricBackground: disabled } });
       },
       onDisableVignetteChange: (disabled: boolean) => {
-        patchBackground({ common: { ...background.common, disableVignette: disabled } });
+        patchBackground({ common: { ...backgroundRef.current.common, disableVignette: disabled } });
       },
     },
     customImage: {
@@ -147,7 +137,24 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
         setUploading(true);
         try {
           const image = await fileToBackgroundImage(file);
-          patchBackground({ customImage: image });
+          const current = backgroundRef.current;
+          patchBackground({
+            customImage: image,
+            monet: {
+              tuning: {
+                ...DEFAULT_MONET_BACKGROUND_TUNING,
+                ...current.monet?.tuning,
+                backgroundSource: 'uploaded-global',
+              },
+            },
+            nomand: {
+              tuning: {
+                ...DEFAULT_NOMAND_BACKGROUND_TUNING,
+                ...current.nomand?.tuning,
+                imageSource: 'uploaded-global',
+              },
+            },
+          });
           return { ok: true };
         } catch (error) {
           return { ok: false, error: error instanceof Error ? error.message : '上传失败' };
@@ -156,7 +163,24 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
         }
       },
       onClear: () => {
-        patchBackground({ customImage: null });
+        const current = backgroundRef.current;
+        patchBackground({
+          customImage: null,
+          monet: {
+            tuning: {
+              ...DEFAULT_MONET_BACKGROUND_TUNING,
+              ...current.monet?.tuning,
+              backgroundSource: 'cover-derived',
+            },
+          },
+          nomand: {
+            tuning: {
+              ...DEFAULT_NOMAND_BACKGROUND_TUNING,
+              ...current.nomand?.tuning,
+              imageSource: 'cover-derived',
+            },
+          },
+        });
       },
       isLoading: uploading,
     },
@@ -166,7 +190,7 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
           monet: {
             tuning: {
               ...DEFAULT_MONET_BACKGROUND_TUNING,
-              ...background.monet?.tuning,
+              ...backgroundRef.current.monet?.tuning,
               ...patch,
             },
           },
@@ -182,7 +206,7 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
           nomand: {
             tuning: {
               ...DEFAULT_NOMAND_BACKGROUND_TUNING,
-              ...background.nomand?.tuning,
+              ...backgroundRef.current.nomand?.tuning,
               ...patch,
             },
           },
@@ -198,7 +222,7 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
           latent: {
             tuning: {
               ...DEFAULT_LATENT_BACKGROUND_TUNING,
-              ...background.latent?.tuning,
+              ...backgroundRef.current.latent?.tuning,
               ...patch,
             },
           },

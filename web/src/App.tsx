@@ -7,6 +7,7 @@ import { isMobileViewport, isWindowsApp, prefersLightweightVisualizer } from './
 import WindowControls from './components/WindowControls';
 import TitlebarDragZone from './components/TitlebarDragZone';
 import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig, writeVisualizerMode } from './lib/visualizer';
+import { loadCustomBackgroundImage } from './lib/customBackgroundImage';
 import { useLibraryStore } from './store/libraryStore';
 import { useCloudStore } from './store/cloudStore';
 import { touchPlaylistRecent } from './store/playlistRecentStore';
@@ -217,6 +218,20 @@ const App: React.FC = () => {
 
   const onAccent = useMemo(() => contrastText(userAccent), [userAccent]);
   const washVars = useMemo(() => accentWashVars(bgWash), [bgWash]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadCustomBackgroundImage().then((image) => {
+      if (cancelled || !image?.url) return;
+      setBackgroundConfig((prev) => {
+        if (prev.customImage?.url) return prev;
+        return { ...prev, customImage: image };
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;

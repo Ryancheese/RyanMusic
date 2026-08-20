@@ -225,103 +225,51 @@ function pickPlacement(
   return candidates[0] || { side: 'left', edgePct: 6, topPct: 14 };
 }
 
-const HOT_SHARE = 7;
-const LATEST_SHARE = 3;
+const PAGE_LIMIT = 50;
+const PREFETCH_AHEAD = 12;
+const MIX_WINDOW = 10;
+const MIX_PREFERRED = 7;
 
 function usableComments(list: SongComment[]): SongComment[] {
   return list.filter((item) => item.content.trim().length >= 8);
 }
 
-function applySourceOrder(list: SongComment[], order: CommentReadOrder): SongComment[] {
-  if (order === 'reverse') return [...list].reverse();
-  return list.slice();
-}
-
-/** 同一首歌内每条评论只进池一次；热评 70% + 最新 30% 交错，不因循环复用。 */
-function buildPool(
-  hot: SongComment[],
-  latest: SongComment[],
-  order: CommentReadOrder,
-): Array<{ comment: SongComment; hot: boolean }> {
+function uniqueById(list: SongComment[]): SongComment[] {
   const seen = new Set<string>();
-  const takeUnique = (list: SongComment[]) => {
-    const out: SongComment[] = [];
-    for (const item of list) {
-      if (seen.has(item.id)) continue;
-      seen.add(item.id);
-      out.push(item);
-    }
-    return out;
-  };
-
-  const hotList = takeUnique(applySourceOrder(usableComments(hot), order));
-  const latestList = takeUnique(applySourceOrder(usableComments(latest), order));
-
-  if (!hotList.length) {
-    const onlyLatest = latestList.map((comment) => ({ comment, hot: false }));
-    return order === 'random' ? shuffle(onlyLatest) : onlyLatest;
+  const out: SongComment[] = [];
+  for (const item of list) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
   }
-  if (!latestList.length) {
-    const onlyHot = hotList.map((comment) => ({ comment, hot: true }));
-    return order === 'random' ? shuffle(onlyHot) : onlyHot;
-  }
-
-  const mixed: Array<{ comment: SongComment; hot: boolean }> = [];
-  let hi = 0;
-  let li = 0;
-  while (hi < hotList.length || li < latestList.length) {
-    for (let i = 0; i < HOT_SHARE && hi < hotList.length; i += 1) {
-      mixed.push({ comment: hotList[hi], hot: true });
-      hi += 1;
-    }
-    for (let i = 0; i < LATEST_SHARE && li < latestList.length; i += 1) {
-      mixed.push({ comment: latestList[li], hot: false });
-      li += 1;
-    }
-  }
-
-  if (order === 'random') return shuffle(mixed);
-
-  // 顺序/倒序：有回复的评论按被回复内容相近的时间排在附近，整体仍按时间先后
-  return mixed.slice().sort((a, b) => {
-    const ta = a.comment.time || 0;
-    const tb = b.comment.time || 0;
-    if (order === 'reverse') return tb - ta;
-    return ta - tb;
-  });
+  return out;
 }
 
-/** 群像批次：尽量把「带回复」的放在一起，并按时间先后排。 */
-function takeNextBatch(
-  pool: Array<{ comment: SongComment; hot: boolean }>,
-  start: number,
-  count: number,
-  shownIds: Set<string>,
-): { items: Array<{ comment: SongComment; hot: boolean }>; nextCursor: number } {
-  const items: Array<{ comment: SongComment; hot: boolean }> = [];
-  let cursor = start;
-  const maxScan = pool.length;
+function orderComments(list: SongComment[], order: CommentReadOrder): SongComment[] {
+  const usable = uniqueById(usableComments(list));
+  if (order === 'reverse') return usable.reverse();
+  if (order === 'random') return shuffle(usable);
+  return usable;
+}
 
-  while (items.length < count && cursor - start < maxScan) {
-    if (cursor >= pool.length) break;
-    const entry = pool[cursor];
-    cursor += 1;
-    if (shownIds.has(entry.comment.id)) continue;
-    items.push(entry);
-  }
-
-  // 同批按时间升序：先发在前；带回复的自然更靠后
-  items.sort((a, b) => (a.comment.time || 0) - (b.comment.time || 0));
-
-  return { items, nextCursor: cursor };
+function appendUnique(
+  target: SongComment[],
+  incoming: SongComment[],
+  seen: Set<string>,
+  order: CommentReadOrder,
+): SongComment[] {
+  const next = orderComments(incoming, order).filter((item) => !seen.has(item.id));
+  for (const item of next) seen.add(item.id);
+  return target.concat(next);
 }
 
 const CommentBubble: React.FC<{
   item: ActiveBubble;
   isDaylight: boolean;
   typewriter: boolean;
+  scale: number;
   onHoverChange: (key: string, hovering: boolean) => void;
-}> = ({ item, isDaylight, typewriter, onHoverChange }) => {
+}> = ({ item, isDaylight, typewriter, scale, onHoverChange }) => {
   const fullText = normalizeContent(item.comment.content);
   const { shown, typing, done } = useTypewriter(fullText, typewriter);
   const { viewportRef, contentRef } = useAutoScroll({
@@ -339,7 +287,13 @@ const CommentBubble: React.FC<{
   const border = isDaylight ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.12)';
   const replyBoxBg = isDaylight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.07)';
   const avatarOnLeft = item.placement.side === 'left';
-  const arrowTop = Math.max(6, Math.round(AVATAR_PX / 2 - 7));
+  const px = (value: number) => Math.max(1, Math.round(value * scale));
+  const avatarPx = px(AVATAR_PX);
+  const arrowTop = Math.max(6, Math.round(avatarPx / 2 - 7));
+  const nicknamePx = px(12);
+  const hotPx = px(10);
+  const replyPx = px(11);
+  const bodyPx = px(13);
 
   return (
     <motion.div
@@ -361,14 +315,14 @@ const CommentBubble: React.FC<{
         className="flex items-start"
         style={{
           flexDirection: avatarOnLeft ? 'row' : 'row-reverse',
-          gap: AVATAR_GAP_PX,
+          gap: px(AVATAR_GAP_PX),
         }}
       >
         <div
           className="relative z-10 shrink-0 overflow-hidden rounded-full shadow-md"
           style={{
-            width: AVATAR_PX,
-            height: AVATAR_PX,
+            width: avatarPx,
+            height: avatarPx,
             boxShadow: isDaylight
               ? '0 6px 16px rgba(0,0,0,0.14)'
               : '0 8px 18px rgba(0,0,0,0.4)',
@@ -382,11 +336,12 @@ const CommentBubble: React.FC<{
         </div>
 
         <div
-          className="relative rounded-[1.15rem] px-3.5 pb-3 pt-3 shadow-lg backdrop-blur-md"
+          className="relative rounded-[1.15rem] shadow-lg backdrop-blur-md"
           style={{
             display: 'inline-block',
             width: 'fit-content',
-            maxWidth: 'min(18.5rem, 44vw)',
+            maxWidth: `min(${18.5 * scale}rem, 48vw)`,
+            padding: `${px(12)}px ${px(14)}px ${px(12)}px`,
             background: bubbleBg,
             color: ink,
             border: `1px solid ${border}`,
@@ -423,18 +378,19 @@ const CommentBubble: React.FC<{
           />
 
           <div className="mb-1.5 flex min-w-0 items-center justify-start gap-1.5">
-            <span className="truncate text-[12px] font-semibold tracking-wide" style={{ color: mute }}>
+            <span className="truncate font-semibold tracking-wide" style={{ color: mute, fontSize: nicknamePx }}>
               {item.comment.nickname || '匿名'}
             </span>
             {item.hot ? (
               <span
-                className="inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-px text-[10px] font-medium"
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-px font-medium"
                 style={{
                   color: '#d9480f',
                   background: 'rgba(255, 146, 84, 0.22)',
+                  fontSize: hotPx,
                 }}
               >
-                <Flame size={10} />
+                <Flame size={hotPx} />
                 热评
               </span>
             ) : null}
@@ -442,11 +398,12 @@ const CommentBubble: React.FC<{
 
           {item.comment.reply ? (
             <div
-              className="hide-scrollbar mb-2 overflow-y-auto rounded-xl px-2.5 py-2 text-left text-[11px] leading-[1.5]"
+              className="hide-scrollbar mb-2 overflow-y-auto rounded-xl px-2.5 py-2 text-left leading-[1.5]"
               style={{
                 background: replyBoxBg,
                 color: mute,
-                maxHeight: 88,
+                maxHeight: px(88),
+                fontSize: replyPx,
               }}
             >
               <span className="font-medium opacity-80">{item.comment.reply.nickname}：</span>
@@ -459,16 +416,17 @@ const CommentBubble: React.FC<{
           <div
             ref={viewportRef}
             className="hide-scrollbar overflow-x-hidden overflow-y-auto"
-            style={{ maxHeight: BODY_MAX_HEIGHT_PX }}
+            style={{ maxHeight: px(BODY_MAX_HEIGHT_PX) }}
           >
             <div
               ref={contentRef}
-              className="whitespace-pre-wrap break-words text-left text-[13px] leading-[1.55]"
+              className="whitespace-pre-wrap break-words text-left leading-[1.55]"
               style={{
                 wordBreak: 'break-word',
                 direction: 'ltr',
                 unicodeBidi: 'plaintext',
                 minHeight: '1.55em',
+                fontSize: bodyPx,
               }}
             >
               {shown}
@@ -504,18 +462,35 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
   const readOrder = useCommentAtmosphereStore((state) => state.readOrder);
   const crowdMode = useCommentAtmosphereStore((state) => state.crowdMode);
   const crowdCount = useCommentAtmosphereStore((state) => state.crowdCount);
+  const fontScale = useCommentAtmosphereStore((state) => state.fontScale);
+  const mixBias = useCommentAtmosphereStore((state) => state.mixBias);
   const maxVisible = crowdMode ? crowdCount : 1;
+  const bubbleScale = fontScale / 100;
 
-  const [fetched, setFetched] = useState<{ hot: SongComment[]; latest: SongComment[] } | null>(null);
-  const [pool, setPool] = useState<Array<{ comment: SongComment; hot: boolean }>>([]);
+  const [feedReady, setFeedReady] = useState(false);
   const [active, setActive] = useState<ActiveBubble[]>([]);
-  const cursorRef = useRef(0);
-  const shownIdsRef = useRef<Set<string>>(new Set());
+  const hotRef = useRef<SongComment[]>([]);
+  const latestRef = useRef<SongComment[]>([]);
+  const latestSeenRef = useRef<Set<string>>(new Set());
+  const hotCursorRef = useRef(0);
+  const latestCursorRef = useRef(0);
+  const nextOffsetRef = useRef(0);
+  const moreRef = useRef(false);
+  const fetchingRef = useRef(false);
+  const prefetchPromiseRef = useRef<Promise<void> | null>(null);
+  const fetchFailsRef = useRef(0);
+  const mixTickRef = useRef(0);
   const activeRef = useRef<ActiveBubble[]>([]);
   const timersRef = useRef<number[]>([]);
   const removeTimersRef = useRef<Map<string, number>>(new Map());
   const hoveringRef = useRef<Set<string>>(new Set());
   const trackKey = track ? `${track.type}:${track.songid}` : '';
+  const trackRef = useRef(track);
+  trackRef.current = track;
+  const readOrderRef = useRef(readOrder);
+  readOrderRef.current = readOrder;
+  const mixBiasRef = useRef(mixBias);
+  mixBiasRef.current = mixBias;
 
   useEffect(() => {
     activeRef.current = active;
@@ -558,45 +533,73 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
   }, [clearRemoveTimer, scheduleRemove]);
 
   useEffect(() => {
-    if (!enabled || !track) {
-      setFetched(null);
-      setPool([]);
-      setActive([]);
-      clearTimers();
-      shownIdsRef.current = new Set();
-      cursorRef.current = 0;
-      return;
-    }
-
-    setFetched(null);
+    hotRef.current = [];
+    latestRef.current = [];
+    latestSeenRef.current = new Set();
+    hotCursorRef.current = 0;
+    latestCursorRef.current = 0;
+    nextOffsetRef.current = 0;
+    moreRef.current = false;
+    fetchingRef.current = false;
+    prefetchPromiseRef.current = null;
+    fetchFailsRef.current = 0;
+    mixTickRef.current = 0;
+    setFeedReady(false);
     setActive([]);
     clearTimers();
-    shownIdsRef.current = new Set();
-    cursorRef.current = 0;
+
+    if (!enabled || !track) return;
 
     let cancelled = false;
+    const currentTrack = track;
+
+    const loadPage = async (offset: number) => {
+      const result = await fetchNeteaseComments({
+        type: currentTrack.type,
+        id: currentTrack.songid,
+        title: currentTrack.title,
+        artist: currentTrack.author,
+        offset,
+        limit: PAGE_LIMIT,
+      });
+      if (cancelled) return null;
+      if (result.code !== 200 || !result.data) return null;
+      return result.data;
+    };
+
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
-          const result = await fetchNeteaseComments({
-            type: track.type,
-            id: track.songid,
-            title: track.title,
-            artist: track.author,
-            offset: 0,
-            limit: 40,
-          });
+          const data = await loadPage(0);
           if (cancelled) return;
-          if (result.code !== 200 || !result.data) {
-            setFetched(null);
+          if (!data) {
+            setFeedReady(false);
             return;
           }
-          setFetched({
-            hot: result.data.hotComments || [],
-            latest: result.data.comments || [],
-          });
+          const order = readOrderRef.current;
+          hotRef.current = orderComments(data.hotComments || [], order);
+          latestSeenRef.current = new Set(hotRef.current.map((item) => item.id));
+          latestRef.current = appendUnique([], data.comments || [], latestSeenRef.current, order);
+          nextOffsetRef.current = PAGE_LIMIT;
+          moreRef.current = Boolean(data.more) && (data.comments || []).length > 0;
+          fetchFailsRef.current = 0;
+          if (moreRef.current) {
+            const extra = await loadPage(PAGE_LIMIT);
+            if (cancelled) return;
+            if (extra) {
+              latestRef.current = appendUnique(
+                latestRef.current,
+                extra.comments || [],
+                latestSeenRef.current,
+                order,
+              );
+              nextOffsetRef.current = PAGE_LIMIT * 2;
+              moreRef.current = Boolean(extra.more) && (extra.comments || []).length > 0;
+            }
+          }
+          setFeedReady(hotRef.current.length + latestRef.current.length > 0);
         } catch {
-          if (!cancelled) setFetched(null);
+          if (!cancelled) setFeedReady(false);
         }
       })();
     }, 800);
@@ -605,35 +608,105 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [clearTimers, enabled, trackKey]);
+  }, [clearTimers, enabled, readOrder, trackKey]);
 
-  useEffect(() => {
-    if (!fetched) {
-      setPool([]);
+  const prefetchLatest = useCallback(async () => {
+    if (prefetchPromiseRef.current) {
+      await prefetchPromiseRef.current;
       return;
     }
-    setPool(buildPool(fetched.hot, fetched.latest, readOrder));
-    cursorRef.current = 0;
-    shownIdsRef.current = new Set();
-  }, [fetched, readOrder]);
+    const current = trackRef.current;
+    if (!current || !moreRef.current) return;
+    const unused = latestRef.current.length - latestCursorRef.current;
+    if (unused >= PREFETCH_AHEAD) return;
+    const startedKey = `${current.type}:${current.songid}`;
+    fetchingRef.current = true;
+    const work = (async () => {
+      try {
+        const result = await fetchNeteaseComments({
+          type: current.type,
+          id: current.songid,
+          title: current.title,
+          artist: current.author,
+          offset: nextOffsetRef.current,
+          limit: PAGE_LIMIT,
+        });
+        const now = trackRef.current;
+        if (!now || `${now.type}:${now.songid}` !== startedKey) return;
+        if (result.code !== 200 || !result.data) {
+          fetchFailsRef.current += 1;
+          if (fetchFailsRef.current >= 3) moreRef.current = false;
+          return;
+        }
+        fetchFailsRef.current = 0;
+        const page = result.data.comments || [];
+        latestRef.current = appendUnique(
+          latestRef.current,
+          page,
+          latestSeenRef.current,
+          readOrderRef.current,
+        );
+        nextOffsetRef.current += PAGE_LIMIT;
+        moreRef.current = Boolean(result.data.more) && page.length > 0;
+      } catch {
+        fetchFailsRef.current += 1;
+        if (fetchFailsRef.current >= 3) moreRef.current = false;
+      } finally {
+        fetchingRef.current = false;
+        prefetchPromiseRef.current = null;
+      }
+    })();
+    prefetchPromiseRef.current = work;
+    await work;
+  }, []);
 
   useEffect(() => {
     clearTimers();
     setActive([]);
-    if (!enabled || pool.length === 0) return;
+    hotCursorRef.current = 0;
+    latestCursorRef.current = 0;
+    mixTickRef.current = 0;
+    if (!enabled || !feedReady) return;
 
     let alive = true;
     let waveLeft = maxVisible;
 
+    const takeHot = (): { comment: SongComment; hot: true } | null => {
+      const list = hotRef.current;
+      if (!list.length) return null;
+      const item = list[hotCursorRef.current % list.length];
+      hotCursorRef.current += 1;
+      return { comment: item, hot: true };
+    };
+
+    const takeLatest = (): { comment: SongComment; hot: false } | null => {
+      const list = latestRef.current;
+      if (latestCursorRef.current >= list.length) return null;
+      const item = list[latestCursorRef.current];
+      latestCursorRef.current += 1;
+      return { comment: item, hot: false };
+    };
+
+    const pickNext = (avoidIds: Set<string>): { comment: SongComment; hot: boolean } | null => {
+      const wantPreferred = (mixTickRef.current % MIX_WINDOW) < MIX_PREFERRED;
+      mixTickRef.current += 1;
+      const preferHot = mixBiasRef.current === 'hot';
+      const wantHot = preferHot ? wantPreferred : !wantPreferred;
+      const primary = wantHot ? takeHot() : takeLatest();
+      const fallback = wantHot ? takeLatest() : takeHot();
+      const candidates = [primary, fallback].filter(Boolean) as Array<{ comment: SongComment; hot: boolean }>;
+      return candidates.find((item) => !avoidIds.has(item.comment.id)) || candidates[0] || null;
+    };
+
     const scheduleNext = (delayMs: number) => {
       const timer = window.setTimeout(() => {
         if (!alive) return;
-        spawnOne();
+        void spawnOne();
       }, delayMs);
       timersRef.current.push(timer);
     };
 
-    const spawnOne = () => {
+    const spawnOne = async () => {
       if (!alive) return;
       const current = activeRef.current;
       if (current.length >= maxVisible) {
@@ -641,29 +714,36 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
         return;
       }
 
-      // 本首歌评论够时：每条只出现一次；全部看完后停止（不再循环复用）
-      if (shownIdsRef.current.size >= pool.length) {
-        return;
+      const unused = latestRef.current.length - latestCursorRef.current;
+      if (unused < PREFETCH_AHEAD && moreRef.current) {
+        const pending = prefetchLatest();
+        if (unused <= 0) {
+          await pending;
+          if (!alive) return;
+        }
       }
 
-      const { items, nextCursor } = takeNextBatch(
-        pool,
-        cursorRef.current,
-        1,
-        shownIdsRef.current,
-      );
-      cursorRef.current = nextCursor;
+      const onScreen = new Set(current.map((item) => item.comment.id));
+      let entry = pickNext(onScreen);
 
-      if (!items.length) {
-        if (shownIdsRef.current.size < pool.length && cursorRef.current >= pool.length) {
-          cursorRef.current = 0;
+      if (!entry && latestRef.current.length && latestCursorRef.current >= latestRef.current.length && !moreRef.current) {
+        latestCursorRef.current = 0;
+        entry = pickNext(onScreen);
+      }
+
+      if (!entry) {
+        if (moreRef.current || fetchingRef.current) {
+          scheduleNext(900);
+          return;
+        }
+        if (hotRef.current.length || latestRef.current.length) {
+          hotCursorRef.current = 0;
+          latestCursorRef.current = 0;
           scheduleNext(rand(GAP_MS_MIN, GAP_MS_MAX));
         }
         return;
       }
 
-      const entry = items[0];
-      shownIdsRef.current.add(entry.comment.id);
       const placement = pickPlacement(
         current.map((item) => item.placement),
         chromeHidden,
@@ -693,11 +773,9 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
       const onScreenAfter = current.length + 1;
       const continueWave = maxVisible > 1
         && waveLeft > 0
-        && onScreenAfter < maxVisible
-        && shownIdsRef.current.size < pool.length;
+        && onScreenAfter < maxVisible;
 
       if (continueWave) {
-        // 一批在约 3s 内先后出现：间隔 = 3s / (本批条数 - 1)
         const stagger = CROWD_WAVE_MS / Math.max(1, maxVisible - 1);
         scheduleNext(stagger);
       } else {
@@ -716,9 +794,11 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
     chromeHidden,
     clearTimers,
     enabled,
+    feedReady,
     isPanelOpen,
     maxVisible,
-    pool,
+    mixBias,
+    prefetchLatest,
     scheduleRemove,
     typewriter,
   ]);
@@ -737,6 +817,7 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
             item={item}
             isDaylight={isDaylight}
             typewriter={typewriter}
+            scale={bubbleScale}
             onHoverChange={handleHoverChange}
           />
         ))}

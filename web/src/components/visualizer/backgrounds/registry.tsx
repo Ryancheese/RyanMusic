@@ -31,10 +31,18 @@ const buildBackgroundRegistry = (modules: Record<string, VisualizerBackgroundEnt
     };
 };
 
+const HIDDEN_BACKGROUND_MODES = new Set(['url']);
+
 const {
     entries: VISUALIZER_BACKGROUND_REGISTRY,
     byMode: VISUALIZER_BACKGROUND_REGISTRY_BY_MODE,
-} = buildBackgroundRegistry(backgroundEntryModules);
+} = buildBackgroundRegistry(
+    Object.fromEntries(
+        Object.entries(backgroundEntryModules).filter(([, module]) => (
+            !HIDDEN_BACKGROUND_MODES.has(module.default?.mode)
+        )),
+    ),
+);
 
 export { VISUALIZER_BACKGROUND_REGISTRY };
 

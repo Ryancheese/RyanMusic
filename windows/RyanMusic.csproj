@@ -8,7 +8,7 @@
     <ApplicationIcon>AppIcon.ico</ApplicationIcon>
     <AssemblyName>RyanMusic</AssemblyName>
     <RootNamespace>RyanMusic</RootNamespace>
-    <Version>2.0.2</Version>
+    <Version>2.0.3</Version>
     <Product>RyanMusic</Product>
     <Description>RyanMusic Windows 客户端</Description>
   </PropertyGroup>
