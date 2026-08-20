@@ -459,6 +459,40 @@ export const parseLRC = (
  return { lines: finalizeParsedLyricLines(lines, options) };
 };
 
+const PHRASE_GAP_SEC = 0.42;
+
+function splitTimedLineByPhraseGaps<T extends {
+  words: Word[];
+  startTime: number;
+  endTime: number;
+  fullText: string;
+}>(line: T): T[] {
+  const words = line.words || [];
+  if (words.length < 4) return [line];
+  const chunks: Word[][] = [];
+  let current: Word[] = [words[0]];
+  for (let index = 1; index < words.length; index += 1) {
+    const prev = words[index - 1];
+    const word = words[index];
+    const gap = word.startTime - prev.endTime;
+    if (gap >= PHRASE_GAP_SEC && current.length >= 2) {
+      chunks.push(current);
+      current = [word];
+    } else {
+      current.push(word);
+    }
+  }
+  chunks.push(current);
+  if (chunks.length <= 1) return [line];
+  return chunks.map((piece) => ({
+    ...line,
+    words: piece,
+    startTime: piece[0].startTime,
+    endTime: piece[piece.length - 1].endTime,
+    fullText: piece.map((word) => word.text).join(''),
+  }));
+}
+
 export const parseYRC = (
  yrcString: string,
  translationString: string = '',
@@ -490,35 +524,47 @@ export const parseYRC = (
  const lineEndTime = (lineStartTimeMs + lineDurationMs) / 1000;
 
  const words: Word[] = [];
- let fullText = '';
-
  const wordRegex = /\((\d+),(\d+),(\d+)\)([^\(]*)/g;
  let wordMatch: RegExpExecArray | null;
 
+ let firstWordStartMs: number | null = null;
  while ((wordMatch = wordRegex.exec(rest)) !== null) {
  const wordStartMs = parseInt(wordMatch[1], 10);
  const wordDurationMs = parseInt(wordMatch[2], 10);
  const text = wordMatch[4];
-
+ if (firstWordStartMs === null) firstWordStartMs = wordStartMs;
  words.push({
  text,
- startTime: wordStartMs / 1000,
- endTime: (wordStartMs + wordDurationMs) / 1000
+ startTime: wordStartMs,
+ endTime: wordStartMs + wordDurationMs,
  });
- fullText += text;
  }
 
  if (words.length > 0) {
+ const wordTimesAreRelative = firstWordStartMs !== null
+   && firstWordStartMs + 8 < lineStartTimeMs
+   && firstWordStartMs <= lineDurationMs + 24;
+ const resolved = words.map((word) => {
+   const startMs = wordTimesAreRelative ? lineStartTimeMs + word.startTime : word.startTime;
+   const durationMs = word.endTime - word.startTime;
+   return {
+     text: word.text,
+     startTime: startMs / 1000,
+     endTime: (startMs + durationMs) / 1000,
+   };
+ });
  if (lineStartTime < lastStartTime) {
  isSorted = false;
  }
  lastStartTime = lineStartTime;
- rawLinesData.push({
- words,
- startTime: lineStartTime,
- endTime: lineEndTime,
- fullText
- });
+ for (const piece of splitTimedLineByPhraseGaps({
+   words: resolved,
+   startTime: lineStartTime,
+   endTime: Math.max(lineEndTime, resolved[resolved.length - 1]?.endTime || lineEndTime),
+   fullText: resolved.map((word) => word.text).join(''),
+ })) {
+   rawLinesData.push(piece);
+ }
  }
  }
 

@@ -1,12 +1,16 @@
 /** 当前应用版本（与 Info.plist / Windows Version / server package 保持一致） */
-export const APP_VERSION = '1.8.69';
+export const APP_VERSION = '1.8.70';
 
 const SEEN_KEY = 'ryanmusic-whats-new-seen';
 
 /** 本版启动后弹窗展示的更新说明 */
-export const WHATS_NEW_NOTES = `• 三端统一切到 Node 后端，移除 PHP 回退与打包残留
-• macOS DMG 打包改进，避免 CI 卸载镜像时偶发失败
-• Android / Windows / macOS 文案与构建流程同步更新`;
+export const WHATS_NEW_NOTES = `• 新增「匹配歌词」：可搜索、预览对比后再保存更合适的歌词
+• 修复歌词与播放进度不一致、舞台显示错误歌词等问题
+• 正在播放面板更大更易读，布局更宽松
+• 新增「添加到歌单」，可将歌曲加入我创建的歌单
+• 添加歌单时仅显示自建歌单，支持按创建顺序或最近收听排序
+• 修复歌词区域偶现竖线的问题
+• 评论氛围支持顺序、随机、倒序播放`;
 
 export function shouldShowWhatsNew(currentVersion = APP_VERSION): boolean {
   try {

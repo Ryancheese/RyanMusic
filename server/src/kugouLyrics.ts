@@ -13,6 +13,7 @@ export interface KugouSongCandidate {
   album: string;
   durationMs: number;
   kgHash: string;
+  pic?: string;
 }
 
 function md5(value: string): string {
@@ -136,13 +137,23 @@ async function requestKugou(
   return data;
 }
 
+function kugouCoverUrl(info: any, hash: string): string {
+  const direct = String(info?.Image || info?.album_img || info?.imgUrl || info?.album_img_url || '')
+    .trim()
+    .replace(/\{size\}/gi, '240');
+  if (/^https?:\/\//i.test(direct)) return direct;
+  const h = String(hash || info?.FileHash || info?.hash || '').trim();
+  if (h.length >= 8) return `https://imgessl.kugou.com/stdmusic/240/${h.slice(0, 8)}/${h}.jpg`;
+  return '';
+}
+
 function mapSearchResult(info: any): KugouSongCandidate | null {
   const singers = Array.isArray(info?.Singers) ? info.Singers : [];
   const artists = singers.map((s: any) => String(s?.name || '').trim()).filter(Boolean).join(', ')
     || String(info?.singername || '').split('、').map((s: string) => s.trim()).filter(Boolean).join(', ');
   const id = Number(info?.ID || info?.album_audio_id || 0);
   const hash = String(info?.FileHash || info?.hash || '').trim();
-  const name = String(info?.SongName || info?.songname || '').trim();
+  const name = String(info?.SongName || info?.songname || '').replace(/<[^>]+>/g, '').trim();
   if (!id || !hash || !name) return null;
   return {
     id,
@@ -151,6 +162,7 @@ function mapSearchResult(info: any): KugouSongCandidate | null {
     album: String(info?.AlbumName || info?.album_name || '').trim(),
     durationMs: Math.max(0, Number(info?.Duration ?? info?.duration ?? 0)) * 1000,
     kgHash: hash,
+    pic: kugouCoverUrl(info, hash),
   };
 }
 

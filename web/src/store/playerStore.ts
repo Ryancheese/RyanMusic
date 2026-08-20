@@ -24,7 +24,7 @@ interface PlayerState {
     queue?: { type: MusicSource; songid: string; title?: string; author?: string; delisted?: boolean }[],
   ) => Promise<void>;
   patchCurrentLyrics: (
-    lyrics: Pick<Track, 'lrc' | 'yrc' | 'tlyric' | 'lyricSource'>,
+    lyrics: Pick<Track, 'lrc' | 'yrc' | 'tlyric' | 'lyricSource' | 'lyricProviderSongId'>,
     options?: { replace?: boolean },
   ) => void;
 }
@@ -161,18 +161,44 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
 
     set({ status: 'loading', error: '' });
+    const prev = state.queue.find(
+      (row) => row.type === entry.type && String(row.songid) === String(entry.songid),
+    );
+    const optimistic: Track = {
+      type: entry.type,
+      songid: String(entry.songid),
+      title: entry.title || '未知曲目',
+      author: entry.author || '',
+      lrc: prev?.lrc || '',
+      yrc: prev?.yrc || '',
+      tlyric: prev?.tlyric || '',
+      lyricSource: prev?.lyricSource,
+      url: prev?.url || '',
+      pic: prev?.pic || '',
+      ...(entry.delisted || prev?.delisted ? { delisted: true } : {}),
+    };
+    set({
+      queue: [optimistic],
+      index: 0,
+      source: entry.type,
+      status: 'loading',
+      error: '',
+      duration: prev?.url ? get().duration : 0,
+    });
     const signed = await fetchSignedMedia(entry.type, entry.songid, {
       title: entry.title || '',
       author: entry.author || '',
       delisted: entry.delisted,
     });
     if (!signed?.url) {
-      set({ status: 'idle', error: '无法播放，歌曲可能已失效' });
+      set({
+        status: 'idle',
+        error: '无法播放，歌曲可能已失效',
+        queue: [{ ...optimistic, url: '' }],
+        index: 0,
+      });
       return;
     }
-    const prev = state.queue.find(
-      (row) => row.type === entry.type && String(row.songid) === String(entry.songid),
-    );
     const first: Track = {
       type: entry.type,
       songid: String(entry.songid),
@@ -277,11 +303,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       ? (lyrics.tlyric || (replace ? '' : current.tlyric || ''))
       : (current.tlyric || '');
     const nextSource = lyrics.lyricSource || current.lyricSource;
+    const nextProviderSongId = lyrics.lyricProviderSongId ?? current.lyricProviderSongId;
     if (
       current.lrc === nextLrc
       && (current.yrc || '') === nextYrc
       && (current.tlyric || '') === nextTlyric
       && current.lyricSource === nextSource
+      && (current.lyricProviderSongId || '') === (nextProviderSongId || '')
     ) {
       return;
     }
@@ -292,6 +320,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       yrc: nextYrc,
       tlyric: nextTlyric,
       lyricSource: nextSource,
+      lyricProviderSongId: nextProviderSongId,
     };
     set({ queue: next });
   },

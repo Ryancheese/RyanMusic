@@ -87,6 +87,20 @@ export function hasUsableTrackLyrics(
   return effectiveTimedLyricScore(track.yrc) + effectiveTimedLyricScore(track.lrc) > 0;
 }
 
+/** 歌词本身的质量（0–100）：逐字加分，覆盖度越高越接近 100 */
+export function lyricQualityPercent(
+  track?: Pick<Track, 'lrc' | 'yrc' | 'tlyric'> | null,
+  filterPattern?: string | null,
+): number {
+  if (!track || !hasUsableTrackLyrics(track)) return 0;
+  const resolved = resolveVisualizerLyrics(track, filterPattern);
+  const spoken = resolved.lines.filter((line) => (line.fullText || '').trim()).length;
+  const words = resolved.lines.reduce((sum, line) => sum + (line.words?.length || 0), 0);
+  const coverage = Math.min(70, spoken * 2.4 + Math.min(words, 80) * 0.25);
+  const timed = resolved.isWordByWord ? 30 : Math.min(18, spoken);
+  return Math.max(0, Math.min(100, Math.round(coverage + timed)));
+}
+
 export function detectLyricParseFormat(content?: string): LyricParseFormat {
   const raw = normalizeLyricText(content);
   if (!raw.trim()) return 'lrc';
@@ -150,8 +164,13 @@ export function resolveVisualizerLyrics(
   const lineScore = lineCoverageScore(lineLines);
   const wordTimed = linesLookWordByWord(wordLines) || isWordByWordLyricText(wordRaw);
 
-  // 有可用逐字：优先用；只有明显缺一大段才回退逐行
-  if (wordTimed && wordScore > 0 && wordScore >= lineScore * 0.55) {
+  const wordSpoken = wordLines.filter((line) => (line.fullText || '').trim()).length;
+  const lineSpoken = lineLines.filter((line) => (line.fullText || '').trim()).length;
+  const yrcCoversLrc = lineSpoken === 0
+    || wordSpoken >= Math.ceil(lineSpoken * 0.78);
+
+  // 有可用逐字：优先用；逐字明显缺段则回退更完整的逐行
+  if (wordTimed && wordScore > 0 && yrcCoversLrc && wordScore >= lineScore * 0.55) {
     return { lines: wordLines, isWordByWord: true };
   }
   if (lineScore > 0) {
@@ -186,15 +205,15 @@ export function trackUsesWordByWordLyrics(
   return resolveVisualizerLyrics(track, filterPattern).isWordByWord;
 }
 
+/** Folia：当前行 = 已经开始的最后一行，一直保持到下一行开始，不因行时长结束而跳空。 */
 export function findLatestActiveLineIndex(lines: Line[], time: number): number {
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
+  let found = -1;
+  for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
-    if (!line || time < line.startTime) continue;
-    if (time <= (line.renderHints?.renderEndTime ?? line.endTime)) {
-      return index;
-    }
+    if (!line) continue;
+    if (line.startTime <= time) found = index;
   }
-  return -1;
+  return found;
 }
 
 export { DEFAULT_LYRIC_FILTER_PATTERN, LYRIC_FILTER_REGEX_EXAMPLE } from '../utils/lyrics/filtering';

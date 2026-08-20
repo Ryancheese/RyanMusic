@@ -2,11 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
-import { AudioLines, ChevronDown, Download, FileDown, Home, Image, ListMusic, MessageCircle, Palette, RefreshCw, ScrollText, X } from 'lucide-react';
-import type { LyricProviderSource, ThemeTokens, Track, VisualizerMode } from '../types';
+import { AudioLines, ChevronDown, Download, FileDown, Home, Image, ListMusic, ListPlus, MessageCircle, Palette, RefreshCw, ScrollText, X } from 'lucide-react';
+import type { ThemeTokens, Track, VisualizerMode } from '../types';
 import type { VisualizerBackgroundConfig } from './visualizer/backgrounds/definition';
 import { coverRefreshUrl } from '../api';
-import { hasUsableTrackLyrics, resolveVisualizerLyrics } from '../lib/lyrics';
+import { findLatestActiveLineIndex, hasUsableTrackLyrics, resolveVisualizerLyrics } from '../lib/lyrics';
 import { LYRIC_SOURCE_OPTIONS, useLyricSettingsStore } from '../store/lyricSettingsStore';
 import { useIsMobile } from '../lib/media';
 import LyricsStylePicker, { type StageSettingsTab } from './LyricsStylePicker';
@@ -16,6 +16,7 @@ import RyanLoader from './RyanLoader';
 import InterludeDots from './InterludeDots';
 import WordByWordBadge from './WordByWordBadge';
 import SongComments from './SongComments';
+import AddToPlaylistModal from './AddToPlaylistModal';
 import { isInterludeLine } from '../utils/lyrics/parserCore';
 import { resolveLyricAlternateText } from '../utils/lyrics/alternateText';
 import { AUTO_AUDIO_QUALITY, audioQualityLabel, pickPreferredLevel } from '../lib/audioQuality';
@@ -63,7 +64,7 @@ interface SidePanelProps {
   onDownloadLrc: () => void;
   onPlayIndex: (index: number) => void;
   onLyricLineSeek?: (time: number) => void;
-  onSwitchLyricSource?: (source: LyricProviderSource) => void;
+  onOpenLyricMatch?: () => void;
 }
 
 const SidePanel: React.FC<SidePanelProps> = ({
@@ -93,14 +94,14 @@ const SidePanel: React.FC<SidePanelProps> = ({
   onDownloadLrc,
   onPlayIndex,
   onLyricLineSeek,
-  onSwitchLyricSource,
+  onOpenLyricMatch,
 }) => {
   const isMobile = useIsMobile();
   const [tab, setTab] = useState<'lyrics' | 'queue' | 'comments'>('lyrics');
   const [settingsTab, setSettingsTab] = useState<StageSettingsTab>('lyrics');
   const [lineIndex, setLineIndex] = useState(-1);
   const [qualityOpen, setQualityOpen] = useState(false);
-  const [lyricSourceOpen, setLyricSourceOpen] = useState(false);
+  const [playlistOpen, setPlaylistOpen] = useState(false);
   const lyricScrollRef = useRef<HTMLDivElement>(null);
   const lyricFilterPattern = useLyricSettingsStore((state) => (
     state.filterEnabled ? state.filterPattern : ''
@@ -149,13 +150,12 @@ const SidePanel: React.FC<SidePanelProps> = ({
   useEffect(() => {
     if (!showExpanded) {
       setQualityOpen(false);
-      setLyricSourceOpen(false);
+      setPlaylistOpen(false);
     }
   }, [showExpanded]);
 
-  useEffect(() => {
-    setLyricSourceOpen(false);
-  }, [track?.songid, track?.type]);
+  const canAddToPlaylist = track?.type === 'netease' || track?.type === 'qq';
+  const actionCapsule = `inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition outline-none ${capsule}`;
 
   const openSettings = (next: StageSettingsTab) => {
     setSettingsTab(next);
@@ -189,15 +189,15 @@ const SidePanel: React.FC<SidePanelProps> = ({
             aria-hidden={!showExpanded}
             className={`z-40 flex flex-col overflow-hidden shadow-2xl backdrop-blur-xl theme-glass-panel titlebar-no-drag ${
               isMobile
-                ? 'fixed inset-x-0 bottom-0 h-[min(78dvh,calc(100%-4rem))] rounded-t-3xl border-0'
-                : 'relative w-[min(22rem,calc(100vw-1.5rem))] rounded-3xl border border-white/10'
+                ? 'fixed inset-x-0 bottom-0 h-[min(82dvh,calc(100%-4rem))] rounded-t-3xl border-0'
+                : 'relative w-[min(26rem,calc(100vw-1.5rem))] rounded-3xl border border-white/10'
             }`}
             style={{
               ...(isMobile
                 ? { paddingBottom: 'var(--safe-bottom)' }
                 : {
-                    height: 'min(28rem, calc(100dvh - 9.5rem))',
-                    maxHeight: '58vh',
+                    height: 'min(34rem, calc(100dvh - 8rem))',
+                    maxHeight: '68vh',
                   }),
               backgroundColor: isDaylight
                 ? 'color-mix(in srgb, var(--bg-color) 88%, transparent)'
@@ -211,34 +211,34 @@ const SidePanel: React.FC<SidePanelProps> = ({
                 <span className={`h-1 w-10 rounded-full ${isDaylight ? 'bg-black/20' : 'bg-white/25'}`} />
               </div>
             )}
-            <div className="titlebar-no-drag flex items-center justify-between px-4 py-2">
+            <div className="titlebar-no-drag flex items-center justify-between px-5 py-3">
               <button
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation();
                   onHome();
                 }}
-                className="titlebar-no-drag relative z-10 rounded-full p-2 hover:bg-white/10"
+                className="titlebar-no-drag relative z-10 rounded-full p-2.5 hover:bg-white/10"
                 aria-label="返回主页"
               >
-                <Home size={16} />
+                <Home size={17} />
               </button>
-              <span className="text-xs opacity-50">正在播放</span>
+              <span className="text-sm opacity-50">正在播放</span>
               <button
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation();
                   onClose();
                 }}
-                className="titlebar-no-drag relative z-10 rounded-full p-2 hover:bg-white/10"
+                className="titlebar-no-drag relative z-10 rounded-full p-2.5 hover:bg-white/10"
                 aria-label="收起"
               >
-                <X size={16} />
+                <X size={17} />
               </button>
             </div>
 
-            <div className={`flex gap-3 px-4 pb-2 ${isMobile ? '' : 'px-5'}`}>
-              <div className={`relative overflow-hidden bg-zinc-800/30 shadow-inner ${isMobile ? 'h-14 w-14 shrink-0 rounded-xl' : 'h-14 w-14 shrink-0 rounded-2xl'}`}>
+            <div className={`flex gap-4 px-5 pb-3 ${isMobile ? '' : 'px-6'}`}>
+              <div className={`relative overflow-hidden bg-zinc-800/30 shadow-inner ${isMobile ? 'h-[4.5rem] w-[4.5rem] shrink-0 rounded-2xl' : 'h-[4.75rem] w-[4.75rem] shrink-0 rounded-2xl'}`}>
                 <CoverArt src={coverUrl} />
                 {track?.delisted ? <DelistedCoverBadge /> : null}
                 {buffering ? (
@@ -248,7 +248,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
                 ) : null}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-base font-semibold" style={{ color: theme.primaryColor }}>
+                <div className="truncate text-lg font-semibold leading-snug" style={{ color: theme.primaryColor }}>
                   {track?.title || '未播放'}
                   {track?.delisted ? (
                     <span className="ml-1.5 inline-flex align-middle text-[10px] font-medium text-orange-500/90">
@@ -256,12 +256,12 @@ const SidePanel: React.FC<SidePanelProps> = ({
                     </span>
                   ) : null}
                 </div>
-                <div className="mt-0.5 truncate text-sm opacity-55">{track?.author}</div>
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <div className="mt-1 truncate text-sm opacity-55">{track?.author}</div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => openSettings('lyrics')}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition ${capsule}`}
+                      className={actionCapsule}
                     >
                       <Palette size={13} style={{ color: 'var(--text-accent)' }} />
                       歌词样式
@@ -269,15 +269,26 @@ const SidePanel: React.FC<SidePanelProps> = ({
                     <button
                       type="button"
                       onClick={() => openSettings('background')}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition ${capsule}`}
+                      className={actionCapsule}
                     >
                       <Image size={13} style={{ color: 'var(--text-accent)' }} />
                       舞台背景
                     </button>
+                    {canAddToPlaylist ? (
+                      <button
+                        type="button"
+                        onClick={() => setPlaylistOpen(true)}
+                        className={actionCapsule}
+                        title="添加到歌单"
+                      >
+                        <ListPlus size={13} style={{ color: 'var(--text-accent)' }} />
+                        添加到歌单
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={onDownloadSong}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition ${capsule}`}
+                      className={actionCapsule}
                       title="下载歌曲"
                     >
                       <Download size={13} />
@@ -286,7 +297,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
                     <button
                       type="button"
                       onClick={onDownloadLrc}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition ${capsule}`}
+                      className={actionCapsule}
                       title="下载歌词"
                     >
                       <FileDown size={13} />
@@ -297,7 +308,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
                         <button
                           type="button"
                           onClick={() => setQualityOpen((prev) => !prev)}
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${capsule}`}
+                          className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition outline-none ${capsule}`}
                           aria-haspopup="listbox"
                           aria-expanded={qualityOpen}
                         >
@@ -362,7 +373,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
               </div>
             </div>
 
-            <div className={`mx-4 mt-2 flex rounded-full p-1 ${isDaylight ? 'bg-black/6' : 'bg-white/10'}`}>
+            <div className={`mx-5 mt-3 flex rounded-full p-1 ${isDaylight ? 'bg-black/6' : 'bg-white/10'}`}>
               {([
                 { key: 'lyrics' as const, label: '歌词', Icon: ScrollText },
                 { key: 'queue' as const, label: '队列', Icon: ListMusic },
@@ -374,7 +385,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
                     key={key}
                     type="button"
                     onClick={() => setTab(key)}
-                    className={`flex flex-1 items-center justify-center gap-1 rounded-full py-2 text-[12px] font-medium transition ${
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-[13px] font-medium transition ${
                       active
                         ? (isDaylight ? 'bg-white text-black shadow-sm' : 'bg-white/18 text-white shadow-sm')
                         : 'opacity-50 hover:opacity-80'
@@ -393,8 +404,8 @@ const SidePanel: React.FC<SidePanelProps> = ({
               ) : tab === 'lyrics' ? (
                 <div className="flex h-full min-h-0 flex-col">
                   {track ? (
-                    <div className="relative flex shrink-0 items-center justify-between gap-2 px-4 pb-1 pt-2.5">
-                      <div className="flex min-w-0 items-center gap-1.5 text-[11px] opacity-45">
+                    <div className="relative flex shrink-0 items-center justify-between gap-3 px-5 pb-2 pt-3">
+                      <div className="flex min-w-0 items-center gap-1.5 text-[12px] opacity-45">
                         <span className="shrink-0">歌词来源</span>
                         <span className="truncate font-medium opacity-90" style={{ color: 'var(--text-accent)' }}>
                           {lyricSourceLabel(track.lyricSource, track, lyricsPending && !lines.length)}
@@ -404,57 +415,22 @@ const SidePanel: React.FC<SidePanelProps> = ({
                       <div className="relative shrink-0">
                         <button
                           type="button"
-                          disabled={!onSwitchLyricSource || lyricsPending}
-                          onClick={() => setLyricSourceOpen((prev) => !prev)}
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition ${capsule} disabled:opacity-40`}
-                          aria-haspopup="listbox"
-                          aria-expanded={lyricSourceOpen}
+                          disabled={!onOpenLyricMatch || lyricsPending}
+                          onClick={() => onOpenLyricMatch?.()}
+                          className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium transition outline-none ${capsule} disabled:opacity-40`}
                         >
                           {lyricsPending ? (
                             <RefreshCw size={12} className="animate-spin" />
                           ) : (
-                            <RefreshCw size={12} />
+                            <ScrollText size={12} />
                           )}
-                          切换来源
-                          <ChevronDown size={11} className={lyricSourceOpen ? 'rotate-180' : ''} />
+                          匹配歌词
                         </button>
-                        {lyricSourceOpen ? (
-                          <div
-                            className={`absolute right-0 z-50 mt-1.5 min-w-[9.5rem] overflow-hidden rounded-2xl border py-1 shadow-xl ${
-                              isDaylight ? 'border-black/10 bg-[var(--bg-color)]' : 'border-white/12 bg-[var(--bg-color)]'
-                            }`}
-                            role="listbox"
-                          >
-                            {LYRIC_SOURCE_OPTIONS.map((item) => {
-                              const active = track.lyricSource === item.id;
-                              return (
-                                <button
-                                  key={item.id}
-                                  type="button"
-                                  role="option"
-                                  aria-selected={active}
-                                  disabled={lyricsSwitching}
-                                  onClick={() => {
-                                    setLyricSourceOpen(false);
-                                    onSwitchLyricSource?.(item.id);
-                                  }}
-                                  className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-[11px] ${
-                                    active ? 'font-semibold' : 'opacity-70 hover:opacity-100'
-                                  }`}
-                                  style={active ? { color: 'var(--text-accent)' } : undefined}
-                                >
-                                  <span>{item.label}</span>
-                                  {active ? <span className="ml-3 opacity-50">当前</span> : null}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : null}
                       </div>
                     </div>
                   ) : null}
-                  <div className="min-h-0 flex-1">
-                    <div ref={lyricScrollRef} className="hide-scrollbar h-full overflow-y-auto px-4 py-2">
+                  <div className="min-h-0 flex-1 overflow-x-hidden">
+                    <div ref={lyricScrollRef} className="side-panel-lyrics hide-scrollbar h-full overflow-x-hidden overflow-y-auto px-5 py-3">
                     {lyricsPending && !lines.length ? (
                       <div className="flex h-full min-h-[12rem] items-center justify-center py-8">
                         <RyanLoader size={36} label="正在匹配最佳歌词…" />
@@ -467,13 +443,20 @@ const SidePanel: React.FC<SidePanelProps> = ({
                           : resolveLyricAlternateText(line, 'translation');
                         const showTranslation = hasReadableLyricText(translation);
                         return (
-                          <button
+                          <div
                             key={`${line.startTime}-${i}`}
-                            type="button"
+                            role="button"
+                            tabIndex={-1}
                             data-active={active ? 'true' : undefined}
                             onClick={() => onLyricLineSeek?.(line.startTime)}
-                            className={`mb-3 block w-full text-left text-sm leading-relaxed transition ${
-                              active ? 'scale-[1.02] font-semibold opacity-100' : 'opacity-45 hover:opacity-70'
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                onLyricLineSeek?.(line.startTime);
+                              }
+                            }}
+                            className={`side-panel-lyric-line mb-4 block w-full cursor-pointer text-left text-[15px] leading-[1.75] transition ${
+                              active ? 'font-semibold opacity-100' : 'opacity-45 hover:opacity-70'
                             }`}
                             style={active ? { color: theme.primaryColor } : undefined}
                           >
@@ -499,7 +482,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
                                 ) : null}
                               </>
                             )}
-                          </button>
+                          </div>
                         );
                       })
                     ) : (
@@ -511,13 +494,13 @@ const SidePanel: React.FC<SidePanelProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="hide-scrollbar h-full overflow-y-auto">
+                <div className="hide-scrollbar h-full overflow-x-hidden overflow-y-auto">
                   {queue.map((item, i) => (
                     <button
                       key={`${item.type}-${item.songid}-${i}`}
                       type="button"
                       onClick={() => onPlayIndex(i)}
-                      className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm md:py-2.5 ${
+                      className={`flex w-full items-center gap-3 px-5 py-3.5 text-left text-sm outline-none md:py-3 ${
                         i === index ? 'bg-white/10' : 'hover:bg-white/5'
                       }`}
                     >
@@ -534,6 +517,14 @@ const SidePanel: React.FC<SidePanelProps> = ({
                 </div>
               )}
             </div>
+
+            <AddToPlaylistModal
+              open={playlistOpen}
+              isDaylight={isDaylight}
+              theme={theme}
+              track={track}
+              onClose={() => setPlaylistOpen(false)}
+            />
 
             <LyricsStylePicker
               open={styleOpen}

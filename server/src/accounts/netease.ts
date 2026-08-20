@@ -76,6 +76,8 @@ export class NeteaseAccount {
         return this.likeCheck(post);
       case 'netease_playlist_detail':
         return this.playlistDetail(post);
+      case 'netease_playlist_add':
+        return this.playlistAdd(post);
       case 'netease_songs_by_ids':
         return this.songsByIds(post.ids || '');
       default:
@@ -191,13 +193,15 @@ export class NeteaseAccount {
     const list = res.json?.playlist;
     if (!Array.isArray(list)) return fail(502, '拉取歌单失败');
     return ok({
-      playlists: list.map((pl: any) => ({
+      playlists: list.map((pl: any, index: number) => ({
         id: String(pl.id || ''),
         name: String(pl.name || '未命名歌单'),
         cover: String(pl.coverImgUrl || ''),
         trackCount: Number(pl.trackCount || 0),
         specialType: Number(pl.specialType || 0),
         subscribed: Boolean(pl.subscribed),
+        order: index,
+        createTime: Number(pl.createTime || 0),
       })),
     });
   }
@@ -307,6 +311,35 @@ export class NeteaseAccount {
       trackIds: ids.map(String),
       tracks: await this.netease.songsByIdsV3(pageIds, auth.cookie),
     });
+  }
+
+  private async playlistAdd(post: Record<string, string>) {
+    const auth = this.requireAuth();
+    if (!auth) return fail(401, '请先登录网易云');
+    const pid = String(post.playlistId || post.id || '').replace(/\D/g, '');
+    const trackId = String(post.songid || '').replace(/\D/g, '');
+    if (!pid) return fail(400, '歌单 ID 无效');
+    if (!trackId) return fail(400, '歌曲 ID 无效');
+    const res = await weapiRequest(
+      '/weapi/playlist/manipulate/tracks',
+      {
+        op: 'add',
+        pid,
+        tracks: trackId,
+        trackIds: JSON.stringify([Number(trackId)]),
+        csrf_token: cookieCsrf(auth.cookie) || auth.csrf || '',
+      },
+      auth.cookie,
+    );
+    const code = Number(res.json?.code ?? 0);
+    if (code !== 200) {
+      return fail(502, String(res.json?.message || res.error || '添加到歌单失败'), {
+        playlistId: pid,
+        songid: trackId,
+        code,
+      });
+    }
+    return ok({ playlistId: pid, songid: trackId, added: true });
   }
 
   private async playlistDetail(post: Record<string, string>) {

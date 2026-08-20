@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export const VERSION = '1.8.69';
+export const VERSION = '1.8.70';
 
 export const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -37,6 +37,8 @@ export interface Track {
   url: string;
   pic: string;
   link?: string;
+  album?: string;
+  durationMs?: number;
   /** 平台侧已下架/无官方版权，播放将走 RyanMusic 跨渠道私链 */
   delisted?: boolean;
 }
@@ -46,6 +48,16 @@ export interface SearchPayload {
   code: number;
   error: string;
   has_more?: boolean;
+}
+
+/** 歌词匹配面板搜索（不经过 wrap，保留原始封面 URL） */
+export interface MatchSearchTrack {
+  songid: string;
+  title: string;
+  author: string;
+  album: string;
+  durationMs: number;
+  pic: string;
 }
 
 export function bootstrapBase(): string | null {

@@ -13,8 +13,8 @@ android {
         applicationId = "cn.ryanmusic.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1869
-        versionName = "1.8.69"
+        versionCode = 1870
+        versionName = "1.8.70"
         val cloudOriginFile = File(repoRoot, "shared/cloud-origin.txt")
         val cloudOrigin = cloudOriginFile
             .takeIf { it.exists() }

@@ -1,4 +1,4 @@
-import { bootstrapBase, type Track } from './config.ts';
+import { bootstrapBase, type MatchSearchTrack, type Track } from './config.ts';
 import { FileCache } from './cache.ts';
 import { encodeLinuxData, linuxForward, neteaseApi, neteaseHttp, eapiRequest, weapiRequest } from './crypto/netease.ts';
 import { followLocation, request } from './http.ts';
@@ -75,6 +75,49 @@ export class NeteaseService {
       .filter((item): item is NonNullable<typeof item> => Boolean(item))
       .map((item) => this.wrap({ ...item, lrc: '', url: '' }));
     return { tracks, hasMore: sliced.has_more };
+  }
+
+  async searchByNameForMatch(query: string, page: number): Promise<MatchSearchTrack[]> {
+    const sourcePage = nameSearchSourcePage(page);
+    const encoded = encodeLinuxData({
+      method: 'POST',
+      url: 'http://music.163.com/api/cloudsearch/pc',
+      params: { s: query, type: 1, offset: sourcePage * 10 - 10, limit: 10 },
+    });
+    const res = await neteaseHttp('POST', 'http://music.163.com/api/linux/forward', encoded, '', {
+      Referer: 'http://music.163.com/',
+    });
+    const songs = res.json?.result?.songs;
+    if (!Array.isArray(songs) || !songs.length) return [];
+    const privileges = res.json?.result?.privileges;
+    const privById = new Map<string, any>(
+      Array.isArray(privileges)
+        ? privileges.map((item: any) => [String(item.id), item])
+        : [],
+    );
+    const ids = songs.map((s: any) => String(s.id));
+    const sliced = sliceNameSearchSongids(ids, page);
+    if (!sliced.songids.length) return [];
+    const byId = new Map(songs.map((song: any) => [String(song.id), song]));
+    return sliced.songids
+      .map((id) => {
+        const song = byId.get(String(id));
+        const track = this.trackFromSong(song, privById.get(String(id)));
+        if (!track) return null;
+        const picRaw = song?.al?.picUrl || song?.album?.picUrl || track.pic || '';
+        const pic = picRaw
+          ? httpsNeteaseUrl(picRaw.includes('?') ? picRaw : `${picRaw}?param=300x300`)
+          : '';
+        return {
+          songid: track.songid,
+          title: track.title,
+          author: track.author,
+          album: track.album || '',
+          durationMs: track.durationMs || 0,
+          pic,
+        } satisfies MatchSearchTrack;
+      })
+      .filter((item): item is MatchSearchTrack => Boolean(item));
   }
 
   async songsByIds(ids: string[], cookie = ''): Promise<Track[]> {
@@ -344,6 +387,8 @@ export class NeteaseService {
     }
     const pic = song.al?.picUrl || song.album?.picUrl || '';
     const delisted = isNeteaseDelisted(song, privilege);
+    const album = String(song.al?.name || song.album?.name || '');
+    const durationMs = Number(song.dt || song.duration || 0) || 0;
     return {
       type: 'netease',
       songid: String(id),
@@ -351,6 +396,8 @@ export class NeteaseService {
       author: artists.join(', ') || '未知艺人',
       link: `https://music.163.com/#/song?id=${id}`,
       pic,
+      album,
+      durationMs,
       ...(delisted ? { delisted: true } : {}),
     };
   }

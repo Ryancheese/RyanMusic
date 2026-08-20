@@ -1,4 +1,4 @@
-import { bootstrapBase, UA, type Track } from './config.ts';
+import { bootstrapBase, UA, type MatchSearchTrack, type Track } from './config.ts';
 import { FileCache } from './cache.ts';
 import { followLocation, request } from './http.ts';
 import { proxyUrl } from './sign.ts';
@@ -88,6 +88,39 @@ export class QqService {
       .map((id) => this.trackFromSong(byId.get(String(id))))
       .filter((item): item is Track => Boolean(item));
     return { tracks, hasMore: sliced.has_more };
+  }
+
+  async searchByNameForMatch(query: string, page: number): Promise<MatchSearchTrack[]> {
+    const sourcePage = nameSearchSourcePage(page);
+    const qs = new URLSearchParams({ w: query, p: String(sourcePage), n: '10', format: 'json' });
+    const res = await request('GET', `http://c.y.qq.com/soso/fcgi-bin/search_for_qq_cp?${qs}`, {
+      headers: {
+        Referer: 'http://m.y.qq.com',
+        'User-Agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1',
+      },
+    });
+    const list = res.json?.data?.song?.list;
+    if (!Array.isArray(list) || !list.length) return [];
+    const ids = list.map((s: any) => String(s.songmid || s.mid || '')).filter(Boolean);
+    const sliced = sliceNameSearchSongids(ids, page);
+    if (!sliced.songids.length) return [];
+    const byId = new Map(list.map((song: any) => [String(song.songmid || song.mid || ''), song]));
+    return sliced.songids
+      .map((id) => {
+        const song = byId.get(String(id));
+        const track = this.trackFromSong(song);
+        if (!track) return null;
+        return {
+          songid: track.songid,
+          title: track.title,
+          author: track.author,
+          album: track.album || '',
+          durationMs: track.durationMs || 0,
+          pic: track.pic || '',
+        } satisfies MatchSearchTrack;
+      })
+      .filter((item): item is MatchSearchTrack => Boolean(item));
   }
 
   async songsByIds(ids: string[]): Promise<Track[]> {
@@ -327,6 +360,8 @@ export class QqService {
     const pic = albummid
       ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albummid}.jpg`
       : '';
+    const album = String(song.albumname || song.album?.title || song.album?.name || '');
+    const intervalSec = Number(song.interval || song.duration || 0) || 0;
     return this.wrap({
       type: 'qq',
       songid: String(mid),
@@ -336,6 +371,8 @@ export class QqService {
       lrc: '',
       url: '',
       pic,
+      album,
+      durationMs: intervalSec > 0 ? Math.round(intervalSec * 1000) : 0,
       ...(isQqDelisted(song) ? { delisted: true } : {}),
     });
   }

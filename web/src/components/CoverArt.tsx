@@ -101,7 +101,7 @@ const CoverArt: React.FC<CoverArtProps> = ({
   }, [url, loaded, failed, reveal]);
 
   if (!candidates.length || failed) {
-    return <DefaultCover className={placeholderClassName} />;
+    return <DefaultCover className={`${className} ${placeholderClassName}`.trim()} />;
   }
 
   const image = (
@@ -112,7 +112,7 @@ const CoverArt: React.FC<CoverArtProps> = ({
       draggable={false}
       loading={lazy ? 'lazy' : 'eager'}
       decoding="async"
-      className={className}
+      className="h-full w-full object-cover"
       onLoad={reveal}
       onError={() => {
         if (index + 1 < candidates.length) {
@@ -128,7 +128,7 @@ const CoverArt: React.FC<CoverArtProps> = ({
 
   if (!flipOnLoad) {
     return (
-      <div className="relative h-full w-full overflow-hidden">
+      <div className={`relative overflow-hidden ${className}`}>
         {!loaded ? (
           <div className="absolute inset-0 z-[1]">
             <CoverShimmer />
@@ -142,7 +142,7 @@ const CoverArt: React.FC<CoverArtProps> = ({
   }
 
   return (
-    <div className="ryan-cover-flip-scene relative h-full w-full">
+    <div className={`ryan-cover-flip-scene relative ${className}`}>
       <div
         className={[
           'ryan-cover-flip-card',

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Flame } from 'lucide-react';
 import { coverImageUrl, fetchNeteaseComments, type SongComment } from '../api';
 import type { Track } from '../types';
-import { useCommentAtmosphereStore } from '../store/commentAtmosphereStore';
+import { useCommentAtmosphereStore, type CommentReadOrder } from '../store/commentAtmosphereStore';
 
 interface CommentAtmosphereOverlayProps {
   track: Track | null;
@@ -150,15 +150,65 @@ function pickPlacement(
   return candidates[0] || { side: 'left', edgePct: 6, topPct: 14 };
 }
 
-function buildPool(hot: SongComment[], latest: SongComment[]): Array<{ comment: SongComment; hot: boolean }> {
+const HOT_SHARE = 7;
+const LATEST_SHARE = 3;
+
+function usableComments(list: SongComment[]): SongComment[] {
+  return list.filter((item) => item.content.trim().length >= 8);
+}
+
+function applySourceOrder(list: SongComment[], order: CommentReadOrder): SongComment[] {
+  if (order === 'reverse') return [...list].reverse();
+  return list.slice();
+}
+
+function buildPool(
+  hot: SongComment[],
+  latest: SongComment[],
+  order: CommentReadOrder,
+): Array<{ comment: SongComment; hot: boolean }> {
   const hotIds = new Set(hot.map((item) => item.id));
-  const preferred = hot
-    .filter((item) => item.content.trim().length >= 8)
-    .map((item) => ({ comment: item, hot: true as const }));
-  const rest = latest
-    .filter((item) => !hotIds.has(item.id) && item.content.trim().length >= 8)
-    .map((item) => ({ comment: item, hot: false as const }));
-  return shuffle([...preferred, ...preferred, ...rest]);
+  const hotList = applySourceOrder(usableComments(hot), order);
+  const latestList = applySourceOrder(
+    usableComments(latest.filter((item) => !hotIds.has(item.id))),
+    order,
+  );
+
+  const wrap = (
+    list: SongComment[],
+    isHot: boolean,
+  ): Array<{ comment: SongComment; hot: boolean }> => (
+    list.map((comment) => ({ comment, hot: isHot }))
+  );
+
+  if (!hotList.length) {
+    const onlyLatest = wrap(latestList, false);
+    return order === 'random' ? shuffle(onlyLatest) : onlyLatest;
+  }
+  if (!latestList.length) {
+    const onlyHot = wrap(hotList, true);
+    return order === 'random' ? shuffle(onlyHot) : onlyHot;
+  }
+
+  const cycles = Math.max(
+    Math.ceil(hotList.length / HOT_SHARE),
+    Math.ceil(latestList.length / LATEST_SHARE),
+    1,
+  );
+  const mixed: Array<{ comment: SongComment; hot: boolean }> = [];
+  let hotIndex = 0;
+  let latestIndex = 0;
+  for (let cycle = 0; cycle < cycles; cycle += 1) {
+    for (let i = 0; i < HOT_SHARE; i += 1) {
+      mixed.push({ comment: hotList[hotIndex % hotList.length], hot: true });
+      hotIndex += 1;
+    }
+    for (let i = 0; i < LATEST_SHARE; i += 1) {
+      mixed.push({ comment: latestList[latestIndex % latestList.length], hot: false });
+      latestIndex += 1;
+    }
+  }
+  return order === 'random' ? shuffle(mixed) : mixed;
 }
 
 const CommentBubble: React.FC<{
@@ -258,11 +308,7 @@ const CommentBubble: React.FC<{
           />
 
           <div
-            className="mb-1.5 flex min-w-0 items-center gap-1.5"
-            style={{
-              justifyContent: avatarOnLeft ? 'flex-start' : 'flex-end',
-              flexDirection: avatarOnLeft ? 'row' : 'row-reverse',
-            }}
+            className="mb-1.5 flex min-w-0 items-center justify-start gap-1.5"
           >
             <span className="truncate text-[12px] font-semibold tracking-wide" style={{ color: mute }}>
               {item.comment.nickname || '匿名'}
@@ -282,10 +328,11 @@ const CommentBubble: React.FC<{
           </div>
 
           <p
-            className="whitespace-pre-wrap break-words text-[13px] leading-[1.55]"
+            className="whitespace-pre-wrap break-words text-left text-[13px] leading-[1.55]"
             style={{
               wordBreak: 'break-word',
-              textAlign: avatarOnLeft ? 'left' : 'right',
+              direction: 'ltr',
+              unicodeBidi: 'plaintext',
               minHeight: '1.55em',
             }}
           >
@@ -318,6 +365,8 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
 }) => {
   const enabled = useCommentAtmosphereStore((state) => state.enabled);
   const typewriter = useCommentAtmosphereStore((state) => state.typewriter);
+  const readOrder = useCommentAtmosphereStore((state) => state.readOrder);
+  const [fetched, setFetched] = useState<{ hot: SongComment[]; latest: SongComment[] } | null>(null);
   const [pool, setPool] = useState<Array<{ comment: SongComment; hot: boolean }>>([]);
   const [active, setActive] = useState<ActiveBubble[]>([]);
   const cursorRef = useRef(0);
@@ -336,11 +385,16 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
 
   useEffect(() => {
     if (!enabled || !track) {
+      setFetched(null);
       setPool([]);
       setActive([]);
       clearTimers();
       return;
     }
+
+    setFetched(null);
+    setActive([]);
+    clearTimers();
 
     let cancelled = false;
     const timer = window.setTimeout(() => {
@@ -356,13 +410,15 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
           });
           if (cancelled) return;
           if (result.code !== 200 || !result.data) {
-            setPool([]);
+            setFetched(null);
             return;
           }
-          setPool(buildPool(result.data.hotComments || [], result.data.comments || []));
-          cursorRef.current = 0;
+          setFetched({
+            hot: result.data.hotComments || [],
+            latest: result.data.comments || [],
+          });
         } catch {
-          if (!cancelled) setPool([]);
+          if (!cancelled) setFetched(null);
         }
       })();
     }, 800);
@@ -372,6 +428,15 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
       window.clearTimeout(timer);
     };
   }, [clearTimers, enabled, trackKey]);
+
+  useEffect(() => {
+    if (!fetched) {
+      setPool([]);
+      return;
+    }
+    setPool(buildPool(fetched.hot, fetched.latest, readOrder));
+    cursorRef.current = 0;
+  }, [fetched, readOrder]);
 
   useEffect(() => {
     clearTimers();

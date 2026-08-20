@@ -12,6 +12,7 @@ import {
   type CloudPlaylist,
   type CloudTrack,
 } from '../api';
+import { touchPlaylistRecent } from './playlistRecentStore';
 
 const NETEASE_KEY = 'ryanmusic-netease-cloud-v1';
 const QQ_KEY = 'ryanmusic-qq-cloud-v1';
@@ -238,6 +239,10 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       return;
     }
     let playlists = res.data.playlists || [];
+    playlists = playlists.map((pl, index) => ({
+      ...pl,
+      order: pl.order ?? index,
+    }));
     writeMeta(NETEASE_KEY, { playlists, syncedAt: Date.now() });
     set({
       neteasePlaylists: playlists,
@@ -261,6 +266,10 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       return;
     }
     let playlists = res.data.playlists || [];
+    playlists = playlists.map((pl, index) => ({
+      ...pl,
+      order: pl.order ?? index,
+    }));
     writeMeta(QQ_KEY, { playlists, syncedAt: Date.now() });
     set({
       qqPlaylists: playlists,
@@ -277,6 +286,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     set({ qqPlaylists: playlists });
   },
   openNeteasePlaylist: async (playlist) => {
+    touchPlaylistRecent('netease', playlist.id);
     const cached = getTrackCache('netease', playlist.id);
     set({
       neteaseLoading: !cached,
@@ -313,6 +323,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     }
   },
   openQqPlaylist: async (playlist) => {
+    touchPlaylistRecent('qq', playlist.id);
     const cached = getTrackCache('qq', playlist.id);
     set({
       qqLoading: !cached,

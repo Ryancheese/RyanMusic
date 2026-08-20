@@ -795,7 +795,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let current = currentVersion()
         fetchRelease(apiURL: releasesAPIURL, pageURL: releasesPageURL, current: current) { primary in
             if primary.hasUpdate && primary.downloadURL == nil {
-                self.fetchRelease(apiURL: self.legacyReleasesAPIURL, pageURL: self.legacyReleasesPageURL, current: current) { legacy in
+                self.fetchRelease(apiURL: legacyReleasesAPIURL, pageURL: legacyReleasesPageURL, current: current) { legacy in
                     if legacy.downloadURL != nil {
                         var merged = primary
                         merged.downloadURL = legacy.downloadURL

@@ -8,7 +8,7 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// server/src/config.ts
+// src/config.ts
 import { createHash } from "node:crypto";
 function randomCnIp() {
   const a = CN_IP_A[Math.floor(Math.random() * CN_IP_A.length)];
@@ -35,16 +35,16 @@ function apiSecret(coreMarker) {
 }
 var VERSION, UA, NETEASE_UA, CN_IP_A;
 var init_config = __esm({
-  "server/src/config.ts"() {
+  "src/config.ts"() {
     "use strict";
-    VERSION = "1.8.69";
+    VERSION = "1.8.70";
     UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     NETEASE_UA = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.29.205117";
     CN_IP_A = [36, 58, 111, 112, 114, 117, 120, 123, 183, 218, 223];
   }
 });
 
-// server/src/http.ts
+// src/http.ts
 var http_exports = {};
 __export(http_exports, {
   PROXY_ENV_KEYS: () => PROXY_ENV_KEYS,
@@ -126,10 +126,10 @@ async function dohResolve(host) {
   ]);
 }
 async function raceFirstNonNull(tasks) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     let pending = tasks.length;
     if (!pending) {
-      resolve(null);
+      resolve2(null);
       return;
     }
     let settled = false;
@@ -137,14 +137,14 @@ async function raceFirstNonNull(tasks) {
       void task.then((value) => {
         if (!settled && value) {
           settled = true;
-          resolve(value);
+          resolve2(value);
           return;
         }
         pending -= 1;
-        if (!settled && pending === 0) resolve(null);
+        if (!settled && pending === 0) resolve2(null);
       }).catch(() => {
         pending -= 1;
-        if (!settled && pending === 0) resolve(null);
+        if (!settled && pending === 0) resolve2(null);
       });
     }
   });
@@ -169,10 +169,10 @@ function firstLookupIp(address) {
   return v4?.address || null;
 }
 function systemLookup(hostname, opts) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     const forced = { ...opts, family: opts.family || 4 };
     originalLookup(hostname, forced, (err, address, family) => {
-      resolve({ err, address, family });
+      resolve2({ err, address, family });
     });
   });
 }
@@ -197,9 +197,9 @@ function patchedLookup(hostname, options, callback) {
     finish(null, ip2, 4);
   };
   const system = systemLookup(hostname, opts);
-  const publicDns = new Promise((resolve) => {
+  const publicDns = new Promise((resolve2) => {
     setTimeout(() => {
-      void resolveHost(hostname).then(resolve).catch(() => resolve(null));
+      void resolveHost(hostname).then(resolve2).catch(() => resolve2(null));
     }, SYSTEM_DNS_GRACE_MS);
   });
   void Promise.race([
@@ -407,7 +407,7 @@ async function followLocation(url, referer, timeoutMs = REDIRECT_TIMEOUT_MS) {
 }
 var FAKE_IP_MASK, FAKE_IP_NET, DEFAULT_TIMEOUT_MS, BUFFER_TIMEOUT_MS, REDIRECT_TIMEOUT_MS, DNS_TIMEOUT_MS, DOH_TIMEOUT_MS, SYSTEM_DNS_GRACE_MS, hostCache, dnsPatched, originalLookup, cnResolver, intlResolver, PROXY_ENV_KEYS;
 var init_http = __esm({
-  "server/src/http.ts"() {
+  "src/http.ts"() {
     "use strict";
     init_config();
     FAKE_IP_MASK = 4294836224;
@@ -445,7 +445,7 @@ var init_http = __esm({
   }
 });
 
-// server/src/util.ts
+// src/util.ts
 function decodeEntities(str) {
   return str.replace(/&#13;/g, "").replace(/&#10;/g, "\n").replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))).replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&nbsp;/g, " ").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
@@ -519,25 +519,25 @@ function nameSearchSourcePage(page) {
   return n < 1 || Number.isNaN(n) ? 1 : n;
 }
 function firstTruthy(tasks) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     let pending = tasks.length;
     let settled = false;
     if (!pending) {
-      resolve(null);
+      resolve2(null);
       return;
     }
     for (const task of tasks) {
       void task().then((value) => {
         if (!settled && value) {
           settled = true;
-          resolve(value);
+          resolve2(value);
           return;
         }
         pending -= 1;
-        if (!settled && pending === 0) resolve(null);
+        if (!settled && pending === 0) resolve2(null);
       }).catch(() => {
         pending -= 1;
-        if (!settled && pending === 0) resolve(null);
+        if (!settled && pending === 0) resolve2(null);
       });
     }
   });
@@ -637,13 +637,13 @@ function parseSongUrl(url) {
 }
 var PLACEHOLDER_LYRIC_RE;
 var init_util = __esm({
-  "server/src/util.ts"() {
+  "src/util.ts"() {
     "use strict";
     PLACEHOLDER_LYRIC_RE = /^(?:暂无歌词|无歌词|纯音乐|此歌曲为没有填词的纯音乐|instrumental|not\s*available|no\s*lyrics?)[\s.…]*$/iu;
   }
 });
 
-// server/src/crypto/netease.ts
+// src/crypto/netease.ts
 import { createCipheriv, createHash as createHash2, randomInt } from "node:crypto";
 function modPow(base, exp, mod) {
   let result = 1n;
@@ -818,7 +818,7 @@ async function eapiRequest(apiPath, data, cookie = "") {
 }
 var LINUX_KEY, WEAPI_PRESET, WEAPI_IV, EAPI_KEY, BASE62, RSA_N, RSA_E;
 var init_netease = __esm({
-  "server/src/crypto/netease.ts"() {
+  "src/crypto/netease.ts"() {
     "use strict";
     init_config();
     init_http();
@@ -835,7 +835,7 @@ var init_netease = __esm({
   }
 });
 
-// server/src/sign.ts
+// src/sign.ts
 var sign_exports = {};
 __export(sign_exports, {
   proxyUrl: () => proxyUrl,
@@ -868,12 +868,12 @@ function proxyUrl(secret, get, type, id) {
   return `api.php?${params.toString()}`;
 }
 var init_sign = __esm({
-  "server/src/sign.ts"() {
+  "src/sign.ts"() {
     "use strict";
   }
 });
 
-// server/src/crossPlay.ts
+// src/crossPlay.ts
 function normalizeMatchText2(value) {
   return String(value || "").toLowerCase().replace(/[\(\[（【].*?[\)\]）】]/g, "").replace(/[\s\p{P}\p{S}]/gu, "").trim();
 }
@@ -936,14 +936,14 @@ function pickBestCrossPlayTrack(target, tracks, mode = "strict") {
 }
 var AUTO_MATCH_MIN_SCORE2, AUTO_MATCH_SEARCH_LIMIT2;
 var init_crossPlay = __esm({
-  "server/src/crossPlay.ts"() {
+  "src/crossPlay.ts"() {
     "use strict";
     AUTO_MATCH_MIN_SCORE2 = 72;
     AUTO_MATCH_SEARCH_LIMIT2 = 8;
   }
 });
 
-// server/src/comments.ts
+// src/comments.ts
 var comments_exports = {};
 __export(comments_exports, {
   fetchNeteaseCommentPage: () => fetchNeteaseCommentPage,
@@ -1107,7 +1107,7 @@ async function loadSongComments(netease, cache, post, cookie = "") {
 }
 var MOBILE_ONLY_COMMENT_RE, DELETED_COMMENT_RE;
 var init_comments = __esm({
-  "server/src/comments.ts"() {
+  "src/comments.ts"() {
     "use strict";
     init_crossPlay();
     init_netease();
@@ -1117,12 +1117,17 @@ var init_comments = __esm({
   }
 });
 
-// server/src/app.ts
+// src/index.ts
+import { createServer } from "node:http";
+import { dirname as dirname2, join as join7, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// src/app.ts
 import { createReadStream, existsSync as existsSync4, statSync as statSync2 } from "node:fs";
 import { join as join6, normalize, extname } from "node:path";
 import { Readable } from "node:stream";
 
-// server/node_modules/hono/dist/compose.js
+// node_modules/hono/dist/compose.js
 var compose = (middleware, onError, onNotFound) => {
   return (context, next) => {
     let index = -1;
@@ -1166,10 +1171,10 @@ var compose = (middleware, onError, onNotFound) => {
   };
 };
 
-// server/node_modules/hono/dist/request/constants.js
+// node_modules/hono/dist/request/constants.js
 var GET_MATCH_RESULT = /* @__PURE__ */ Symbol();
 
-// server/node_modules/hono/dist/utils/buffer.js
+// node_modules/hono/dist/utils/buffer.js
 var bufferToFormData = (arrayBuffer, contentType) => {
   const response = new Response(arrayBuffer, {
     headers: {
@@ -1180,7 +1185,7 @@ var bufferToFormData = (arrayBuffer, contentType) => {
   return response.formData();
 };
 
-// server/node_modules/hono/dist/utils/body.js
+// node_modules/hono/dist/utils/body.js
 var isRawRequest = (request2) => "headers" in request2;
 var parseBody = async (request2, options = /* @__PURE__ */ Object.create(null)) => {
   const { all = false, dot = false } = options;
@@ -1266,7 +1271,7 @@ var handleParsingNestedValues = (form, key, value) => {
   });
 };
 
-// server/node_modules/hono/dist/utils/url.js
+// node_modules/hono/dist/utils/url.js
 var splitPath = (path) => {
   const paths = path.split("/");
   if (paths[0] === "") {
@@ -1468,7 +1473,7 @@ var getQueryParams = (url, key) => {
 };
 var decodeURIComponent_ = decodeURIComponent;
 
-// server/node_modules/hono/dist/request.js
+// node_modules/hono/dist/request.js
 var HonoRequest = class {
   /**
    * `.raw` can get the raw Request object.
@@ -1749,7 +1754,7 @@ var HonoRequest = class {
   }
 };
 
-// server/node_modules/hono/dist/utils/html.js
+// node_modules/hono/dist/utils/html.js
 var HtmlEscapedCallbackPhase = {
   Stringify: 1,
   BeforeStream: 2,
@@ -1791,7 +1796,7 @@ var resolveCallback = async (str, phase, preserveCallbacks, context, buffer) => 
   }
 };
 
-// server/node_modules/hono/dist/context.js
+// node_modules/hono/dist/context.js
 var TEXT_PLAIN = "text/plain; charset=UTF-8";
 var setDefaultContentType = (contentType, headers) => {
   return {
@@ -2063,11 +2068,11 @@ var Context = class {
     }
     return Object.fromEntries(this.#var);
   }
-  #newResponse(data, arg, headers) {
+  #newResponse(data, arg2, headers) {
     let responseHeaders = this.#res ? new Headers(this.#res.headers) : this.#preparedHeaders;
-    if (typeof arg === "object" && arg.headers) {
+    if (typeof arg2 === "object" && arg2.headers) {
       responseHeaders ??= new Headers();
-      for (const [key, value] of new Headers(arg.headers)) {
+      for (const [key, value] of new Headers(arg2.headers)) {
         if (key === "set-cookie") {
           responseHeaders.append(key, value);
         } else {
@@ -2099,7 +2104,7 @@ var Context = class {
         }
       }
     }
-    const status = typeof arg === "number" ? arg : arg?.status ?? this.#status;
+    const status = typeof arg2 === "number" ? arg2 : arg2?.status ?? this.#status;
     return createResponseInstance(data, {
       status,
       headers: responseHeaders ?? headers
@@ -2127,7 +2132,7 @@ var Context = class {
    * })
    * ```
    */
-  body = (data, arg, headers) => this.#newResponse(data, arg, headers);
+  body = (data, arg2, headers) => this.#newResponse(data, arg2, headers);
   /**
    * `.text()` can render text as `Content-Type:text/plain`.
    *
@@ -2140,10 +2145,10 @@ var Context = class {
    * })
    * ```
    */
-  text = (text, arg, headers) => {
-    return !this.#preparedHeaders && !this.#status && !arg && !headers && !this.finalized ? new Response(text) : this.#newResponse(
+  text = (text, arg2, headers) => {
+    return !this.#preparedHeaders && !this.#status && !arg2 && !headers && !this.finalized ? new Response(text) : this.#newResponse(
       text,
-      arg,
+      arg2,
       setDefaultContentType(TEXT_PLAIN, headers)
     );
   };
@@ -2159,15 +2164,15 @@ var Context = class {
    * })
    * ```
    */
-  json = (object, arg, headers) => {
+  json = (object, arg2, headers) => {
     return this.#newResponse(
       JSON.stringify(object),
-      arg,
+      arg2,
       setDefaultContentType("application/json", headers)
     );
   };
-  html = (html, arg, headers) => {
-    const res = (html2) => this.#newResponse(html2, arg, setDefaultContentType("text/html; charset=UTF-8", headers));
+  html = (html, arg2, headers) => {
+    const res = (html2) => this.#newResponse(html2, arg2, setDefaultContentType("text/html; charset=UTF-8", headers));
     return typeof html === "object" ? resolveCallback(html, HtmlEscapedCallbackPhase.Stringify, false, {}).then(res) : res(html);
   };
   /**
@@ -2213,7 +2218,7 @@ var Context = class {
   };
 };
 
-// server/node_modules/hono/dist/router.js
+// node_modules/hono/dist/router.js
 var METHOD_NAME_ALL = "ALL";
 var METHOD_NAME_ALL_LOWERCASE = "all";
 var METHODS = ["get", "post", "put", "delete", "options", "patch", "query"];
@@ -2221,10 +2226,10 @@ var MESSAGE_MATCHER_IS_ALREADY_BUILT = "Can not add a route since the matcher is
 var UnsupportedPathError = class extends Error {
 };
 
-// server/node_modules/hono/dist/utils/constants.js
+// node_modules/hono/dist/utils/constants.js
 var COMPOSED_HANDLER = "__COMPOSED_HANDLER";
 
-// server/node_modules/hono/dist/hono-base.js
+// node_modules/hono/dist/hono-base.js
 var notFoundHandler = (c) => {
   return c.text("404 Not Found", 404);
 };
@@ -2330,14 +2335,14 @@ var Hono = class _Hono {
    * app.route("/api", app2) // GET /api/user
    * ```
    */
-  route(path, app) {
+  route(path, app2) {
     const subApp = this.basePath(path);
-    app.routes.map((r) => {
+    app2.routes.map((r) => {
       let handler;
-      if (app.errorHandler === errorHandler) {
+      if (app2.errorHandler === errorHandler) {
         handler = r.handler;
       } else {
-        handler = async (c, next) => (await compose([], app.errorHandler)(c, () => r.handler(c, next))).res;
+        handler = async (c, next) => (await compose([], app2.errorHandler)(c, () => r.handler(c, next))).res;
         handler[COMPOSED_HANDLER] = r.handler;
       }
       subApp.#addRoute(r.method, r.path, handler, r.basePath);
@@ -2601,11 +2606,11 @@ var Hono = class _Hono {
   };
 };
 
-// server/node_modules/hono/dist/router/reg-exp-router/matcher.js
+// node_modules/hono/dist/router/reg-exp-router/matcher.js
 var emptyParam = [];
 function match(method, path) {
   const matchers = this.buildAllMatchers();
-  const match2 = (method2, path2) => {
+  const match2 = ((method2, path2) => {
     const matcher = matchers[method2] || matchers[METHOD_NAME_ALL];
     const staticMatch = matcher[2][path2];
     if (staticMatch) {
@@ -2617,12 +2622,12 @@ function match(method, path) {
     }
     const index = match3.indexOf("", 1);
     return [matcher[1][index], match3];
-  };
+  });
   this.match = match2;
   return match2(method, path);
 }
 
-// server/node_modules/hono/dist/router/reg-exp-router/node.js
+// node_modules/hono/dist/router/reg-exp-router/node.js
 var LABEL_REG_EXP_STR = "[^/]+";
 var ONLY_WILDCARD_REG_EXP_STR = ".*";
 var TAIL_WILDCARD_REG_EXP_STR = "(?:|/.*)";
@@ -2729,7 +2734,7 @@ var Node = class _Node {
   }
 };
 
-// server/node_modules/hono/dist/router/reg-exp-router/trie.js
+// node_modules/hono/dist/router/reg-exp-router/trie.js
 var Trie = class {
   #context = { varIndex: 0 };
   #root = new Node();
@@ -2793,7 +2798,7 @@ var Trie = class {
   }
 };
 
-// server/node_modules/hono/dist/router/reg-exp-router/router.js
+// node_modules/hono/dist/router/reg-exp-router/router.js
 var wildcardRegExpCache = /* @__PURE__ */ Object.create(null);
 function buildWildcardRegExp(path) {
   return wildcardRegExpCache[path] ??= new RegExp(
@@ -2951,7 +2956,7 @@ var RegExpRouter = class {
   }
 };
 
-// server/node_modules/hono/dist/router/smart-router/router.js
+// node_modules/hono/dist/router/smart-router/router.js
 var SmartRouter = class {
   name = "SmartRouter";
   #routers = [];
@@ -3006,7 +3011,7 @@ var SmartRouter = class {
   }
 };
 
-// server/node_modules/hono/dist/router/trie-router/node.js
+// node_modules/hono/dist/router/trie-router/node.js
 var emptyParams = /* @__PURE__ */ Object.create(null);
 var hasChildren = (children) => {
   for (const _ in children) {
@@ -3190,7 +3195,7 @@ var Node2 = class _Node2 {
   }
 };
 
-// server/node_modules/hono/dist/router/trie-router/router.js
+// node_modules/hono/dist/router/trie-router/router.js
 var TrieRouter = class {
   name = "TrieRouter";
   #node;
@@ -3212,7 +3217,7 @@ var TrieRouter = class {
   }
 };
 
-// server/node_modules/hono/dist/hono.js
+// node_modules/hono/dist/hono.js
 var Hono2 = class extends Hono {
   /**
    * Creates an instance of the Hono class.
@@ -3227,11 +3232,11 @@ var Hono2 = class extends Hono {
   }
 };
 
-// server/src/accounts/netease.ts
+// src/accounts/netease.ts
 init_netease();
 import { join as join2 } from "node:path";
 
-// server/src/accounts/session.ts
+// src/accounts/session.ts
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 function readJson(path) {
@@ -3300,7 +3305,7 @@ function qqGuid() {
   }).toUpperCase();
 }
 
-// server/src/accounts/netease.ts
+// src/accounts/netease.ts
 var NeteaseAccount = class {
   constructor(cache, netease) {
     this.netease = netease;
@@ -3354,6 +3359,8 @@ var NeteaseAccount = class {
         return this.likeCheck(post);
       case "netease_playlist_detail":
         return this.playlistDetail(post);
+      case "netease_playlist_add":
+        return this.playlistAdd(post);
       case "netease_songs_by_ids":
         return this.songsByIds(post.ids || "");
       default:
@@ -3462,13 +3469,15 @@ var NeteaseAccount = class {
     const list = res.json?.playlist;
     if (!Array.isArray(list)) return fail(502, "\u62C9\u53D6\u6B4C\u5355\u5931\u8D25");
     return ok({
-      playlists: list.map((pl) => ({
+      playlists: list.map((pl, index) => ({
         id: String(pl.id || ""),
         name: String(pl.name || "\u672A\u547D\u540D\u6B4C\u5355"),
         cover: String(pl.coverImgUrl || ""),
         trackCount: Number(pl.trackCount || 0),
         specialType: Number(pl.specialType || 0),
-        subscribed: Boolean(pl.subscribed)
+        subscribed: Boolean(pl.subscribed),
+        order: index,
+        createTime: Number(pl.createTime || 0)
       }))
     });
   }
@@ -3572,6 +3581,34 @@ var NeteaseAccount = class {
       tracks: await this.netease.songsByIdsV3(pageIds, auth.cookie)
     });
   }
+  async playlistAdd(post) {
+    const auth = this.requireAuth();
+    if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
+    const pid = String(post.playlistId || post.id || "").replace(/\D/g, "");
+    const trackId = String(post.songid || "").replace(/\D/g, "");
+    if (!pid) return fail(400, "\u6B4C\u5355 ID \u65E0\u6548");
+    if (!trackId) return fail(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    const res = await weapiRequest(
+      "/weapi/playlist/manipulate/tracks",
+      {
+        op: "add",
+        pid,
+        tracks: trackId,
+        trackIds: JSON.stringify([Number(trackId)]),
+        csrf_token: cookieCsrf(auth.cookie) || auth.csrf || ""
+      },
+      auth.cookie
+    );
+    const code = Number(res.json?.code ?? 0);
+    if (code !== 200) {
+      return fail(502, String(res.json?.message || res.error || "\u6DFB\u52A0\u5230\u6B4C\u5355\u5931\u8D25"), {
+        playlistId: pid,
+        songid: trackId,
+        code
+      });
+    }
+    return ok({ playlistId: pid, songid: trackId, added: true });
+  }
   async playlistDetail(post) {
     const auth = this.requireAuth();
     if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
@@ -3597,7 +3634,7 @@ function fail(code, error, data = "") {
   return { code, error, data };
 }
 
-// server/src/accounts/qq.ts
+// src/accounts/qq.ts
 init_http();
 import { createHash as createHash3 } from "node:crypto";
 import { join as join3 } from "node:path";
@@ -3653,6 +3690,8 @@ var QqAccount = class {
         return this.likeCheck(post);
       case "qq_playlist_detail":
         return this.playlistDetail(post.id || "");
+      case "qq_playlist_add":
+        return this.playlistAdd(post);
       default:
         return fail2(400, "\u672A\u77E5\u64CD\u4F5C");
     }
@@ -4043,7 +4082,9 @@ ${body}`;
         cover: String(pl.diss_cover || ""),
         trackCount: Number(pl.song_cnt || 0),
         dirid: Number(pl.dirid || 0),
-        subscribed: false
+        subscribed: false,
+        order: out.length,
+        createTime: Number(pl.create_time || pl.createTime || 0)
       });
     }
     const fav = await this.qqGet(
@@ -4066,7 +4107,8 @@ ${body}`;
         cover: String(pl.logo || pl.pic || ""),
         trackCount: Number(pl.song_cnt || pl.songnum || 0),
         dirid: 0,
-        subscribed: true
+        subscribed: true,
+        order: out.length
       });
     }
     const seen = /* @__PURE__ */ new Set();
@@ -4188,6 +4230,61 @@ ${body}`;
     const tracks = await this.playlistTracks(liked.id, auth.cookie);
     return ok2({ playlistId: liked.id, name: "\u6211\u559C\u6B22", tracks, total: tracks.length });
   }
+  async playlistAdd(post) {
+    const auth = this.read();
+    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    const songId = Number(String(post.songid || "").replace(/\D/g, ""));
+    if (!songId) return fail2(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    let dirId = Number(String(post.dirid || "").replace(/\D/g, ""));
+    const playlistId = String(post.playlistId || post.id || "").replace(/\D/g, "");
+    if (!dirId && playlistId) {
+      const playlists = await this.fetchPlaylists(auth.uin, auth.cookie);
+      const matched = playlists.find((pl) => String(pl.id) === playlistId);
+      dirId = Number(matched?.dirid || 0);
+    }
+    if (!dirId) dirId = 201;
+    const map = cookieToMap(auth.cookie);
+    const pSkey = map.p_skey || map.pskey || map.skey || "";
+    const gtk = getGtk(pSkey || map.qqmusic_key || "");
+    const payload = {
+      comm: {
+        g_tk: gtk,
+        uin: Number(auth.uin) || auth.uin,
+        format: "json",
+        platform: "yqq.json",
+        ct: 24,
+        cv: 0
+      },
+      req_1: {
+        module: "music.musicasset.PlaylistDetailWrite",
+        method: "AddSonglist",
+        param: {
+          dirId,
+          v_songInfo: [{ songId, songType: 0 }]
+        }
+      }
+    };
+    const res = await request("POST", "https://u.y.qq.com/cgi-bin/musicu.fcg", {
+      headers: {
+        Referer: "https://y.qq.com/",
+        Origin: "https://y.qq.com",
+        Cookie: auth.cookie,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = res.json?.req_1;
+    const code = Number(data?.code ?? res.json?.code ?? -1);
+    if (!res.ok || code !== 0) {
+      return fail2(502, String(data?.data?.Msg || data?.data?.msg || "\u6DFB\u52A0\u5230\u6B4C\u5355\u5931\u8D25"), {
+        playlistId,
+        dirId,
+        songid: String(songId),
+        code
+      });
+    }
+    return ok2({ playlistId, dirId, songid: String(songId), added: true });
+  }
   async playlistDetail(id) {
     const auth = this.read();
     if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
@@ -4220,7 +4317,7 @@ function fail2(code, error, data = "") {
   return { code, error, data };
 }
 
-// server/src/cache.ts
+// src/cache.ts
 import { mkdirSync as mkdirSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2, existsSync as existsSync2, readdirSync, rmSync, statSync } from "node:fs";
 import { join as join4 } from "node:path";
 var PRESERVE_DIRS = /* @__PURE__ */ new Set(["netease_auth", "qq_auth"]);
@@ -4339,13 +4436,13 @@ function measurePath(path) {
   }
 }
 
-// server/src/app.ts
+// src/app.ts
 init_config();
 
-// server/src/crypto/qrcDecrypt.ts
+// src/crypto/qrcDecrypt.ts
 import { inflateSync, unzipSync } from "node:zlib";
 
-// server/src/crypto/qrcDes.ts
+// src/crypto/qrcDes.ts
 var QQ_KEY = Buffer.from("!@#)(*$%123ZXC!@!@#)(NHL", "ascii");
 var ENCRYPT = 1;
 var DECRYPT = 0;
@@ -4481,7 +4578,7 @@ function qrcTripleDesDecrypt(hexCipher) {
   return out;
 }
 
-// server/src/crypto/qrcDecrypt.ts
+// src/crypto/qrcDecrypt.ts
 function inflateAuto(data) {
   const candidates = [data];
   for (const magic of [Buffer.from([120, 156]), Buffer.from([120, 1]), Buffer.from([120, 218])]) {
@@ -4524,10 +4621,10 @@ function qrcPlainOrDecrypt(raw2) {
   }
 }
 
-// server/src/lyrics.ts
+// src/lyrics.ts
 init_netease();
 
-// server/src/kugouLyrics.ts
+// src/kugouLyrics.ts
 init_http();
 init_util();
 import { createHash as createHash4 } from "node:crypto";
@@ -4636,12 +4733,19 @@ async function requestKugou(url, params, module, headers = {}) {
   }
   return data;
 }
+function kugouCoverUrl(info, hash) {
+  const direct = String(info?.Image || info?.album_img || info?.imgUrl || info?.album_img_url || "").trim().replace(/\{size\}/gi, "240");
+  if (/^https?:\/\//i.test(direct)) return direct;
+  const h = String(hash || info?.FileHash || info?.hash || "").trim();
+  if (h.length >= 8) return `https://imgessl.kugou.com/stdmusic/240/${h.slice(0, 8)}/${h}.jpg`;
+  return "";
+}
 function mapSearchResult(info) {
   const singers = Array.isArray(info?.Singers) ? info.Singers : [];
   const artists = singers.map((s) => String(s?.name || "").trim()).filter(Boolean).join(", ") || String(info?.singername || "").split("\u3001").map((s) => s.trim()).filter(Boolean).join(", ");
   const id = Number(info?.ID || info?.album_audio_id || 0);
   const hash = String(info?.FileHash || info?.hash || "").trim();
-  const name = String(info?.SongName || info?.songname || "").trim();
+  const name = String(info?.SongName || info?.songname || "").replace(/<[^>]+>/g, "").trim();
   if (!id || !hash || !name) return null;
   return {
     id,
@@ -4649,7 +4753,8 @@ function mapSearchResult(info) {
     artists,
     album: String(info?.AlbumName || info?.album_name || "").trim(),
     durationMs: Math.max(0, Number(info?.Duration ?? info?.duration ?? 0)) * 1e3,
-    kgHash: hash
+    kgHash: hash,
+    pic: kugouCoverUrl(info, hash)
   };
 }
 async function searchKugouSongs(keyword, page = 1, pageSize = 20) {
@@ -4735,7 +4840,7 @@ async function fetchKugouLyricText(song) {
   return decodeEntities(lyricText);
 }
 
-// server/src/lyrics.ts
+// src/lyrics.ts
 init_http();
 init_util();
 var AMLL_DB_BASE = "https://amll-ttml-db.stevexmh.net";
@@ -4743,6 +4848,10 @@ var EMPTY_LYRICS = { lrc: "", yrc: "", tlyric: "" };
 var BASE_LYRIC_SOURCE_ORDER = ["netease", "amll", "qq", "kugou"];
 var AUTO_MATCH_MIN_SCORE = 75;
 var AUTO_MATCH_SEARCH_LIMIT = 8;
+var LYRIC_MODAL_SEARCH_LIMIT = 20;
+function stripSearchMarkup(value) {
+  return String(value || "").replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/\s+/g, " ").trim();
+}
 function scoreBundle(lyrics) {
   return effectiveTimedLyricScore(lyrics.yrc) + effectiveTimedLyricScore(lyrics.lrc);
 }
@@ -4772,6 +4881,24 @@ function pickBetterLyrics(a, b) {
     return aCov > bCov * 1.45 ? a : b;
   }
   return aCov >= bCov ? a : b;
+}
+function pickAutoMatchedLyrics(native, candidate, nativeType) {
+  if (!hasUsableLyrics(candidate)) return native;
+  if (!hasUsableLyrics(native)) return candidate;
+  const nativeWord = isWordByWord(native);
+  const candidateWord = isWordByWord(candidate);
+  const nativeCov = coverageScore(native);
+  const candidateCov = coverageScore(candidate);
+  if (nativeWord) {
+    const samePlatform = nativeType && (candidate.source === nativeType || candidate.source === "native");
+    if (samePlatform) {
+      return pickBetterLyrics(native, candidate);
+    }
+    if (!candidateWord || candidateCov < nativeCov * 1.35) {
+      return native;
+    }
+  }
+  return pickBetterLyrics(candidate, native);
 }
 function buildLyricSourceOrder(preferred) {
   return [preferred, ...BASE_LYRIC_SOURCE_ORDER.filter((source) => source !== preferred)];
@@ -4966,25 +5093,21 @@ var LyricsService = class {
       const forced = await this.fetchPreferred(options).catch(() => EMPTY_LYRICS);
       return withSource(forced, options.preferred);
     }
-    const native = options.nativeType && options.nativeId ? await this.fetch(options.nativeType, options.nativeId).catch(() => EMPTY_LYRICS) : EMPTY_LYRICS;
-    const taggedNative = withSource(native, options.nativeType || "native");
+    const taggedNative = (lyrics) => withSource(lyrics, options.nativeType || "native");
+    const nativePromise = options.nativeType && options.nativeId ? this.fetch(options.nativeType, options.nativeId).catch(() => EMPTY_LYRICS) : Promise.resolve(EMPTY_LYRICS);
     if (options.autoUseBest) {
-      const preferredLyrics = await this.fetchPreferred(options).catch(() => EMPTY_LYRICS);
-      if (hasUsableLyrics(preferredLyrics)) {
-        return withSource(preferredLyrics, options.preferred);
-      }
-      const nativeIsPreferred = options.nativeType === options.preferred;
-      if (!nativeIsPreferred && isWordByWord(native) && coverageScore(native) >= 48 && hasUsableLyrics(native)) {
-        return taggedNative;
-      }
-      const best = await this.matchBest(options).catch(() => null);
+      const [native2, best] = await Promise.all([
+        nativePromise,
+        this.matchBest(options).catch(() => null)
+      ]);
+      const nativeTagged2 = taggedNative(native2);
       if (best && hasUsableLyrics(best)) {
-        if (hasUsableLyrics(native) && !nativeIsPreferred) {
-          return pickBetterLyrics(best, taggedNative);
+        const picked = hasUsableLyrics(native2) ? pickAutoMatchedLyrics(nativeTagged2, best, options.nativeType) : best;
+        if (hasUsableLyrics(picked)) {
+          return picked.source ? picked : withSource(picked, options.preferred);
         }
-        return best.source ? best : withSource(best, options.preferred);
       }
-      if (hasUsableLyrics(native)) return taggedNative;
+      if (hasUsableLyrics(nativeTagged2)) return nativeTagged2;
       const relaxed = await this.matchBest({
         ...options,
         artist: ""
@@ -4992,15 +5115,20 @@ var LyricsService = class {
       if (relaxed && hasUsableLyrics(relaxed)) {
         return relaxed.source ? relaxed : withSource(relaxed, options.preferred);
       }
+      return nativeTagged2;
     }
-    const preferred = await this.fetchPreferred(options).catch(() => EMPTY_LYRICS);
+    const [native, preferred] = await Promise.all([
+      nativePromise,
+      this.fetchPreferred(options).catch(() => EMPTY_LYRICS)
+    ]);
     const taggedPreferred = withSource(preferred, options.preferred);
+    const nativeTagged = taggedNative(native);
     if (!hasUsableLyrics(preferred) && !hasUsableLyrics(native)) {
-      return taggedPreferred.source ? taggedPreferred : taggedNative;
+      return taggedPreferred.source ? taggedPreferred : nativeTagged;
     }
-    if (!hasUsableLyrics(preferred)) return taggedNative;
+    if (!hasUsableLyrics(preferred)) return nativeTagged;
     if (!hasUsableLyrics(native)) return taggedPreferred;
-    return pickBetterLyrics(taggedPreferred, taggedNative);
+    return pickBetterLyrics(taggedPreferred, nativeTagged);
   }
   /**
    * 按优先级扫各源，最终取「覆盖度更高」的一份（更完整优先于短逐字）。
@@ -5029,6 +5157,7 @@ var LyricsService = class {
         if (options.nativeType === source && options.nativeId) {
           const exact = await this.fetch(source, options.nativeId).catch(() => EMPTY_LYRICS);
           consider(exact, source);
+          return;
         }
         const found = source === "qq" ? await this.qq.searchByName(query, 1).catch(() => null) : await this.netease.searchByName(query, 1).catch(() => null);
         let hit = pickBestSearchTrack(target, found?.tracks || []);
@@ -5177,9 +5306,139 @@ var LyricsService = class {
     }
     return { lrc: lyricText, yrc: "", tlyric: "" };
   }
+  async searchCandidates(options) {
+    const target = {
+      title: options.title,
+      artist: options.artist,
+      durationMs: options.durationMs
+    };
+    const query = options.query?.trim() || [options.title, options.artist].filter(Boolean).join(" ").trim() || options.title;
+    if (!query.trim()) return [];
+    const toCandidate = (provider, item) => {
+      const title = stripSearchMarkup(item.title);
+      const artist = stripSearchMarkup(item.artist);
+      const album = stripSearchMarkup(item.album || "");
+      const details = scoreCandidate(target, {
+        title,
+        author: artist,
+        durationMs: item.durationMs
+      });
+      return {
+        provider,
+        providerSongId: item.providerSongId,
+        title,
+        artist,
+        album,
+        durationMs: item.durationMs || 0,
+        pic: item.pic || "",
+        matchScore: details.score,
+        titleMatched: details.titleMatched,
+        artistMatched: details.artistMatched,
+        kgHash: item.kgHash,
+        amllPlatform: item.amllPlatform
+      };
+    };
+    if (options.source === "netease" || options.source === "qq") {
+      const found = options.source === "qq" ? await this.qq.searchByNameForMatch(query, 1).catch(() => []) : await this.netease.searchByNameForMatch(query, 1).catch(() => []);
+      let results = found.slice(0, LYRIC_MODAL_SEARCH_LIMIT).map((track) => toCandidate(options.source, {
+        providerSongId: track.songid,
+        title: track.title,
+        artist: track.author,
+        album: track.album,
+        durationMs: track.durationMs,
+        pic: track.pic
+      })).sort((a, b) => b.matchScore - a.matchScore);
+      results = this.pinNativeSearchCandidate(results, options);
+      return results;
+    }
+    if (options.source === "kugou") {
+      const songs = await searchKugouSongs(query, 1, LYRIC_MODAL_SEARCH_LIMIT).catch(() => []);
+      return songs.map((song) => toCandidate("kugou", {
+        providerSongId: String(song.id),
+        title: song.name,
+        artist: song.artists,
+        album: song.album,
+        durationMs: song.durationMs,
+        kgHash: song.kgHash,
+        pic: song.pic
+      })).sort((a, b) => b.matchScore - a.matchScore);
+    }
+    const [ncmFound, qqFound] = await Promise.all([
+      this.netease.searchByNameForMatch(query, 1).catch(() => []),
+      this.qq.searchByNameForMatch(query, 1).catch(() => [])
+    ]);
+    const merged = [];
+    for (const track of ncmFound) {
+      merged.push(toCandidate("amll", {
+        providerSongId: track.songid,
+        title: track.title,
+        artist: track.author,
+        album: track.album,
+        durationMs: track.durationMs,
+        pic: track.pic,
+        amllPlatform: "ncm"
+      }));
+    }
+    for (const track of qqFound) {
+      merged.push(toCandidate("amll", {
+        providerSongId: track.songid,
+        title: track.title,
+        artist: track.author,
+        album: track.album,
+        durationMs: track.durationMs,
+        pic: track.pic,
+        amllPlatform: "qq"
+      }));
+    }
+    return merged.sort((a, b) => b.matchScore - a.matchScore).slice(0, LYRIC_MODAL_SEARCH_LIMIT);
+  }
+  /** 搜索列表优先置顶正在播放的曲目 ID，避免同名不同版本默认选中另一首 */
+  pinNativeSearchCandidate(results, options) {
+    const pinId = String(options.nativeSongId || "").trim();
+    if (!pinId || options.source !== options.nativeSource) return results;
+    const idx = results.findIndex((item) => String(item.providerSongId) === pinId);
+    if (idx < 0) return results;
+    const [exact] = results.splice(idx, 1);
+    return [{
+      ...exact,
+      matchScore: Math.max(exact.matchScore, 100),
+      titleMatched: true,
+      artistMatched: true
+    }, ...results];
+  }
+  async fetchByCandidate(candidate) {
+    const { provider, providerSongId } = candidate;
+    if (provider === "netease" || provider === "qq") {
+      const lyrics = await this.fetch(provider, providerSongId);
+      return withSource(lyrics, provider);
+    }
+    if (provider === "amll") {
+      const platform = candidate.amllPlatform || "ncm";
+      const lyrics = await this.fetchAmllFromDb(platform, providerSongId);
+      return withSource(lyrics, "amll");
+    }
+    if (provider === "kugou") {
+      const lyricText = await fetchKugouLyricText({
+        id: Number(providerSongId),
+        name: candidate.title || "",
+        artists: candidate.artist || "",
+        album: candidate.album || "",
+        durationMs: candidate.durationMs || 0,
+        kgHash: candidate.kgHash || ""
+      }).catch(() => "");
+      if (!lyricText || !effectiveTimedLyricScore(lyricText)) {
+        return withSource(EMPTY_LYRICS, "kugou");
+      }
+      if (/\[\d+,\d+\]/.test(lyricText)) {
+        return withSource({ lrc: "", yrc: lyricText, tlyric: "" }, "kugou");
+      }
+      return withSource({ lrc: lyricText, yrc: "", tlyric: "" }, "kugou");
+    }
+    return EMPTY_LYRICS;
+  }
 };
 
-// server/src/netease.ts
+// src/netease.ts
 init_config();
 init_netease();
 init_http();
@@ -5236,6 +5495,42 @@ var NeteaseService = class _NeteaseService {
     const byId = new Map(songs.map((song) => [String(song.id), song]));
     const tracks = sliced.songids.map((id) => this.trackFromSong(byId.get(String(id)), privById.get(String(id)))).filter((item) => Boolean(item)).map((item) => this.wrap({ ...item, lrc: "", url: "" }));
     return { tracks, hasMore: sliced.has_more };
+  }
+  async searchByNameForMatch(query, page) {
+    const sourcePage = nameSearchSourcePage(page);
+    const encoded = encodeLinuxData({
+      method: "POST",
+      url: "http://music.163.com/api/cloudsearch/pc",
+      params: { s: query, type: 1, offset: sourcePage * 10 - 10, limit: 10 }
+    });
+    const res = await neteaseHttp("POST", "http://music.163.com/api/linux/forward", encoded, "", {
+      Referer: "http://music.163.com/"
+    });
+    const songs = res.json?.result?.songs;
+    if (!Array.isArray(songs) || !songs.length) return [];
+    const privileges = res.json?.result?.privileges;
+    const privById = new Map(
+      Array.isArray(privileges) ? privileges.map((item) => [String(item.id), item]) : []
+    );
+    const ids = songs.map((s) => String(s.id));
+    const sliced = sliceNameSearchSongids(ids, page);
+    if (!sliced.songids.length) return [];
+    const byId = new Map(songs.map((song) => [String(song.id), song]));
+    return sliced.songids.map((id) => {
+      const song = byId.get(String(id));
+      const track = this.trackFromSong(song, privById.get(String(id)));
+      if (!track) return null;
+      const picRaw = song?.al?.picUrl || song?.album?.picUrl || track.pic || "";
+      const pic = picRaw ? httpsNeteaseUrl(picRaw.includes("?") ? picRaw : `${picRaw}?param=300x300`) : "";
+      return {
+        songid: track.songid,
+        title: track.title,
+        author: track.author,
+        album: track.album || "",
+        durationMs: track.durationMs || 0,
+        pic
+      };
+    }).filter((item) => Boolean(item));
   }
   async songsByIds(ids, cookie = "") {
     const unique = [...new Set(ids.map((id) => String(id).trim()).filter(Boolean))];
@@ -5462,6 +5757,8 @@ var NeteaseService = class _NeteaseService {
     }
     const pic = song.al?.picUrl || song.album?.picUrl || "";
     const delisted = isNeteaseDelisted(song, privilege);
+    const album = String(song.al?.name || song.album?.name || "");
+    const durationMs = Number(song.dt || song.duration || 0) || 0;
     return {
       type: "netease",
       songid: String(id),
@@ -5469,6 +5766,8 @@ var NeteaseService = class _NeteaseService {
       author: artists.join(", ") || "\u672A\u77E5\u827A\u4EBA",
       link: `https://music.163.com/#/song?id=${id}`,
       pic,
+      album,
+      durationMs,
       ...delisted ? { delisted: true } : {}
     };
   }
@@ -5497,13 +5796,13 @@ var NeteaseService = class _NeteaseService {
   }
 };
 
-// server/src/pages.ts
+// src/pages.ts
 import { existsSync as existsSync3, readFileSync as readFileSync3 } from "node:fs";
 import { join as join5 } from "node:path";
-function spaHtml(webRoot) {
+function spaHtml(webRoot2) {
   const manifestPath = [
-    join5(webRoot, "static/app/manifest.json"),
-    join5(webRoot, "static/app/.vite/manifest.json")
+    join5(webRoot2, "static/app/manifest.json"),
+    join5(webRoot2, "static/app/.vite/manifest.json")
   ].find((p) => existsSync3(p));
   if (!manifestPath) return null;
   let manifest;
@@ -5541,7 +5840,7 @@ ${cssTags}
 </html>`;
 }
 
-// server/src/qq.ts
+// src/qq.ts
 init_config();
 init_http();
 init_sign();
@@ -5622,6 +5921,35 @@ var QqService = class {
     const byId = new Map(list.map((song) => [String(song.songmid || song.mid || ""), song]));
     const tracks = sliced.songids.map((id) => this.trackFromSong(byId.get(String(id)))).filter((item) => Boolean(item));
     return { tracks, hasMore: sliced.has_more };
+  }
+  async searchByNameForMatch(query, page) {
+    const sourcePage = nameSearchSourcePage(page);
+    const qs = new URLSearchParams({ w: query, p: String(sourcePage), n: "10", format: "json" });
+    const res = await request("GET", `http://c.y.qq.com/soso/fcgi-bin/search_for_qq_cp?${qs}`, {
+      headers: {
+        Referer: "http://m.y.qq.com",
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1"
+      }
+    });
+    const list = res.json?.data?.song?.list;
+    if (!Array.isArray(list) || !list.length) return [];
+    const ids = list.map((s) => String(s.songmid || s.mid || "")).filter(Boolean);
+    const sliced = sliceNameSearchSongids(ids, page);
+    if (!sliced.songids.length) return [];
+    const byId = new Map(list.map((song) => [String(song.songmid || song.mid || ""), song]));
+    return sliced.songids.map((id) => {
+      const song = byId.get(String(id));
+      const track = this.trackFromSong(song);
+      if (!track) return null;
+      return {
+        songid: track.songid,
+        title: track.title,
+        author: track.author,
+        album: track.album || "",
+        durationMs: track.durationMs || 0,
+        pic: track.pic || ""
+      };
+    }).filter((item) => Boolean(item));
   }
   async songsByIds(ids) {
     const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
@@ -5836,6 +6164,8 @@ var QqService = class {
     }
     const albummid = song.albummid || song.album?.mid || "";
     const pic = albummid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albummid}.jpg` : "";
+    const album = String(song.albumname || song.album?.title || song.album?.name || "");
+    const intervalSec = Number(song.interval || song.duration || 0) || 0;
     return this.wrap({
       type: "qq",
       songid: String(mid),
@@ -5845,6 +6175,8 @@ var QqService = class {
       lrc: "",
       url: "",
       pic,
+      album,
+      durationMs: intervalSec > 0 ? Math.round(intervalSec * 1e3) : 0,
       ...isQqDelisted(song) ? { delisted: true } : {}
     });
   }
@@ -5855,7 +6187,7 @@ function formatCacheStamp() {
   return `${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
-// server/src/app.ts
+// src/app.ts
 init_sign();
 init_util();
 init_crossPlay();
@@ -5941,7 +6273,7 @@ function createApp(options) {
   if (privateBase) {
     void request("GET", `${privateBase}/`, { timeoutMs: 2e3 });
   }
-  const app = new Hono2();
+  const app2 = new Hono2();
   const mime = {
     ".js": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
@@ -5967,15 +6299,15 @@ function createApp(options) {
       headers: { "Content-Type": mime[extname(file).toLowerCase()] || "application/octet-stream" }
     });
   };
-  app.get("/static/*", (c) => sendFile(c.req.path.slice(1)));
-  app.get("/favicon.ico", () => sendFile("favicon.ico"));
-  app.get("/help.php", (c) => c.redirect("/?doc=help", 302));
-  app.get("/help", (c) => c.redirect("/?doc=help", 302));
-  app.get("/disclaimer.php", (c) => c.redirect("/?doc=disclaimer", 302));
-  app.get("/disclaimer", (c) => c.redirect("/?doc=disclaimer", 302));
-  app.get("/privacy.php", (c) => c.redirect("/?doc=privacy", 302));
-  app.get("/privacy", (c) => c.redirect("/?doc=privacy", 302));
-  app.all("/api.php", async (c) => {
+  app2.get("/static/*", (c) => sendFile(c.req.path.slice(1)));
+  app2.get("/favicon.ico", () => sendFile("favicon.ico"));
+  app2.get("/help.php", (c) => c.redirect("/?doc=help", 302));
+  app2.get("/help", (c) => c.redirect("/?doc=help", 302));
+  app2.get("/disclaimer.php", (c) => c.redirect("/?doc=disclaimer", 302));
+  app2.get("/disclaimer", (c) => c.redirect("/?doc=disclaimer", 302));
+  app2.get("/privacy.php", (c) => c.redirect("/?doc=privacy", 302));
+  app2.get("/privacy", (c) => c.redirect("/?doc=privacy", 302));
+  app2.all("/api.php", async (c) => {
     const get = (c.req.query("get") || "").trim();
     const typeRaw = (c.req.query("type") || "").trim();
     const id = (c.req.query("id") || "").trim();
@@ -6146,21 +6478,67 @@ function createApp(options) {
         const result = await qqAccount.handle(action, post);
         return jsonResponse(result.data, result.code, result.error);
       }
+      if (action === "lyrics_search") {
+        const title = (post.title || "").trim();
+        const artist = (post.artist || "").trim();
+        const durationMs = Number(post.durationMs || 0) || 0;
+        const query = (post.query || "").trim();
+        const source = (post.source || "").trim();
+        const nativeSongId = (post.nativeSongId || "").trim();
+        const nativeSourceRaw = (post.nativeSource || "").trim();
+        const nativeSource = nativeSourceRaw === "qq" ? "qq" : nativeSourceRaw === "netease" ? "netease" : void 0;
+        const sourceOk = source === "netease" || source === "qq" || source === "kugou" || source === "amll";
+        if (!sourceOk) {
+          return jsonResponse("", 403, "\u6B4C\u8BCD\u6E90\u65E0\u6548");
+        }
+        try {
+          const candidates = await lyrics.searchCandidates({
+            title,
+            artist,
+            durationMs,
+            source,
+            query,
+            nativeSongId: nativeSongId || void 0,
+            nativeSource
+          });
+          return jsonResponse(candidates, 200, "");
+        } catch (err) {
+          return jsonResponse("", 502, `(\xB0\u30FC\xB0\u3003) ${err instanceof Error ? err.message : "\u6B4C\u8BCD\u641C\u7D22\u5931\u8D25"}`);
+        }
+      }
       if (action === "lyrics") {
         const lyricType = (post.type || "").trim();
         const lyricId = (post.id || "").trim();
         const preferred = (post.preferred || "").trim();
         const title = (post.title || "").trim();
         const artist = (post.artist || "").trim();
+        const album = (post.album || "").trim();
         const durationMs = Number(post.durationMs || 0) || 0;
         const autoUseBest = post.autoUseBest === "1" || post.autoUseBest === "true" || post.autoUseBest === true;
         const forceSource = post.forceSource === "1" || post.forceSource === "true" || post.forceSource === true;
+        const providerSongId = (post.providerSongId || "").trim();
+        const kgHash = (post.kgHash || "").trim();
+        const amllPlatformRaw = (post.amllPlatform || "").trim();
+        const amllPlatform = amllPlatformRaw === "qq" ? "qq" : amllPlatformRaw === "ncm" ? "ncm" : void 0;
         const nativeOk = lyricType === "netease" || lyricType === "qq";
         const preferredOk = preferred === "netease" || preferred === "qq" || preferred === "kugou" || preferred === "amll";
         if (!nativeOk && !preferredOk) {
           return jsonResponse("", 403, "\u6B4C\u8BCD\u7C7B\u578B\u65E0\u6548");
         }
         try {
+          if (providerSongId && preferredOk) {
+            const data2 = await lyrics.fetchByCandidate({
+              provider: preferred,
+              providerSongId,
+              kgHash: kgHash || void 0,
+              amllPlatform,
+              title,
+              artist,
+              album,
+              durationMs
+            });
+            return jsonResponse(data2, 200, "");
+          }
           const data = preferredOk ? await lyrics.match({
             preferred,
             title,
@@ -6255,14 +6633,84 @@ function createApp(options) {
     }
     return c.html(html);
   };
-  app.get("/", handleIndex);
-  app.post("/", handleIndex);
-  app.get("/index.php", handleIndex);
-  app.post("/index.php", handleIndex);
-  return app;
+  app2.get("/", handleIndex);
+  app2.post("/", handleIndex);
+  app2.get("/index.php", handleIndex);
+  app2.post("/index.php", handleIndex);
+  return app2;
 }
-var app_default = createApp;
-export {
-  createApp,
-  app_default as default
-};
+
+// src/index.ts
+init_http();
+installDirectNetwork();
+function arg(name, fallback) {
+  const prefix = `--${name}=`;
+  const hit = process.argv.find((a) => a.startsWith(prefix));
+  if (hit) return hit.slice(prefix.length);
+  const idx = process.argv.indexOf(`--${name}`);
+  if (idx >= 0 && process.argv[idx + 1]) return process.argv[idx + 1];
+  return fallback;
+}
+var here = dirname2(fileURLToPath(import.meta.url));
+var defaultRoot = resolve(here, "../../maicong-music");
+var webRoot = resolve(arg("web-root", process.env.RYANMUSIC_WEB_ROOT || defaultRoot));
+var cacheDir = resolve(
+  arg("cache-dir", process.env.RYANMUSIC_CACHE_DIR || join7(webRoot, "core/cache"))
+);
+var listen = arg("listen", process.env.RYANMUSIC_LISTEN || "127.0.0.1");
+var port = Number(arg("port", process.env.PORT || process.env.RYANMUSIC_PORT || "18765"));
+var app = createApp({
+  webRoot,
+  cacheDir,
+  coreMarker: join7(webRoot, "core")
+});
+var server = createServer(async (req, res) => {
+  try {
+    const host = req.headers.host || `${listen}:${port}`;
+    const url = new URL(req.url || "/", `http://${host}`);
+    const headers = new Headers();
+    for (const [k, v] of Object.entries(req.headers)) {
+      if (v == null) continue;
+      if (Array.isArray(v)) headers.set(k, v.join(", "));
+      else headers.set(k, v);
+    }
+    const method = req.method || "GET";
+    const body = method === "GET" || method === "HEAD" ? void 0 : await new Promise((resolvePromise, reject) => {
+      const chunks = [];
+      req.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+      req.on("end", () => resolvePromise(Buffer.concat(chunks)));
+      req.on("error", reject);
+    });
+    const request2 = new Request(url, { method, headers, body, duplex: "half" });
+    const response = await app.fetch(request2);
+    res.statusCode = response.status;
+    response.headers.forEach((value, key) => {
+      res.setHeader(key, value);
+    });
+    if (!response.body) {
+      res.end();
+      return;
+    }
+    const reader = response.body.getReader();
+    const pump = async () => {
+      for (; ; ) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) res.write(Buffer.from(value));
+      }
+      res.end();
+    };
+    pump().catch(() => {
+      try {
+        res.end();
+      } catch {
+      }
+    });
+  } catch (err) {
+    res.statusCode = 500;
+    res.end(err instanceof Error ? err.message : "internal error");
+  }
+});
+server.listen(port, listen, () => {
+  console.log(`RyanMusic server http://${listen}:${port}/  webRoot=${webRoot}`);
+});

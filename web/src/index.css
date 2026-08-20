@@ -109,6 +109,20 @@ a {
 
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
+  width: 0;
+  height: 0;
+}
+
+.side-panel-lyrics,
+.side-panel-lyric-line {
+  user-select: none;
+  -webkit-user-select: none;
+  caret-color: transparent;
+}
+
+.side-panel-lyrics ::selection,
+.side-panel-lyric-line::selection {
+  background: transparent;
 }
 
 .app-scroll {

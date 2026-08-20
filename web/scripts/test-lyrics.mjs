@@ -1,4 +1,4 @@
-import { detectLyricParseFormat, findLatestActiveLineIndex, trackToVisualizerLines } from '../src/lib/lyrics.ts';
+import { detectLyricParseFormat, findLatestActiveLineIndex, resolveVisualizerLyrics, trackToVisualizerLines } from '../src/lib/lyrics.ts';
 
 const yrc = `[1080,1860](1080,420,0)你(1500,440,0)好(1940,1000,0)吗`;
 const lines = trackToVisualizerLines({
@@ -40,6 +40,29 @@ if (lrcLines[0].words.length < 2) {
 
 if (findLatestActiveLineIndex(lines, 1.2) !== 0) {
   throw new Error('Active line lookup should follow Folia render window');
+}
+if (findLatestActiveLineIndex(lines, 4) !== 0) {
+  throw new Error('Active line should hold until the next line starts, got ' + findLatestActiveLineIndex(lines, 4));
+}
+
+const sparseResolved = resolveVisualizerLyrics({
+  lrc: '[00:10.00]第一行\n[00:20.00]第二行\n[00:30.00]第三行\n[00:40.00]第四行',
+  yrc: `[10000,2000](10000,200,0)第一(10200,200,0)行`,
+});
+if (sparseResolved.lines.length < 3) {
+  throw new Error('Incomplete yrc should fall back to fuller lrc');
+}
+
+const relativeYrc = `[1080,1860](0,420,0)你(420,440,0)好(860,1000,0)吗`;
+const relativeYrcLines = trackToVisualizerLines({ yrc: relativeYrc });
+if (Math.abs((relativeYrcLines[0]?.words[0]?.startTime || 0) - 1.08) > 0.001) {
+  throw new Error('Relative YRC word time should add line start, got ' + relativeYrcLines[0]?.words[0]?.startTime);
+}
+
+const mashedYrc = `[10000,5000](10000,200,0)月(10200,200,0)光(10400,200,0)色(10600,200,0)香(11800,200,0)泪(12000,200,0)断(12200,200,0)剑`;
+const mashedLines = trackToVisualizerLines({ yrc: mashedYrc }).filter((line) => line.fullText && line.fullText !== '......');
+if (mashedLines.length < 2) {
+  throw new Error('YRC phrase gap should split mashed lines, got ' + mashedLines.map((line) => line.fullText).join('|'));
 }
 
 const qrc = `[0,800]你(0,200)好(200,200)吗(400,200)`;

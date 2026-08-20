@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AudioLines, Gauge, HardDrive, Hexagon, Keyboard, LayoutGrid, Link2, List, MessageCircleHeart, Palette, SlidersHorizontal, SquareStack, Trash2, X } from 'lucide-react';
+import { ArrowDownUp, AudioLines, Gauge, HardDrive, Hexagon, Keyboard, LayoutGrid, Link2, List, MessageCircleHeart, Palette, SlidersHorizontal, SquareStack, Trash2, X } from 'lucide-react';
 import {
   LYRIC_SOURCE_OPTIONS,
   useLyricSettingsStore,
@@ -10,7 +10,7 @@ import {
 } from '../utils/lyrics/filtering';
 import { useControlAppearanceStore } from '../store/controlAppearanceStore';
 import { usePlaybackSettingsStore } from '../store/playbackSettingsStore';
-import { useCommentAtmosphereStore } from '../store/commentAtmosphereStore';
+import { COMMENT_READ_ORDER_OPTIONS, useCommentAtmosphereStore } from '../store/commentAtmosphereStore';
 import { useLibraryStore } from '../store/libraryStore';
 import {
   LIBRARY_CARD_STYLE_HINT,
@@ -146,6 +146,8 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
   const setCommentAtmosphere = useCommentAtmosphereStore((state) => state.setEnabled);
   const commentTypewriter = useCommentAtmosphereStore((state) => state.typewriter);
   const setCommentTypewriter = useCommentAtmosphereStore((state) => state.setTypewriter);
+  const commentReadOrder = useCommentAtmosphereStore((state) => state.readOrder);
+  const setCommentReadOrder = useCommentAtmosphereStore((state) => state.setReadOrder);
   const opacity = useControlAppearanceStore((state) => state.opacity);
   const blur = useControlAppearanceStore((state) => state.blur);
   const hoverBoost = useControlAppearanceStore((state) => state.hoverBoost);
@@ -288,6 +290,44 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                   idle={idle}
                   onToggle={() => setCommentTypewriter(!commentTypewriter)}
                 />
+
+                <div className={`rounded-2xl px-3 py-3 ${card}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${idle}`}>
+                      <ArrowDownUp size={15} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold">评论读取顺序</div>
+                      <div className="mt-1 text-[11px] leading-relaxed opacity-50">
+                        舞台气泡按此顺序读评论。热评约占 70%、最新约占 30%；没有热评时只用最新评论。
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {COMMENT_READ_ORDER_OPTIONS.map((item) => {
+                      const active = item.id === commentReadOrder;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setCommentReadOrder(item.id)}
+                          className={`rounded-2xl px-3 py-2.5 text-sm transition ${active ? '' : idle}`}
+                          style={
+                            active
+                              ? {
+                                  background: 'color-mix(in srgb, var(--text-accent) 16%, transparent)',
+                                  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--text-accent) 55%, transparent)',
+                                }
+                              : undefined
+                          }
+                        >
+                          <div>{item.label}</div>
+                          <div className="mt-0.5 text-[10px] leading-snug opacity-45">{item.hint}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 <div>
                   <div className="text-sm font-semibold">歌词匹配优先级</div>

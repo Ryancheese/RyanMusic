@@ -92,6 +92,8 @@ export class QqAccount {
         return this.likeCheck(post);
       case 'qq_playlist_detail':
         return this.playlistDetail(post.id || '');
+      case 'qq_playlist_add':
+        return this.playlistAdd(post);
       default:
         return fail(400, '未知操作');
     }
@@ -509,6 +511,8 @@ export class QqAccount {
         trackCount: Number(pl.song_cnt || 0),
         dirid: Number(pl.dirid || 0),
         subscribed: false,
+        order: out.length,
+        createTime: Number(pl.create_time || pl.createTime || 0),
       });
     }
     const fav = await this.qqGet(
@@ -532,6 +536,7 @@ export class QqAccount {
         trackCount: Number(pl.song_cnt || pl.songnum || 0),
         dirid: 0,
         subscribed: true,
+        order: out.length,
       });
     }
     const seen = new Set<string>();
@@ -658,6 +663,62 @@ export class QqAccount {
     if (!liked) return ok({ playlistId: '', tracks: [], name: '我喜欢', total: 0 });
     const tracks = await this.playlistTracks(liked.id, auth.cookie);
     return ok({ playlistId: liked.id, name: '我喜欢', tracks, total: tracks.length });
+  }
+
+  private async playlistAdd(post: Record<string, string>) {
+    const auth = this.read();
+    if (!auth) return fail(401, '请先登录 QQ 音乐');
+    const songId = Number(String(post.songid || '').replace(/\D/g, ''));
+    if (!songId) return fail(400, '歌曲 ID 无效');
+    let dirId = Number(String(post.dirid || '').replace(/\D/g, ''));
+    const playlistId = String(post.playlistId || post.id || '').replace(/\D/g, '');
+    if (!dirId && playlistId) {
+      const playlists = await this.fetchPlaylists(auth.uin, auth.cookie);
+      const matched = playlists.find((pl) => String(pl.id) === playlistId);
+      dirId = Number(matched?.dirid || 0);
+    }
+    if (!dirId) dirId = 201;
+    const map = cookieToMap(auth.cookie);
+    const pSkey = map.p_skey || map.pskey || map.skey || '';
+    const gtk = getGtk(pSkey || map.qqmusic_key || '');
+    const payload = {
+      comm: {
+        g_tk: gtk,
+        uin: Number(auth.uin) || auth.uin,
+        format: 'json',
+        platform: 'yqq.json',
+        ct: 24,
+        cv: 0,
+      },
+      req_1: {
+        module: 'music.musicasset.PlaylistDetailWrite',
+        method: 'AddSonglist',
+        param: {
+          dirId,
+          v_songInfo: [{ songId, songType: 0 }],
+        },
+      },
+    };
+    const res = await request('POST', 'https://u.y.qq.com/cgi-bin/musicu.fcg', {
+      headers: {
+        Referer: 'https://y.qq.com/',
+        Origin: 'https://y.qq.com',
+        Cookie: auth.cookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = res.json?.req_1;
+    const code = Number(data?.code ?? res.json?.code ?? -1);
+    if (!res.ok || code !== 0) {
+      return fail(502, String(data?.data?.Msg || data?.data?.msg || '添加到歌单失败'), {
+        playlistId,
+        dirId,
+        songid: String(songId),
+        code,
+      });
+    }
+    return ok({ playlistId, dirId, songid: String(songId), added: true });
   }
 
   private async playlistDetail(id: string) {

@@ -158,6 +158,8 @@ export interface CloudPlaylist {
   specialType?: number;
   dirid?: number;
   subscribed?: boolean;
+  order?: number;
+  createTime?: number;
 }
 
 export interface CloudTrack {
@@ -229,6 +231,21 @@ export function toggleQqLike(songid: string, like: boolean) {
   });
 }
 
+export function addNeteasePlaylistTrack(playlistId: string, songid: string) {
+  return postAction<{ playlistId: string; songid: string; added: boolean }>('netease_playlist_add', {
+    playlistId,
+    songid,
+  });
+}
+
+export function addQqPlaylistTrack(options: { playlistId: string; songid: string; dirid?: number }) {
+  return postAction<{ playlistId: string; songid: string; added: boolean; dirId?: number }>('qq_playlist_add', {
+    playlistId: options.playlistId,
+    songid: options.songid,
+    dirid: options.dirid ? String(options.dirid) : '',
+  });
+}
+
 export function checkQqLike(songid: string) {
   return postAction<{ liked: boolean; id: string }>('qq_like_check', {
     id: String(songid),
@@ -240,21 +257,29 @@ export async function fetchTrackLyrics(options: {
   songid: string;
   title?: string;
   artist?: string;
+  album?: string;
   durationMs?: number;
   preferred?: 'netease' | 'qq' | 'kugou' | 'amll';
   autoUseBest?: boolean;
   forceSource?: boolean;
   nativeOnly?: boolean;
+  providerSongId?: string;
+  kgHash?: string;
+  amllPlatform?: 'ncm' | 'qq';
 }): Promise<(Pick<Track, 'lrc' | 'yrc' | 'tlyric' | 'lyricSource'>) | null> {
   const result = await postAction<Pick<Track, 'lrc' | 'yrc' | 'tlyric'> & { source?: string }>('lyrics', {
     type: options.type,
     id: String(options.songid),
     title: options.title || '',
     artist: options.artist || '',
+    album: options.album || '',
     durationMs: options.durationMs ? String(Math.round(options.durationMs)) : '',
     preferred: options.nativeOnly ? '' : (options.preferred || ''),
     autoUseBest: options.autoUseBest ? '1' : '0',
     forceSource: options.forceSource ? '1' : '0',
+    providerSongId: options.providerSongId || '',
+    kgHash: options.kgHash || '',
+    amllPlatform: options.amllPlatform || '',
   }, LYRICS_TIMEOUT_MS);
   if (result.code !== 200 || !result.data) return null;
   const source = result.data.source;
@@ -267,6 +292,68 @@ export async function fetchTrackLyrics(options: {
     tlyric: result.data.tlyric || '',
     lyricSource,
   };
+}
+
+export interface LyricSearchCandidate {
+  provider: 'netease' | 'qq' | 'kugou' | 'amll';
+  providerSongId: string;
+  title: string;
+  artist: string;
+  album: string;
+  durationMs: number;
+  pic: string;
+  matchScore: number;
+  titleMatched: boolean;
+  artistMatched: boolean;
+  kgHash?: string;
+  amllPlatform?: 'ncm' | 'qq';
+}
+
+export async function searchLyricCandidates(options: {
+  title: string;
+  artist: string;
+  durationMs?: number;
+  source: 'netease' | 'qq' | 'kugou' | 'amll';
+  query?: string;
+  /** 正在播放曲目的平台 ID，与 source 同源时优先置顶 */
+  nativeSongId?: string;
+  nativeSource?: 'netease' | 'qq';
+}): Promise<LyricSearchCandidate[]> {
+  const result = await postAction<LyricSearchCandidate[]>('lyrics_search', {
+    title: options.title || '',
+    artist: options.artist || '',
+    durationMs: options.durationMs ? String(Math.round(options.durationMs)) : '',
+    source: options.source,
+    query: options.query || '',
+    nativeSongId: options.nativeSongId || '',
+    nativeSource: options.nativeSource || '',
+  }, LYRICS_TIMEOUT_MS);
+  if (result.code !== 200 || !Array.isArray(result.data)) return [];
+  return result.data.map((item) => ({
+    ...item,
+    title: item.title || '',
+    artist: item.artist || '',
+    album: item.album || '',
+    matchScore: Number(item.matchScore) || 0,
+    pic: resolveCandidateCover(item.pic || '', item.provider, item.providerSongId),
+  }));
+}
+
+function resolveCandidateCover(pic: string, provider: string, providerSongId: string): string {
+  const raw = (pic || '').trim();
+  if (!raw) {
+    if (provider === 'netease' && providerSongId) {
+      return coverRefreshUrl('netease', providerSongId);
+    }
+    if (provider === 'qq' && providerSongId) {
+      return coverRefreshUrl('qq', providerSongId);
+    }
+    return '';
+  }
+  if (raw.includes('api.php') || raw.includes('get=pic') || raw.includes('cover=1')) {
+    return resolveMediaUrl(raw);
+  }
+  return coverImageUrl(raw, 120);
 }
 
 export function canNativeSave(): boolean {

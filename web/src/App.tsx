@@ -1,18 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type Track, type VisualizerMode } from './types';
-import { buildDownloadUrl, canNativeSave, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type PlayQuality } from './api';
+import { buildDownloadUrl, canNativeSave, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type LyricSearchCandidate, type PlayQuality } from './api';
 import { contrastText, extractAccentFromImage } from './lib/color';
 import { isMobileViewport, isWindowsApp, prefersLightweightVisualizer } from './lib/media';
 import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig, writeVisualizerMode } from './lib/visualizer';
 import { useLibraryStore } from './store/libraryStore';
 import { useCloudStore } from './store/cloudStore';
+import { touchPlaylistRecent } from './store/playlistRecentStore';
 import { usePlayerStore } from './store/playerStore';
 import { useThemeAccentStore } from './store/themeStore';
-import { useLyricSettingsStore, buildLyricSourceOrder } from './store/lyricSettingsStore';
-import { hasUsableTrackLyrics } from './lib/lyrics';
+import { LYRIC_SOURCE_OPTIONS, useLyricSettingsStore, buildLyricSourceOrder } from './store/lyricSettingsStore';
+import { useLyricMatchStore } from './store/lyricMatchStore';
+import { hasUsableTrackLyrics, isWordByWordLyricText } from './lib/lyrics';
+import { showToast } from './store/toastStore';
 import { usePlaybackSettingsStore } from './store/playbackSettingsStore';
-import type { LyricProviderSource } from './types';
+import { trackKey } from './types';
 import { AUTO_AUDIO_QUALITY, estimateNetworkQualityCeiling } from './lib/audioQuality';
 import FloatingPlayerControls from './components/FloatingPlayerControls';
 import HomeView from './components/HomeView';
@@ -20,9 +23,11 @@ import PlayerView from './components/PlayerView';
 import SearchWorkspace from './components/SearchWorkspace';
 import SidePanel from './components/SidePanel';
 import AccountModal from './components/AccountModal';
+import LyricMatchModal from './components/LyricMatchModal';
 import LegalModal from './components/LegalModal';
 import UpdateModal from './components/UpdateModal';
 import WhatsNewModal from './components/WhatsNewModal';
+import ToastHost from './components/ToastHost';
 import { parseLegalTab, type LegalTab } from './legal';
 import { checkAppUpdate, installAppUpdate, type AppUpdateInfo } from './lib/update';
 import {
@@ -103,6 +108,7 @@ const App: React.FC = () => {
   const [chromeHidden, setChromeHidden] = useState(false);
   const [lyricsSwitching, setLyricsSwitching] = useState(false);
   const [lyricsLoading, setLyricsLoading] = useState(false);
+  const [lyricMatchOpen, setLyricMatchOpen] = useState(false);
   const lyricRequestGen = useRef(0);
   const durationRef = useRef(0);
   const [accent, setAccent] = useState<string | null>(null);
@@ -123,6 +129,7 @@ const App: React.FC = () => {
   const queue = usePlayerStore((state) => state.queue);
   const index = usePlayerStore((state) => state.index);
   const status = usePlayerStore((state) => state.status);
+  const playerError = usePlayerStore((state) => state.error);
   const duration = usePlayerStore((state) => state.duration);
   durationRef.current = duration;
   const loopMode = usePlayerStore((state) => state.loopMode);
@@ -140,6 +147,10 @@ const App: React.FC = () => {
   const cardStyle = useLibraryStore((state) => state.cardStyle);
   const setLayoutMode = useLibraryStore((state) => state.setLayoutMode);
   const preferredLyricSource = useLyricSettingsStore((state) => state.preferredSource);
+  const autoUseBestLyrics = useLyricSettingsStore((state) => state.autoUseBest);
+  const getManualLyricSelection = useLyricMatchStore((state) => state.getManualSelection);
+  const hasManualLyricSelection = useLyricMatchStore((state) => state.hasManualSelection);
+  const setManualLyricSelection = useLyricMatchStore((state) => state.setManualSelection);
 
   const neteasePlaylists = useCloudStore((state) => state.neteasePlaylists);
   const qqPlaylists = useCloudStore((state) => state.qqPlaylists);
@@ -632,23 +643,89 @@ const App: React.FC = () => {
     const title = track.title;
     const artist = track.author;
     const preferred = preferredLyricSource;
+    const manualKey = trackKey({ type, songid: id });
+    const manualSelection = hasManualLyricSelection(manualKey)
+      ? getManualLyricSelection(manualKey)
+      : null;
     let alive = true;
     const gen = ++lyricRequestGen.current;
     setLyricsLoading(true);
 
     const applyLyrics = (
-      lyrics: Pick<Track, 'lrc' | 'yrc' | 'tlyric' | 'lyricSource'> | null,
+      lyrics: Pick<Track, 'lrc' | 'yrc' | 'tlyric' | 'lyricSource' | 'lyricProviderSongId'> | null,
       fallbackSource?: typeof preferred | typeof type,
+      providerSongId?: string,
     ) => {
       if (!alive || gen !== lyricRequestGen.current || !lyrics || !hasUsableTrackLyrics(lyrics)) return false;
       patchCurrentLyrics({
         ...lyrics,
         lyricSource: lyrics.lyricSource || fallbackSource,
+        lyricProviderSongId: lyrics.lyricProviderSongId || providerSongId,
       }, { replace: true });
       return true;
     };
 
+    const fetchExactLyrics = async (
+      provider: 'netease' | 'qq' | 'kugou' | 'amll',
+      providerSongId: string,
+      durationMs: number,
+    ) => fetchTrackLyrics({
+      type,
+      songid: id,
+      title,
+      artist,
+      durationMs,
+      preferred: provider,
+      providerSongId,
+      forceSource: true,
+    });
+
+    const applyManualSelection = async (durationMs: number) => {
+      if (!manualSelection) return false;
+      const lyrics = await fetchTrackLyrics({
+        type,
+        songid: id,
+        title: manualSelection.title,
+        artist: manualSelection.artist,
+        album: manualSelection.album,
+        durationMs: manualSelection.durationMs || durationMs,
+        preferred: manualSelection.provider,
+        providerSongId: manualSelection.providerSongId,
+        kgHash: manualSelection.kgHash,
+        amllPlatform: manualSelection.amllPlatform,
+        forceSource: true,
+      });
+      return applyLyrics(lyrics, manualSelection.provider, manualSelection.providerSongId);
+    };
+
     const runMatch = async (durationMs: number) => {
+      let nativeExactApplied = false;
+
+      if (type === 'netease' || type === 'qq') {
+        const exact = await fetchExactLyrics(type, id, durationMs);
+        nativeExactApplied = applyLyrics(exact, type, id);
+      }
+
+      if (autoUseBestLyrics) {
+        const current = usePlayerStore.getState().queue[usePlayerStore.getState().index];
+        const nativeWordByWord = current
+          && (isWordByWordLyricText(current.yrc) || isWordByWordLyricText(current.lrc));
+        if (nativeExactApplied && nativeWordByWord && preferred === type) {
+          return true;
+        }
+        const best = await fetchTrackLyrics({
+          type,
+          songid: id,
+          title,
+          artist,
+          preferred,
+          autoUseBest: true,
+          durationMs,
+        });
+        if (applyLyrics(best, preferred)) return true;
+        return nativeExactApplied;
+      }
+
       const preferredFirst = await fetchTrackLyrics({
         type,
         songid: id,
@@ -660,17 +737,6 @@ const App: React.FC = () => {
         durationMs,
       });
       if (applyLyrics(preferredFirst, preferred)) return true;
-
-      const primary = await fetchTrackLyrics({
-        type,
-        songid: id,
-        title,
-        artist,
-        preferred,
-        autoUseBest: true,
-        durationMs,
-      });
-      if (applyLyrics(primary, preferred)) return true;
 
       if (preferred !== type) {
         const nativeFirst = await fetchTrackLyrics({
@@ -704,24 +770,34 @@ const App: React.FC = () => {
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
-          const firstDurationMs = durationRef.current > 0 ? durationRef.current * 1000 : 0;
-          if (await runMatch(firstDurationMs)) return;
-          if (firstDurationMs <= 0) {
-            await new Promise((resolve) => window.setTimeout(resolve, 1200));
-            if (!alive || gen !== lyricRequestGen.current) return;
-            const retryMs = durationRef.current > 0 ? durationRef.current * 1000 : 0;
-            if (retryMs > 0) await runMatch(retryMs);
+          const durationMs = durationRef.current > 0 ? durationRef.current * 1000 : 0;
+          if (manualSelection && await applyManualSelection(durationMs)) return;
+          if (await runMatch(durationMs)) return;
+
+          if (type === 'netease' || type === 'qq') {
+            const native = await fetchTrackLyrics({
+              type,
+              songid: id,
+              title,
+              artist,
+              nativeOnly: true,
+              durationMs,
+            });
+            applyLyrics(native, type);
           }
         } finally {
           if (alive && gen === lyricRequestGen.current) setLyricsLoading(false);
         }
       })();
-    }, 80);
+    }, 0);
     return () => {
       alive = false;
       window.clearTimeout(timer);
     };
   }, [
+    autoUseBestLyrics,
+    getManualLyricSelection,
+    hasManualLyricSelection,
     patchCurrentLyrics,
     preferredLyricSource,
     track?.author,
@@ -730,36 +806,51 @@ const App: React.FC = () => {
     track?.type,
   ]);
 
-  const switchLyricSource = useCallback(async (source: LyricProviderSource) => {
+  const applyLyricCandidate = useCallback(async (candidate: LyricSearchCandidate) => {
     if (!track) return;
     const type = track.type;
     const id = track.songid;
-    const title = track.title;
-    const artist = track.author;
-    const durationMs = duration > 0 ? duration * 1000 : 0;
+    const durationMs = candidate.durationMs || (duration > 0 ? duration * 1000 : 0);
     const gen = ++lyricRequestGen.current;
     setLyricsSwitching(true);
     try {
       const lyrics = await fetchTrackLyrics({
         type,
         songid: id,
-        title,
-        artist,
-        preferred: source,
-        autoUseBest: false,
-        forceSource: true,
+        title: candidate.title,
+        artist: candidate.artist,
+        album: candidate.album,
         durationMs,
+        preferred: candidate.provider,
+        providerSongId: candidate.providerSongId,
+        kgHash: candidate.kgHash,
+        amllPlatform: candidate.amllPlatform,
+        forceSource: true,
       });
       if (gen !== lyricRequestGen.current) return;
-      if (!lyrics || !hasUsableTrackLyrics(lyrics)) return;
+      if (!lyrics || !hasUsableTrackLyrics(lyrics)) {
+        showToast({ kind: 'error', title: '未能应用歌词', detail: '该候选没有可用歌词' });
+        return;
+      }
+      setManualLyricSelection(trackKey(track), candidate);
       patchCurrentLyrics(
-        { ...lyrics, lyricSource: lyrics.lyricSource || source },
+        {
+          ...lyrics,
+          lyricSource: lyrics.lyricSource || candidate.provider,
+          lyricProviderSongId: candidate.providerSongId,
+        },
         { replace: true },
       );
+      const sourceLabel = LYRIC_SOURCE_OPTIONS.find((item) => item.id === candidate.provider)?.label || candidate.provider;
+      showToast({
+        kind: 'success',
+        title: '歌词已更新',
+        detail: `${sourceLabel} · ${candidate.title}`,
+      });
     } finally {
       if (gen === lyricRequestGen.current) setLyricsSwitching(false);
     }
-  }, [duration, patchCurrentLyrics, track]);
+  }, [duration, patchCurrentLyrics, setManualLyricSelection, track]);
 
   useEffect(() => {
     const next = queue[index + 1];
@@ -986,6 +1077,11 @@ const App: React.FC = () => {
           onHomeTabChange={setHomeTab}
           onLayoutModeChange={setLayoutMode}
           onSelectEntry={(entry, queueEntries) => {
+            if (homeTab === 'netease' && neteaseOpen) {
+              touchPlaylistRecent('netease', neteaseOpen.id);
+            } else if (homeTab === 'qq' && qqOpen) {
+              touchPlaylistRecent('qq', qqOpen.id);
+            }
             void playLibraryEntry(entry, queueEntries);
             setView('player');
             setChromeHidden(false);
@@ -1030,6 +1126,8 @@ const App: React.FC = () => {
           paused={status !== 'playing'}
           buffering={(buffering || status === 'loading') && status !== 'paused'}
           lyricsLoading={lyricsLoading || lyricsSwitching}
+          playerStatus={status}
+          playerError={playerError}
           onBack={() => {
             if (styleOpen) {
               setStyleOpen(false);
@@ -1109,6 +1207,17 @@ const App: React.FC = () => {
             ? '正在同步歌单…'
             : [neteaseError, qqError].filter(Boolean).join(' ')
         }
+      />
+
+      <LyricMatchModal
+        open={lyricMatchOpen}
+        isDaylight={isDaylight}
+        theme={theme}
+        track={track}
+        currentTime={currentTime}
+        durationSec={duration}
+        onClose={() => setLyricMatchOpen(false)}
+        onSave={applyLyricCandidate}
       />
 
       <LegalModal
@@ -1204,13 +1313,14 @@ const App: React.FC = () => {
             onDownloadLrc={downloadLrc}
             onPlayIndex={playIndex}
             onLyricLineSeek={seek}
-            onSwitchLyricSource={switchLyricSource}
+            onOpenLyricMatch={() => setLyricMatchOpen(true)}
             qualityOptions={authedPlay && track?.type === 'netease' ? qualityOptions : []}
             audioQuality={audioQuality}
             onAudioQualityChange={setAudioQuality}
           />
         ) : null}
       </FloatingPlayerControls>
+      <ToastHost />
     </div>
   );
 };

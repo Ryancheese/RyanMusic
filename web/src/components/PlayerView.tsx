@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, type MotionValue } from 'framer-motion';
-import type { AudioBands, ThemeTokens, Track, VisualizerMode } from '../types';
+import type { AudioBands, PlayerStatus, ThemeTokens, Track, VisualizerMode } from '../types';
 import type { VisualizerBackgroundConfig } from './visualizer/backgrounds/definition';
 import { findLatestActiveLineIndex, resolveVisualizerLyrics } from '../lib/lyrics';
 import { useLyricSettingsStore } from '../store/lyricSettingsStore';
@@ -26,6 +26,8 @@ interface PlayerViewProps {
   buffering?: boolean;
   /** 歌词首次拉取 / 切源中 */
   lyricsLoading?: boolean;
+  playerStatus?: PlayerStatus;
+  playerError?: string;
   isPanelOpen?: boolean;
   onToggleChrome: () => void;
   onOpenPanel?: () => void;
@@ -47,6 +49,8 @@ const PlayerView: React.FC<PlayerViewProps> = ({
   paused = false,
   buffering = false,
   lyricsLoading = false,
+  playerStatus = 'idle',
+  playerError = '',
   isPanelOpen = false,
   onToggleChrome,
   onLyricLineSeek,
@@ -62,9 +66,10 @@ const PlayerView: React.FC<PlayerViewProps> = ({
   const foliaTheme = useMemo(() => toFoliaTheme(theme, accent), [accent, theme]);
   const [lineIndex, setLineIndex] = useState(-1);
   const coverUrl = track ? (track.pic || coverRefreshUrl(track.type, track.songid)) : undefined;
-  const showSongLoading = Boolean(track && buffering);
-  const showLyricsLoading = Boolean(track && lyricsLoading && !buffering);
+  const showSongLoading = Boolean(track && (buffering || (playerStatus === 'loading' && !track.url)));
+  const showLyricsLoading = Boolean(track && track.url && lyricsLoading && !buffering);
   const loadingHint = showSongLoading ? '歌曲加载中' : showLyricsLoading ? '歌词加载中' : null;
+  const showPlayError = Boolean(track && !track.url && playerStatus === 'idle' && playerError);
 
   useEffect(() => {
     let frame = 0;
@@ -79,7 +84,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
 
   return (
     <div className="absolute inset-0 z-20 h-full w-full overflow-hidden" onClick={onToggleChrome}>
-      {track ? (
+      {track && track.url ? (
         <div className="absolute inset-0 h-full w-full">
           <VisualizerRenderer
             mode={visualizerMode}
@@ -107,6 +112,15 @@ const PlayerView: React.FC<PlayerViewProps> = ({
             chromeHidden={chromeHidden}
             isPanelOpen={isPanelOpen}
           />
+        </div>
+      ) : showPlayError ? (
+        <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
+          <p className="text-sm font-medium opacity-70">{track?.title || '无法播放'}</p>
+          <p className="text-sm opacity-45">{playerError}</p>
+        </div>
+      ) : track && playerStatus === 'loading' ? (
+        <div className="flex h-full items-center justify-center">
+          <RyanLoader size={36} label="正在加载歌曲" />
         </div>
       ) : (
         <div className="flex h-full items-center justify-center text-sm opacity-40">

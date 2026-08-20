@@ -341,21 +341,67 @@ export function createApp(options: AppOptions) {
         const result = await qqAccount.handle(action, post);
         return jsonResponse(result.data, result.code, result.error);
       }
+      if (action === 'lyrics_search') {
+        const title = (post.title || '').trim();
+        const artist = (post.artist || '').trim();
+        const durationMs = Number(post.durationMs || 0) || 0;
+        const query = (post.query || '').trim();
+        const source = (post.source || '').trim();
+        const nativeSongId = (post.nativeSongId || '').trim();
+        const nativeSourceRaw = (post.nativeSource || '').trim();
+        const nativeSource = nativeSourceRaw === 'qq' ? 'qq' : nativeSourceRaw === 'netease' ? 'netease' : undefined;
+        const sourceOk = source === 'netease' || source === 'qq' || source === 'kugou' || source === 'amll';
+        if (!sourceOk) {
+          return jsonResponse('', 403, '歌词源无效');
+        }
+        try {
+          const candidates = await lyrics.searchCandidates({
+            title,
+            artist,
+            durationMs,
+            source: source as 'netease' | 'qq' | 'kugou' | 'amll',
+            query,
+            nativeSongId: nativeSongId || undefined,
+            nativeSource,
+          });
+          return jsonResponse(candidates, 200, '');
+        } catch (err) {
+          return jsonResponse('', 502, `(°ー°〃) ${err instanceof Error ? err.message : '歌词搜索失败'}`);
+        }
+      }
       if (action === 'lyrics') {
         const lyricType = (post.type || '').trim();
         const lyricId = (post.id || '').trim();
         const preferred = (post.preferred || '').trim();
         const title = (post.title || '').trim();
         const artist = (post.artist || '').trim();
+        const album = (post.album || '').trim();
         const durationMs = Number(post.durationMs || 0) || 0;
         const autoUseBest = post.autoUseBest === '1' || post.autoUseBest === 'true' || post.autoUseBest === true;
         const forceSource = post.forceSource === '1' || post.forceSource === 'true' || post.forceSource === true;
+        const providerSongId = (post.providerSongId || '').trim();
+        const kgHash = (post.kgHash || '').trim();
+        const amllPlatformRaw = (post.amllPlatform || '').trim();
+        const amllPlatform = amllPlatformRaw === 'qq' ? 'qq' : amllPlatformRaw === 'ncm' ? 'ncm' : undefined;
         const nativeOk = lyricType === 'netease' || lyricType === 'qq';
         const preferredOk = preferred === 'netease' || preferred === 'qq' || preferred === 'kugou' || preferred === 'amll';
         if (!nativeOk && !preferredOk) {
           return jsonResponse('', 403, '歌词类型无效');
         }
         try {
+          if (providerSongId && preferredOk) {
+            const data = await lyrics.fetchByCandidate({
+              provider: preferred as 'netease' | 'qq' | 'kugou' | 'amll',
+              providerSongId,
+              kgHash: kgHash || undefined,
+              amllPlatform,
+              title,
+              artist,
+              album,
+              durationMs,
+            });
+            return jsonResponse(data, 200, '');
+          }
           const data = preferredOk
             ? await lyrics.match({
                 preferred: preferred as 'netease' | 'qq' | 'kugou' | 'amll',

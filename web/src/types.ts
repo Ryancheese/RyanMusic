@@ -23,9 +23,13 @@ export interface Track {
   tlyric?: string;
   /** 当前展示歌词实际来自哪个源 */
   lyricSource?: 'netease' | 'qq' | 'kugou' | 'amll' | 'native';
+  /** 当前歌词在来源平台的曲目 ID（跨源匹配时与 songid 可能不同） */
+  lyricProviderSongId?: string;
   url: string;
   pic: string;
   link?: string;
+  album?: string;
+  durationMs?: number;
   /** 平台侧已下架/无官方版权，播放将走 RyanMusic 跨渠道私链 */
   delisted?: boolean;
 }
