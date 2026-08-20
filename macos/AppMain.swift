@@ -6,6 +6,9 @@ import WebKit
 private let releasesRepo = "Ryancheese/RyanMusic-Releases"
 private let releasesPageURL = "https://github.com/\(releasesRepo)/releases/latest"
 private let releasesAPIURL = "https://api.github.com/repos/\(releasesRepo)/releases/latest"
+private let legacyReleasesRepo = "Ryancheese/RyanMusic"
+private let legacyReleasesPageURL = "https://github.com/\(legacyReleasesRepo)/releases/latest"
+private let legacyReleasesAPIURL = "https://api.github.com/repos/\(legacyReleasesRepo)/releases/latest"
 
 /// 顶部标题栏命中层：拖拽移动；双击缩放（与系统 App 一致）
 /// 左右留空给红绿灯 / LOGO，避免挡住交互
@@ -790,8 +793,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     private func checkLatest(completion: @escaping (UpdateInfo) -> Void) {
         let current = currentVersion()
-        guard let endpoint = URL(string: releasesAPIURL) else {
-            completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: "", downloadURL: nil, error: "更新地址无效"))
+        fetchRelease(apiURL: releasesAPIURL, pageURL: releasesPageURL, current: current) { primary in
+            if primary.hasUpdate && primary.downloadURL == nil {
+                self.fetchRelease(apiURL: self.legacyReleasesAPIURL, pageURL: self.legacyReleasesPageURL, current: current) { legacy in
+                    if legacy.downloadURL != nil {
+                        var merged = primary
+                        merged.downloadURL = legacy.downloadURL
+                        merged.error = ""
+                        completion(merged)
+                    } else {
+                        completion(primary)
+                    }
+                }
+            } else {
+                completion(primary)
+            }
+        }
+    }
+
+    private func fetchRelease(apiURL: String, pageURL: String, current: String, completion: @escaping (UpdateInfo) -> Void) {
+        guard let endpoint = URL(string: apiURL) else {
+            completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: pageURL, downloadURL: nil, error: "更新地址无效"))
             return
         }
         var request = URLRequest(url: endpoint, timeoutInterval: 20)
@@ -799,36 +821,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         request.setValue("RyanMusic/\(current)", forHTTPHeaderField: "User-Agent")
         directSession.dataTask(with: request) { data, _, error in
             if let error {
-                completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: releasesPageURL, downloadURL: nil, error: error.localizedDescription))
+                completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: pageURL, downloadURL: nil, error: error.localizedDescription))
                 return
             }
             guard let data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: releasesPageURL, downloadURL: nil, error: "无法解析 GitHub 版本信息"))
+                completion(UpdateInfo(ok: false, hasUpdate: false, current: current, latest: "", notes: "", url: pageURL, downloadURL: nil, error: "无法解析 GitHub 版本信息"))
                 return
             }
-            let latest = String(json["tag_name"] as? String ?? "").replacingOccurrences(of: #"^v"#, with: "", options: .regularExpression)
-            let notes = String(json["body"] as? String ?? "")
-            let page = String(json["html_url"] as? String ?? releasesPageURL)
-            let assets = json["assets"] as? [[String: Any]] ?? []
-            let needle = self.archAssetNeedle()
-            let asset = assets.first { asset in
-                let name = (asset["name"] as? String ?? "").lowercased()
-                return name.contains(needle) && name.hasSuffix(".dmg")
-            }
-            let download = URL(string: asset?["browser_download_url"] as? String ?? "")
-            let newer = !latest.isEmpty && self.compareVersions(current, latest) == .orderedAscending
-            completion(UpdateInfo(
-                ok: true,
-                hasUpdate: newer,
-                current: current,
-                latest: latest,
-                notes: notes,
-                url: page,
-                downloadURL: download,
-                error: newer && download == nil ? "Release 里没有 \(needle) 安装包" : ""
-            ))
+            completion(self.parseReleaseJSON(json, current: current, pageURL: pageURL))
         }.resume()
+    }
+
+    private func parseReleaseJSON(_ json: [String: Any], current: String, pageURL: String) -> UpdateInfo {
+        let latest = String(json["tag_name"] as? String ?? "").replacingOccurrences(of: #"^v"#, with: "", options: .regularExpression)
+        let notes = String(json["body"] as? String ?? "")
+        let page = String(json["html_url"] as? String ?? pageURL)
+        let assets = json["assets"] as? [[String: Any]] ?? []
+        let needle = archAssetNeedle()
+        let asset = assets.first { asset in
+            let name = (asset["name"] as? String ?? "").lowercased()
+            return name.contains(needle) && name.hasSuffix(".dmg")
+        }
+        let download = URL(string: asset?["browser_download_url"] as? String ?? "")
+        let newer = !latest.isEmpty && compareVersions(current, latest) == .orderedAscending
+        return UpdateInfo(
+            ok: true,
+            hasUpdate: newer,
+            current: current,
+            latest: latest,
+            notes: notes,
+            url: page,
+            downloadURL: download,
+            error: newer && download == nil ? "Release 里没有 \(needle) 安装包" : ""
+        )
     }
 
     private func installLatest(replyToWeb: Bool) {

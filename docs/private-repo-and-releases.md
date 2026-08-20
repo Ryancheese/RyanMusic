@@ -58,6 +58,8 @@ git push origin v1.8.69
 
 CI 会在 **公开** `RyanMusic-Releases` 创建/更新同名 Release，并上传 DMG / EXE / APK。
 
+同时会 **镜像安装包到源码仓** `RyanMusic` 的同名 Release，供 **1.8.67 及更早** 客户端应用内更新（它们仍查源码仓）。
+
 ## 用户侧
 
 - 下载：<https://github.com/Ryancheese/RyanMusic-Releases/releases>

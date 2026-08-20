@@ -78,3 +78,16 @@ jobs:
           append_body: true
           make_latest: true
           fail_on_unmatched_files: true
+          overwrite_files: true
+
+      - name: Mirror APK to source repo (legacy updaters)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: RyanMusic ${{ github.ref_name }}
+          files: dist-apk/RyanMusic-android.apk
+          append_body: true
+          make_latest: true
+          fail_on_unmatched_files: true
+          overwrite_files: true

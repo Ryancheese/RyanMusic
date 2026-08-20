@@ -25,6 +25,9 @@ public sealed class MainForm : Form
     private const string ReleasesRepo = "Ryancheese/RyanMusic-Releases";
     private const string ReleasesPageUrl = "https://github.com/Ryancheese/RyanMusic-Releases/releases/latest";
     private const string ReleasesApiUrl = "https://api.github.com/repos/Ryancheese/RyanMusic-Releases/releases/latest";
+    private const string LegacyReleasesRepo = "Ryancheese/RyanMusic";
+    private const string LegacyReleasesPageUrl = "https://github.com/Ryancheese/RyanMusic/releases/latest";
+    private const string LegacyReleasesApiUrl = "https://api.github.com/repos/Ryancheese/RyanMusic/releases/latest";
 
     private readonly WebView2 _webView = new();
     private bool _daylight;
@@ -932,20 +935,43 @@ public sealed class MainForm : Form
     private async Task<ReleaseUpdateInfo> FetchLatestReleaseAsync()
     {
         var current = CurrentAppVersion();
-        const string page = ReleasesPageUrl;
+        var primary = await FetchReleaseAsync(ReleasesApiUrl, ReleasesPageUrl, current);
+        if (primary.HasUpdate && string.IsNullOrWhiteSpace(primary.DownloadUrl))
+        {
+            var legacy = await FetchReleaseAsync(LegacyReleasesApiUrl, LegacyReleasesPageUrl, current);
+            if (!string.IsNullOrWhiteSpace(legacy.DownloadUrl))
+            {
+                return new ReleaseUpdateInfo
+                {
+                    Ok = primary.Ok,
+                    HasUpdate = primary.HasUpdate,
+                    Current = primary.Current,
+                    Latest = primary.Latest,
+                    Notes = primary.Notes,
+                    Url = primary.Url,
+                    DownloadUrl = legacy.DownloadUrl,
+                    Error = "",
+                };
+            }
+        }
+        return primary;
+    }
+
+    private async Task<ReleaseUpdateInfo> FetchReleaseAsync(string apiUrl, string pageUrl, string current)
+    {
         try
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
             client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/vnd.github+json");
             client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", $"RyanMusic/{current}");
-            using var resp = await client.GetAsync(ReleasesApiUrl);
+            using var resp = await client.GetAsync(apiUrl);
             resp.EnsureSuccessStatusCode();
             await using var stream = await resp.Content.ReadAsStreamAsync();
             using var doc = await JsonDocument.ParseAsync(stream);
             var root = doc.RootElement;
             var latest = (root.TryGetProperty("tag_name", out var tagEl) ? tagEl.GetString() : "")?.TrimStart('v', 'V') ?? "";
             var notes = root.TryGetProperty("body", out var bodyEl) ? bodyEl.GetString() ?? "" : "";
-            var htmlUrl = root.TryGetProperty("html_url", out var urlEl) ? urlEl.GetString() ?? page : page;
+            var htmlUrl = root.TryGetProperty("html_url", out var urlEl) ? urlEl.GetString() ?? pageUrl : pageUrl;
             string? download = null;
             if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
             {
@@ -993,7 +1019,7 @@ public sealed class MainForm : Form
                 Ok = false,
                 HasUpdate = false,
                 Current = current,
-                Url = page,
+                Url = pageUrl,
                 Error = ex.Message,
             };
         }
