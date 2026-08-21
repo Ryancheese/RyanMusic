@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Image, Palette, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { VISUALIZER_REGISTRY, getVisualizerModeLabel } from './visualizer/registry';
+import { VISUALIZER_REGISTRY, getVisualizerModeLabel, getVisualizerRegistryEntry } from './visualizer/registry';
+import { useTemperaTuningStore } from '../store/temperaTuningStore';
 import {
   VISUALIZER_BACKGROUND_REGISTRY,
   getVisualizerBackgroundModeLabel,
@@ -63,6 +64,8 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
 }) => {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
+  const temperaTuning = useTemperaTuningStore((state) => state.tuning);
+  const patchTemperaTuning = useTemperaTuningStore((state) => state.patchTuning);
   const [tab, setTab] = useState<StageSettingsTab>(initialTab);
   const [uploading, setUploading] = useState(false);
   const foliaTheme = useMemo(() => toFoliaTheme(theme), [theme]);
@@ -288,7 +291,7 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
         {tab === 'lyrics' ? (
           <>
             <div className="px-5 pb-2 text-xs opacity-50">选择歌词动画风格</div>
-            <div className="grid grid-cols-2 gap-2 px-5 pb-5">
+            <div className="grid grid-cols-2 gap-2 px-5 pb-3">
               {VISUALIZER_REGISTRY.map((entry) => {
                 const active = entry.mode === mode;
                 return (
@@ -304,6 +307,21 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
                 );
               })}
             </div>
+            {mode === 'tempera' && getVisualizerRegistryEntry(mode).renderSettingsPanel ? (
+              <div className="px-5 pb-5">
+                {getVisualizerRegistryEntry(mode).renderSettingsPanel?.({
+                  t,
+                  isDaylight,
+                  theme: foliaTheme,
+                  controlCardBg,
+                  rangeInputClass,
+                  temperaTuning,
+                  onTemperaTuningChange: patchTemperaTuning,
+                })}
+              </div>
+            ) : (
+              <div className="h-2" />
+            )}
           </>
         ) : (
           <div className="px-5 pb-5">

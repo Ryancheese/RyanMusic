@@ -4,6 +4,7 @@ import type { AudioBands, PlayerStatus, ThemeTokens, Track, VisualizerMode } fro
 import type { VisualizerBackgroundConfig } from './visualizer/backgrounds/definition';
 import { findLatestActiveLineIndex, resolveVisualizerLyrics } from '../lib/lyrics';
 import { useLyricSettingsStore } from '../store/lyricSettingsStore';
+import { useTemperaTuningStore } from '../store/temperaTuningStore';
 import { coverRefreshUrl } from '../api';
 import { toFoliaTheme } from '../lib/visualizer';
 import VisualizerRenderer from './visualizer/VisualizerRenderer';
@@ -58,6 +59,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
   const lyricFilterPattern = useLyricSettingsStore((state) => (
     state.filterEnabled ? state.filterPattern : ''
   ));
+  const temperaTuning = useTemperaTuningStore((state) => state.tuning);
   const resolvedLyrics = useMemo(
     () => resolveVisualizerLyrics(track, lyricFilterPattern),
     [lyricFilterPattern, track],
@@ -105,6 +107,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
             isPlayerChromeHidden={chromeHidden}
             onLyricLineSeek={onLyricLineSeek}
             background={background}
+            visualizerTunings={{ tempera: temperaTuning }}
           />
           <CommentAtmosphereOverlay
             track={track}

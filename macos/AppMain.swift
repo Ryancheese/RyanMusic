@@ -1,6 +1,7 @@
 import Cocoa
 import Darwin
 import MediaPlayer
+import UniformTypeIdentifiers
 import WebKit
 
 private let releasesRepo = "Ryancheese/RyanMusic-Releases"
@@ -61,7 +62,7 @@ final class FullBleedView: NSView {
     override var safeAreaInsets: NSEdgeInsets { NSEdgeInsetsZero }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler, WKDownloadDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate {
     var window: NSWindow!
     var webView: RyanWebView!
     private var titlebarDragOverlay: TitlebarDragOverlay?
@@ -235,6 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         webView = RyanWebView(frame: .zero, configuration: config)
         webView.customUserAgent = desktopUA
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
 
         let container = FullBleedView(frame: rect)
@@ -461,6 +463,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             }
         }
         task.resume()
+    }
+
+    // MARK: - File picker（WKWebView 默认不弹出 <input type="file">）
+
+    func webView(
+        _ webView: WKWebView,
+        runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping ([URL]?) -> Void
+    ) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.canChooseFiles = true
+        panel.canCreateDirectories = false
+        panel.resolvesAliases = true
+        panel.allowedContentTypes = [.image, .svg]
+        panel.message = "选择图片"
+        panel.prompt = "选择"
+
+        let present: (NSApplication.ModalResponse) -> Void = { result in
+            completionHandler(result == .OK ? panel.urls : nil)
+        }
+        if let window {
+            panel.beginSheetModal(for: window, completionHandler: present)
+        } else {
+            present(panel.runModal())
+        }
     }
 
     // MARK: - Navigation
