@@ -431,7 +431,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                 onChange={(event) => onSearchQueryChange(event.target.value)}
                 onFocus={() => onOpenSearch(false)}
                 placeholder="搜索歌曲"
-                className={`w-full rounded-full border border-white/10 py-2.5 pr-4 pl-10 text-base outline-none transition-[background-color,color,border-color] duration-500 md:py-2 md:text-sm ${inputBg}`}
+                className={`ryan-allow-select w-full rounded-full border border-white/10 py-2.5 pr-4 pl-10 text-base outline-none transition-[background-color,color,border-color] duration-500 md:py-2 md:text-sm ${inputBg}`}
               />
             </form>
             <div className="hidden items-center gap-2 md:flex">{themeButtons}</div>

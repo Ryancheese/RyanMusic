@@ -258,6 +258,20 @@ const App: React.FC = () => {
     }
   }, [bgWash, isDaylight, onAccent, theme.backgroundColor, theme.primaryColor, theme.secondaryColor, uiTint, userAccent, washVars]);
 
+  // WKWebView：祖先 CSS user-select:none 会让搜索框也无法选中；改用 selectstart 只拦非输入区
+  useEffect(() => {
+    const canSelect = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return false;
+      return Boolean(target.closest('input, textarea, select, [contenteditable="true"], .ryan-allow-select'));
+    };
+    const onSelectStart = (event: Event) => {
+      if (canSelect(event.target)) return;
+      event.preventDefault();
+    };
+    document.addEventListener('selectstart', onSelectStart);
+    return () => document.removeEventListener('selectstart', onSelectStart);
+  }, []);
+
   const appStyle = useMemo(
     () =>
       ({

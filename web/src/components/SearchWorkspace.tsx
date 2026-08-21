@@ -114,7 +114,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                   value={query}
                   onChange={(event) => onQueryChange(event.target.value)}
                   placeholder="搜索歌曲、歌手"
-                  className="w-full bg-transparent py-3.5 pr-4 pl-11 text-base outline-none md:text-sm"
+                  className="ryan-allow-select w-full bg-transparent py-3.5 pr-4 pl-11 text-base outline-none md:text-sm"
                   autoFocus
                 />
               </form>

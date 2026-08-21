@@ -30,19 +30,6 @@ body,
   transition:
     background-color 0.5s cubic-bezier(0.22, 1, 0.36, 1),
     color 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-  user-select: none;
-  -webkit-user-select: none;
-  caret-color: transparent;
-}
-
-/* 输入与可编辑区域仍允许选中/复制 */
-input,
-textarea,
-[contenteditable="true"],
-.ryan-allow-select {
-  user-select: text;
-  -webkit-user-select: text;
-  caret-color: auto;
 }
 
 #root {
@@ -55,6 +42,26 @@ body {
   color: var(--text-primary, #e4e4e7);
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   overflow: hidden;
+}
+
+/*
+ * 禁止拖选：
+ * WKWebView 下祖先 -webkit-user-select:none 会使 input 无法选中（子级例外常无效）。
+ * 因此这里不用祖先 none；由 App 里 selectstart 拦截非输入区域，输入框保持系统默认可选。
+ */
+.app-shell input,
+.app-shell textarea,
+.app-shell select,
+.app-shell [contenteditable="true"],
+.app-shell .ryan-allow-select,
+input,
+textarea,
+select,
+[contenteditable="true"],
+.ryan-allow-select {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  caret-color: auto !important;
 }
 
 .app-theme-surface {
