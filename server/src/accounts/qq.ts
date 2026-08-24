@@ -902,6 +902,59 @@ export class QqAccount {
     });
   }
 
+  private radarTracksFromResponse(data: any): any[] {
+    const vecSongs: any[] = data?.VecSongs || [];
+    if (vecSongs.length) {
+      return vecSongs
+        .map((item) => item?.Track || item)
+        .filter(Boolean);
+    }
+    return data?.TrackInfoList || [];
+  }
+
+  private radioTracksFromResponse(data: any): any[] {
+    return data?.tracks || data?.TrackList || [];
+  }
+
+  private albumCoverFromTrack(track: any): string {
+    const albummid = track?.album?.mid || track?.AlbumMID || track?.albumMid || '';
+    return albummid
+      ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albummid}.jpg`
+      : '';
+  }
+
+  private recommendPlaylistsFromFeed(data: any, limit: number): any[] {
+    const list: any[] = data?.List || data?.list || [];
+    const playlists: Array<Record<string, unknown>> = [];
+    for (const entry of list) {
+      const basic = entry?.Playlist?.basic || entry?.basic || entry;
+      const id = String(basic?.tid || basic?.disstid || basic?.id || '');
+      if (!id) continue;
+      playlists.push({
+        id,
+        name: String(basic?.title || basic?.dissname || '推荐歌单'),
+        cover: String(
+          basic?.cover?.medium_url
+          || basic?.cover?.default_url
+          || basic?.cover?.big_url
+          || basic?.picUrl
+          || basic?.imgurl
+          || '',
+        ),
+        trackCount: Number(basic?.song_cnt || basic?.songNum || 0),
+        recommendKind: 'playlist',
+        description: String(
+          basic?.desc
+          || basic?.description
+          || basic?.creator?.nick
+          || '个性推荐',
+        ),
+      });
+      if (playlists.length >= limit) break;
+    }
+    return playlists;
+  }
+
   private async recommendFeed(post: Record<string, string>) {
     const auth = this.read();
     if (!auth) return fail(401, '请先登录 QQ 音乐');
@@ -927,28 +980,24 @@ export class QqAccount {
         },
       }),
       // 个性化推荐歌单
-      this.qqGet(
-        `https://c.y.qq.com/rsc/fcgi-bin/fcg_get_homepage_recommend_playlist?${new URLSearchParams({
-          uin: auth.uin,
-          sin: '0',
-          ein: String(limit - 1),
-          format: 'json',
-        })}`,
-        auth.cookie,
-      ),
+      this.musiculPost(auth, {
+        req_0: {
+          module: 'music.playlist.PlaylistSquare',
+          method: 'GetRecommendFeed',
+          param: { From: 0, Size: limit },
+        },
+      }),
     ]);
 
-    const radarSongs: any[] = radarRes.json?.req_0?.data?.TrackInfoList || [];
-    const radioSongs: any[] = radioRes.json?.req_0?.data?.TrackList || [];
-    const playlists: any[] = feedRes.json?.data?.list || feedRes.json?.data?.playList || [];
+    const radarSongs = this.radarTracksFromResponse(radarRes.json?.req_0?.data);
+    const radioSongs = this.radioTracksFromResponse(radioRes.json?.req_0?.data);
+    const playlists = this.recommendPlaylistsFromFeed(feedRes.json?.req_0?.data, limit);
 
     const items: Array<Record<string, unknown>> = [
       {
         id: '__qq_radar__',
         name: '私人雷达',
-        cover: radarSongs[0]?.AlbumMID
-          ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${radarSongs[0].AlbumMID}.jpg`
-          : '',
+        cover: this.albumCoverFromTrack(radarSongs[0]),
         trackCount: radarSongs.length || 30,
         recommendKind: 'daily',
         description: '根据你的喜好智能推荐，每天更新',
@@ -956,27 +1005,14 @@ export class QqAccount {
       {
         id: '__qq_fm__',
         name: '猜你喜欢',
-        cover: radioSongs[0]?.AlbumMID
-          ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${radioSongs[0].AlbumMID}.jpg`
-          : '',
+        cover: this.albumCoverFromTrack(radioSongs[0]),
         trackCount: radioSongs.length || 6,
         recommendKind: 'fm',
         description: '无限随机电台',
       },
     ];
 
-    for (const pl of playlists) {
-      const id = String(pl.tid || pl.disstid || pl.id || '');
-      if (!id) continue;
-      items.push({
-        id,
-        name: String(pl.title || pl.dissname || '推荐歌单'),
-        cover: String(pl.picUrl || pl.imgurl || pl.cover_url_medium || pl.logo || ''),
-        trackCount: Number(pl.song_cnt || pl.songNum || 0),
-        recommendKind: 'playlist',
-        description: String(pl.desc || pl.description || pl.reason || '个性推荐'),
-      });
-    }
+    items.push(...playlists);
 
     if (!radarSongs.length && !radioSongs.length && !playlists.length) {
       return fail(502, '拉取 QQ 音乐推荐失败');
@@ -998,7 +1034,7 @@ export class QqAccount {
       },
     });
 
-    const rawList: any[] = radarRes.json?.req_0?.data?.TrackInfoList || [];
+    const rawList = this.radarTracksFromResponse(radarRes.json?.req_0?.data);
     if (!rawList.length) {
       // 回退到猜你喜欢
       const radioRes = await this.musiculPost(auth, {
@@ -1008,32 +1044,16 @@ export class QqAccount {
           param: { IsGetTrackInfo: 1, IsSetTrack: 0 },
         },
       });
-      const radioList: any[] = radioRes.json?.req_0?.data?.TrackList || [];
+      const radioList = this.radioTracksFromResponse(radioRes.json?.req_0?.data);
       if (!radioList.length) return fail(502, '拉取 QQ 音乐推荐歌曲失败');
       const tracks = radioList
-        .map((item: any) => this.qq.trackFromSong({
-          songmid: item.SongMID || item.mid,
-          songname: item.SongName || item.name,
-          singer: Array.isArray(item.SingerList)
-            ? item.SingerList.map((s: any) => ({ name: s.Name || s.name }))
-            : [],
-          albummid: item.AlbumMID || item.albumMid,
-          interval: item.Interval || item.interval || 0,
-        }))
+        .map((item: any) => this.qq.trackFromSong(item))
         .filter(Boolean);
       return ok({ tracks });
     }
 
     const tracks = rawList
-      .map((item: any) => this.qq.trackFromSong({
-        songmid: item.SongMID || item.mid,
-        songname: item.SongName || item.name,
-        singer: Array.isArray(item.SingerList)
-          ? item.SingerList.map((s: any) => ({ name: s.Name || s.name }))
-          : [],
-        albummid: item.AlbumMID || item.albumMid,
-        interval: item.Interval || item.interval || 0,
-      }))
+      .map((item: any) => this.qq.trackFromSong(item))
       .filter(Boolean);
 
     return ok({ tracks });
