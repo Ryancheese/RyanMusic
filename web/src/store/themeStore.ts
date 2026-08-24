@@ -27,6 +27,8 @@ interface PersistedAccent {
   uiTint: number;
   /** 背景主题色晕染填充度 0–100 */
   bgWash: number;
+  /** 主题色随当前播放歌曲封面取色 */
+  coverAccentEnabled: boolean;
 }
 
 function clampTint(value: unknown, fallback = 45): number {
@@ -49,9 +51,16 @@ function readAccent(): PersistedAccent {
       customColor,
       uiTint: clampTint(parsed.uiTint, 45),
       bgWash: clampTint(parsed.bgWash, 50),
+      coverAccentEnabled: Boolean(parsed.coverAccentEnabled),
     };
   } catch {
-    return { presetId: 'default', customColor: '#7c3aed', uiTint: 45, bgWash: 50 };
+    return {
+      presetId: 'default',
+      customColor: '#7c3aed',
+      uiTint: 45,
+      bgWash: 50,
+      coverAccentEnabled: false,
+    };
   }
 }
 
@@ -60,10 +69,12 @@ interface ThemeAccentState {
   customColor: string;
   uiTint: number;
   bgWash: number;
+  coverAccentEnabled: boolean;
   setPreset: (id: string) => void;
   setCustomColor: (color: string) => void;
   setUiTint: (value: number) => void;
   setBgWash: (value: number) => void;
+  setCoverAccentEnabled: (enabled: boolean) => void;
   resolveAccent: (isDaylight: boolean) => string;
 }
 
@@ -74,10 +85,12 @@ export const useThemeAccentStore = create<ThemeAccentState>((set, get) => ({
   customColor: initial.customColor,
   uiTint: initial.uiTint,
   bgWash: initial.bgWash,
+  coverAccentEnabled: initial.coverAccentEnabled,
   setPreset: (presetId) => set({ presetId }),
   setCustomColor: (customColor) => set({ presetId: 'custom', customColor }),
   setUiTint: (uiTint) => set({ uiTint: clampTint(uiTint, 45) }),
   setBgWash: (bgWash) => set({ bgWash: clampTint(bgWash, 50) }),
+  setCoverAccentEnabled: (coverAccentEnabled) => set({ coverAccentEnabled }),
   resolveAccent: (isDaylight) => {
     const { presetId, customColor } = get();
     if (presetId === 'custom') return customColor;
@@ -95,5 +108,6 @@ useThemeAccentStore.subscribe((state) => {
     customColor: state.customColor,
     uiTint: state.uiTint,
     bgWash: state.bgWash,
+    coverAccentEnabled: state.coverAccentEnabled,
   }));
 });

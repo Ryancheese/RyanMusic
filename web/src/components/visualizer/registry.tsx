@@ -58,6 +58,9 @@ export const getVisualizerModeLabel = (mode: VisualizerMode, t: (key: string) =>
     return !translated || translated === entry.labelKey ? entry.labelFallback : translated;
 };
 
+export const getVisualizerSettingsTitle = (mode: VisualizerMode, t: (key: string) => string) =>
+    `${getVisualizerModeLabel(mode, t)}参数`;
+
 export const getVisualizerPreviewStartOffset = (mode: VisualizerMode, loopDuration: number) => {
     if (loopDuration <= 0) {
         return 0;

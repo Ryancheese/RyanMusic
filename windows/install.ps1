@@ -153,7 +153,7 @@ function Resolve-RepoRoot {
   $here = $PSScriptRoot
   if ($here) {
     $candidate = Resolve-Path (Join-Path $here "..") -ErrorAction SilentlyContinue
-    if ($candidate -and (Test-Path (Join-Path $candidate "maicong-music\static")) -and (Test-Path (Join-Path $candidate "windows\build-app.ps1"))) {
+    if ($candidate -and (Test-Path (Join-Path $candidate "web-root\static")) -and (Test-Path (Join-Path $candidate "windows\build-app.ps1"))) {
       return $candidate.Path
     }
   }
@@ -269,7 +269,7 @@ function Stop-RunningApp {
         $cmd = $_.CommandLine
         if (-not $cmd) { return }
         $cmdLower = $cmd.ToLowerInvariant()
-        if ($cmdLower.Contains($installLower) -or $cmdLower.Contains('ryanmusic\maicong-music') -or $cmdLower.Contains('server.mjs')) {
+        if ($cmdLower.Contains($installLower) -or $cmdLower.Contains('ryanmusic\web-root') -or $cmdLower.Contains('server.mjs')) {
           try {
             Write-Yellow "结束 $($_.Name) (PID $($_.ProcessId))"
             Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop

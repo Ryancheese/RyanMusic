@@ -1,12 +1,12 @@
 /** 当前应用版本（与 Info.plist / Windows Version / server package 保持一致） */
-export const APP_VERSION = '2.0.4';
+export const APP_VERSION = '2.0.5';
 
 const SEEN_KEY = 'ryanmusic-whats-new-seen';
 
 /** 本版启动后弹窗展示的更新说明 */
-export const WHATS_NEW_NOTES = `• 新增歌词样式「凝彩」：色块构图与镜头分镜
-• 修复 Mac 无法选择上传图片（背景图 / 凝彩画布）
-• 凝彩参数可调，支持立绘与纹理图池`;
+export const WHATS_NEW_NOTES = `• 支持酷狗登录与多平台歌曲评论
+• 歌词样式与可视化器设置面板体验优化
+• 修复凝彩间奏圆点显示问题`;
 
 export function shouldShowWhatsNew(currentVersion = APP_VERSION): boolean {
   try {

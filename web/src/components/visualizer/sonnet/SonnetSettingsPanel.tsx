@@ -3,12 +3,14 @@ import { DEFAULT_SONNET_TUNING, type SonnetOuterFrameMode, type SonnetTuning } f
 import { colorWithAlpha } from '../colorMix';
 import type { VisualizerSettingsPanelProps } from '../definition';
 import VisualizerPresetGroup, { type VisualizerPresetOption } from '../VisualizerPresetGroup';
+import VisualizerSettingsIntro from '../VisualizerSettingsIntro';
 import { SonnetRangeControl, SonnetSettingsSection } from './SonnetSettingsControls';
 
 // src/components/visualizer/sonnet/SonnetSettingsPanel.tsx
 // Keeps Sonnet's tuning controls adjacent to the mode implementation.
 const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
+    settingsTitle,
     isDaylight,
     theme,
     rangeInputClass,
@@ -56,14 +58,10 @@ const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             className="rounded-[24px] border border-white/10 p-4 space-y-4"
             style={{ backgroundColor: controlCardBg }}
         >
-            <div className="space-y-1">
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {t('options.sonnetSettings')}
-                </div>
-                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.sonnetSettingsDesc')}
-                </div>
-            </div>
+            <VisualizerSettingsIntro
+                title={settingsTitle ?? t('options.sonnetSettings')}
+                description={t('options.sonnetSettingsDesc')}
+            />
 
             <SonnetSettingsSection title={t('options.sonnetQualitySection')}>
                 <div

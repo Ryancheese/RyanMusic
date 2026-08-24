@@ -2,7 +2,7 @@ import { handle } from 'hono/vercel';
 import { join } from 'node:path';
 import { createApp } from './bundle.mjs';
 
-const webRoot = join(process.cwd(), 'maicong-music');
+const webRoot = join(process.cwd(), 'web-root');
 const cacheDir = process.env.RYANMUSIC_CACHE_DIR || '/tmp/ryanmusic-cache';
 
 const app = createApp({

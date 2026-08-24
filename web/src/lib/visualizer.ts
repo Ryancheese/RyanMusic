@@ -1,10 +1,11 @@
 import { motionValue, type MotionValue } from 'framer-motion';
-import type { AudioBands, Theme, ThemeTokens, VisualizerBackgroundMode, VisualizerMode } from '../types';
+import type { AudioBands, Theme, ThemeTokens, VisualizerMode } from '../types';
 import type { VisualizerBackgroundConfig } from '../components/visualizer/backgrounds/definition';
 import {
   hasVisualizerBackgroundMode,
 } from '../components/visualizer/backgrounds/registry';
 import { saveCustomBackgroundImage, stripCustomImageUrl } from './customBackgroundImage';
+import type { LyricsAppearanceState } from '../store/lyricsAppearanceStore';
 
 export const VISUALIZER_MODE_KEY = 'ryanmusic-visualizer-mode';
 export const VISUALIZER_BG_KEY = 'ryanmusic-visualizer-bg-v1';
@@ -19,15 +20,42 @@ export function createAudioBands(): AudioBands {
   };
 }
 
-export function toFoliaTheme(theme: ThemeTokens, accent?: string | null): Theme {
+export type FoliaThemeOptions = Partial<Pick<
+  LyricsAppearanceState,
+  | 'fontStyle'
+  | 'fontWeight'
+  | 'fontFallbackFamilies'
+  | 'customFont'
+  | 'animationIntensity'
+  | 'keywordColoringEnabled'
+  | 'wordColors'
+>>;
+
+/** Build Folia Theme from RyanMusic tokens + lyrics appearance overrides. */
+export function toFoliaTheme(
+  theme: ThemeTokens,
+  accent?: string | null,
+  appearance?: FoliaThemeOptions | null,
+): Theme {
+  const fontStyle = appearance?.fontStyle || 'serif';
+  const wordColors = appearance?.keywordColoringEnabled === false
+    ? []
+    : (appearance?.wordColors || []);
+
   return {
     name: theme.name,
     backgroundColor: theme.backgroundColor,
     primaryColor: theme.primaryColor,
     accentColor: accent || theme.accentColor,
     secondaryColor: theme.secondaryColor,
-    fontStyle: 'serif',
-    animationIntensity: 'normal',
+    fontStyle,
+    fontWeight: appearance?.fontWeight ?? undefined,
+    fontFamily: appearance?.customFont?.family || undefined,
+    fontFamilyStack: appearance?.fontFallbackFamilies?.length
+      ? appearance.fontFallbackFamilies
+      : undefined,
+    animationIntensity: appearance?.animationIntensity || 'normal',
+    wordColors: wordColors.length ? wordColors : undefined,
   };
 }
 

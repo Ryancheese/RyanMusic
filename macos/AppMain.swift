@@ -662,7 +662,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     static func webRoot() -> String {
         let bundle = Bundle.main.bundlePath
-        return (bundle as NSString).appendingPathComponent("Contents/Resources/maicong-music")
+        return (bundle as NSString).appendingPathComponent("Contents/Resources/web-root")
     }
 
     static func serverJs() -> String? {

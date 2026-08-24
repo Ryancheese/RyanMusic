@@ -8,7 +8,7 @@
 |------|------|
 | `web/` | React 前端（Vite） |
 | `server/` | TypeScript + Hono 后端（搜索、签名代理、账号） |
-| `maicong-music/` | 前端静态资源与兼容旧路由资源 |
+| `web-root/` | 站点根目录（静态资源、运行时缓存） |
 | `macos/` | macOS 原生窗口 App（WKWebView）与一键安装脚本 |
 | `windows/` | Windows 原生窗口 App（WebView2）与一键安装脚本 |
 | `android/` | Android 独立 APK（WebView；默认连接线上站点） |

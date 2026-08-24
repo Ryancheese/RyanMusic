@@ -1,6 +1,6 @@
 # RyanMusic Web UI
 
-React 前端，构建后输出到 `../maicong-music/static/app/`，由 Node 后端（或历史 PHP 模板）加载。
+React 前端，构建后输出到 `../web-root/static/app/`，由 Node 后端（或历史 PHP 模板）加载。
 
 ## 开发
 
@@ -9,7 +9,7 @@ React 前端，构建后输出到 `../maicong-music/static/app/`，由 Node 后�
 ```bash
 cd ../server
 npm install
-npm run dev -- --listen 127.0.0.1 --port 8088 --web-root ../maicong-music
+npm run dev -- --listen 127.0.0.1 --port 8088 --web-root ../web-root
 ```
 
 再启动前端：

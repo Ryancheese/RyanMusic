@@ -2,9 +2,9 @@
 
 define('MC_CORE', true);
 define('MC_DEBUG', 0);
-define('MC_CORE_DIR', __DIR__ . '/../maicong-music/core');
+define('MC_CORE_DIR', __DIR__ . '/../web-root/core');
 
-require __DIR__ . '/../maicong-music/core/music.php';
+require __DIR__ . '/../web-root/core/music.php';
 
 if (!function_exists('mc_name_search_source_page') || !function_exists('mc_slice_name_search_songids')) {
     fwrite(STDERR, "Expected name search paging helpers to exist.\n");

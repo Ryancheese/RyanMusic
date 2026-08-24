@@ -6,7 +6,7 @@ node_modules/
 .npm-cache/
 web/.next/
 .vercel
-maicong-music/core/cache/
+web-root/core/cache/
 dist/
 server/dist/
 esbuild.tgz
@@ -19,7 +19,7 @@ windows/*.user
 android/.gradle/
 android/local.properties
 android/**/build/
-android/app/src/main/assets/maicong-music/
+android/app/src/main/assets/web-root/
 android/app/src/main/jniLibs/**/libphp.so
 android/.idea/
 *.apk

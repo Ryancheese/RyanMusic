@@ -84,7 +84,7 @@ resolve_repo_root() {
   fi
   local script_dir
   script_dir="$(cd "$(dirname "$src")" && pwd)"
-  if [[ -f "$script_dir/build-app.sh" && -d "$script_dir/../maicong-music" ]]; then
+  if [[ -f "$script_dir/build-app.sh" && -d "$script_dir/../web-root" ]]; then
     echo "$(cd "$script_dir/.." && pwd)"
     return 0
   fi

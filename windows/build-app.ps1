@@ -22,7 +22,7 @@ $DistDir = Join-Path $Root "dist\RyanMusic-win"
 $SetupPath = Join-Path $Root "dist\RyanMusic-Setup-x64.exe"
 $ZipPath = Join-Path $Root "dist\RyanMusic-win-x64.zip"
 $IssPath = Join-Path $WinDir "RyanMusic.iss"
-$MusicSrc = Join-Path $Root "maicong-music"
+$WebRootSrc = Join-Path $Root "web-root"
 $Csproj = Join-Path $WinDir "RyanMusic.csproj"
 # CLI / 内置服务器用 NTS；latest 别名跟随官方小版本更新
 # 固定版本，避免下载器跳到 HTML 页面
@@ -52,8 +52,8 @@ if (-not (Test-Path $Csproj)) {
   Write-Error "找不到 $Csproj"
 }
 
-if (-not (Test-Path $MusicSrc)) {
-  Write-Error "找不到 $MusicSrc"
+if (-not (Test-Path $WebRootSrc)) {
+  Write-Error "找不到 $WebRootSrc"
 }
 
 function Get-AppVersion {
@@ -345,14 +345,14 @@ if (-not (Test-Path (Join-Path $DistDir "RyanMusic.exe"))) {
 }
 
 Write-Host "==> 复制站点文件"
-$MusicDst = Join-Path $DistDir "maicong-music"
-robocopy $MusicSrc $MusicDst /E /NFL /NDL /NJH /NJS /nc /ns /np `
+$WebRootDst = Join-Path $DistDir "web-root"
+robocopy $WebRootSrc $WebRootDst /E /NFL /NDL /NJH /NJS /nc /ns /np `
   /XD .git core\cache node_modules `
   /XF .DS_Store Dockerfile docker-compose.yml | Out-Null
 if ($LASTEXITCODE -ge 8) {
   Write-Error "复制站点文件失败 (robocopy=$LASTEXITCODE)"
 }
-New-Item -ItemType Directory -Force -Path (Join-Path $MusicDst "core\cache") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $WebRootDst "core\cache") | Out-Null
 
 Write-Host "==> 构建 Node 后端"
 $ServerDir = Join-Path $Root "server"

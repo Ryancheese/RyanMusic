@@ -901,10 +901,10 @@ public sealed class MainForm : Form
         var baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var candidates = new[]
         {
-            Path.Combine(baseDir, "maicong-music"),
-            Path.GetFullPath(Path.Combine(baseDir, "..", "maicong-music")),
-            Path.GetFullPath(Path.Combine(baseDir, "..", "..", "maicong-music")),
-            Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "maicong-music")),
+            Path.Combine(baseDir, "web-root"),
+            Path.GetFullPath(Path.Combine(baseDir, "..", "web-root")),
+            Path.GetFullPath(Path.Combine(baseDir, "..", "..", "web-root")),
+            Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "web-root")),
         };
         foreach (var c in candidates)
         {
@@ -913,7 +913,7 @@ public sealed class MainForm : Form
                 return c;
             }
         }
-        return Path.Combine(baseDir, "maicong-music");
+        return Path.Combine(baseDir, "web-root");
     }
 
     private static int PickPort(int start)

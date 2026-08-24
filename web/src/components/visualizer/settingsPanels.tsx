@@ -8,6 +8,7 @@ import { DioramaEffectSettings } from './diorama/DioramaEffectSettings';
 import { DioramaSettingsToggle } from './diorama/DioramaSettingsToggle';
 import { resolveDioramaMoteCircumference, resolveDioramaMoteRadial } from './diorama/dioramaMoteField';
 import VisualizerPresetGroup, { type VisualizerPresetOption } from './VisualizerPresetGroup';
+import VisualizerSettingsIntro from './VisualizerSettingsIntro';
 
 // src/components/visualizer/settingsPanels.tsx
 // Mode-owned preview settings panels used by discoverable visualizer entries.
@@ -23,6 +24,7 @@ const clampCladdaghEllipseTiltDeg = (val: number) => Math.min(60, Math.max(0, va
 
 export const ClassicSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
+    settingsTitle,
     isDaylight,
     theme,
     controlCardBg,
@@ -56,14 +58,10 @@ export const ClassicSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             className="rounded-[24px] border border-white/10 p-4 space-y-4"
             style={{ backgroundColor: controlCardBg }}
         >
-            <div className="space-y-1">
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {t('options.classicSettings') }
-                </div>
-                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.classicSettingsDesc')}
-                </div>
-            </div>
+            <VisualizerSettingsIntro
+                title={settingsTitle ?? t('options.classicSettings')}
+                description={t('options.classicSettingsDesc')}
+            />
 
             <PresetGroup
                 label={t('options.classicWordRotation') }
@@ -129,6 +127,7 @@ export const ClassicSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 };
 export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
+    settingsTitle,
     isDaylight,
     theme,
     controlCardBg,
@@ -174,14 +173,10 @@ export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             className="rounded-[24px] border border-white/10 p-4 space-y-4"
             style={{ backgroundColor: controlCardBg }}
         >
-            <div className="space-y-1">
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {t('options.partitaSettings') }
-                </div>
-                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.partitaSettingsDesc')}
-                </div>
-            </div>
+            <VisualizerSettingsIntro
+                title={settingsTitle ?? t('options.partitaSettings')}
+                description={t('options.partitaSettingsDesc')}
+            />
 
             <PresetGroup
                 label={t('options.partitaGuideLines') }
@@ -251,6 +246,7 @@ const resolveFumeCameraTrackingMode = (value: FumeTuning['cameraTrackingMode'] |
 
 export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
+    settingsTitle,
     isDaylight,
     theme,
     controlCardBg,
@@ -287,14 +283,10 @@ export const FumeSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             className="rounded-[24px] border border-white/10 p-4 space-y-4"
             style={{ backgroundColor: controlCardBg }}
         >
-            <div className="space-y-1">
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {t('options.fumeSettings') }
-                </div>
-                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.fumeSettingsDesc')}
-                </div>
-            </div>
+            <VisualizerSettingsIntro
+                title={settingsTitle ?? t('options.fumeSettings')}
+                description={t('options.fumeSettingsDesc')}
+            />
 
             <PresetGroup
                 label={t('options.fumeHidePrintSymbols') }
@@ -440,6 +432,7 @@ const resolveCappellaTuning = (
 
 export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
+    settingsTitle,
     isDaylight,
     theme,
     controlCardBg,
@@ -558,14 +551,10 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             className="rounded-[24px] border border-white/10 p-4 space-y-4"
             style={{ backgroundColor: controlCardBg }}
         >
-            <div className="space-y-1">
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {t('options.cappellaSettings') }
-                </div>
-                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.cappellaSettingsDesc')}
-                </div>
-            </div>
+            <VisualizerSettingsIntro
+                title={settingsTitle ?? t('options.cappellaSettings')}
+                description={t('options.cappellaSettingsDesc')}
+            />
 
             <PresetGroup
                 label={t('options.cappellaShowEmoMessages') }
@@ -804,6 +793,7 @@ export const CappellaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
 export const TiltSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
+    settingsTitle,
     isDaylight,
     theme,
     controlCardBg,
@@ -835,14 +825,10 @@ export const TiltSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             className="rounded-[24px] border border-white/10 p-4 space-y-4"
             style={{ backgroundColor: controlCardBg }}
         >
-            <div className="space-y-1">
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {t('options.tiltSettings') }
-                </div>
-                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.tiltSettingsDesc')}
-                </div>
-            </div>
+            <VisualizerSettingsIntro
+                title={settingsTitle ?? t('options.tiltSettings')}
+                description={t('options.tiltSettingsDesc')}
+            />
 
             <PresetGroup<TiltColorScheme>
                 label={t('options.tiltColorScheme') }
@@ -902,6 +888,7 @@ const clampDioramaAudioReactivity = (value: number) => Math.min(1.5, Math.max(0,
 
 export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
+    settingsTitle,
     isDaylight,
     theme,
     controlCardBg,
@@ -961,11 +948,7 @@ export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             className="rounded-[24px] border border-white/10 p-4 space-y-4"
             style={{ backgroundColor: controlCardBg }}
         >
-            <div>
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {t('options.dioramaSettings') || '镜台参数'}
-                </div>
-            </div>
+            <VisualizerSettingsIntro title={settingsTitle ?? (t('options.dioramaSettings') || '景深参数')} />
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
@@ -1141,6 +1124,7 @@ const clampCladdaghLetterSpacingOffset = (val: number) => Math.min(20, Math.max(
 
 export const CladdaghSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
+    settingsTitle,
     isDaylight,
     theme,
     controlCardBg,
@@ -1168,14 +1152,10 @@ export const CladdaghSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             className="rounded-[24px] border border-white/10 p-4 space-y-4"
             style={{ backgroundColor: controlCardBg }}
         >
-            <div className="space-y-1">
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {t('options.claddaghSettings') }
-                </div>
-                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.claddaghSettingsDesc')}
-                </div>
-            </div>
+            <VisualizerSettingsIntro
+                title={settingsTitle ?? t('options.claddaghSettings')}
+                description={t('options.claddaghSettingsDesc')}
+            />
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>

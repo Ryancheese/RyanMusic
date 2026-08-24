@@ -91,6 +91,8 @@ export interface VisualizerSharedProps {
 
 export interface VisualizerSettingsPanelProps {
     t: (key: string) => string;
+    /** RyanMusic display title; falls back to i18n when omitted. */
+    settingsTitle?: string;
     isDaylight: boolean;
     theme: Theme;
     controlCardBg: string;

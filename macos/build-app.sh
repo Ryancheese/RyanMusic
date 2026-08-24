@@ -12,7 +12,7 @@ APP_DIR="$DIST_DIR/${APP_NAME}.app"
 CONTENTS="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS/MacOS"
 RESOURCES_DIR="$CONTENTS/Resources"
-SRC_MUSIC="$ROOT/maicong-music"
+SRC_WEB_ROOT="$ROOT/web-root"
 SRC_SWIFT="$ROOT/macos/AppMain.swift"
 
 BUNDLE_NODE=1
@@ -345,9 +345,9 @@ rsync -a \
   --exclude 'core/cache/' \
   --exclude '.DS_Store' \
   --exclude 'node_modules/' \
-  "$SRC_MUSIC/" "$RESOURCES_DIR/maicong-music/"
+  "$SRC_WEB_ROOT/" "$RESOURCES_DIR/web-root/"
 
-mkdir -p "$RESOURCES_DIR/maicong-music/core/cache"
+mkdir -p "$RESOURCES_DIR/web-root/core/cache"
 
 echo "==> build Node backend"
 (

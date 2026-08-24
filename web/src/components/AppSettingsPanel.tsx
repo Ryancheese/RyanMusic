@@ -217,6 +217,8 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
   const setListColumns = useLibraryStore((state) => state.setListColumns);
   const bgWash = useThemeAccentStore((state) => state.bgWash);
   const setBgWash = useThemeAccentStore((state) => state.setBgWash);
+  const coverAccentEnabled = useThemeAccentStore((state) => state.coverAccentEnabled);
+  const setCoverAccentEnabled = useThemeAccentStore((state) => state.setCoverAccentEnabled);
   const panelRef = useRef<HTMLDivElement>(null);
   const [cacheBusy, setCacheBusy] = useState<ClearTarget | null>(null);
   const [cacheMessage, setCacheMessage] = useState('');
@@ -845,6 +847,17 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                     })}
                   </div>
                 </div>
+
+                <ToggleRow
+                  icon={<Palette size={15} />}
+                  title="封面取色"
+                  description="播放时从当前歌曲封面提取主题色；无封面时仍使用预设主题色"
+                  enabled={coverAccentEnabled}
+                  isDaylight={isDaylight}
+                  card={card}
+                  idle={idle}
+                  onToggle={() => setCoverAccentEnabled(!coverAccentEnabled)}
+                />
 
                 <div>
                   <div className="text-sm font-semibold">主题背景</div>

@@ -1,43 +1,40 @@
-import { create } from 'zustand';
-import { DEFAULT_TEMPERA_TUNING, type TemperaTuning } from '../types';
+import { useVisualizerTuningStore } from './visualizerTuningStore';
+import type { TemperaTuning } from '../types';
 
-const KEY = 'ryanmusic-tempera-tuning-v1';
-
-const readTuning = (): TemperaTuning => {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(KEY) || 'null') as Partial<TemperaTuning> | null;
-    if (!parsed || typeof parsed !== 'object') return DEFAULT_TEMPERA_TUNING;
-    return {
-      ...DEFAULT_TEMPERA_TUNING,
-      ...parsed,
-      layerImages: Array.isArray(parsed.layerImages) ? parsed.layerImages : [],
-    };
-  } catch {
-    return DEFAULT_TEMPERA_TUNING;
-  }
-};
-
-interface TemperaTuningState {
+type TemperaTuningSlice = {
   tuning: TemperaTuning;
   setTuning: (tuning: TemperaTuning) => void;
   patchTuning: (patch: Partial<TemperaTuning>) => void;
   resetTuning: () => void;
+};
+
+const toSlice = (): TemperaTuningSlice => {
+  const state = useVisualizerTuningStore.getState();
+  return {
+    tuning: state.tempera,
+    setTuning: (tuning) => {
+      useVisualizerTuningStore.setState({ tempera: tuning });
+      state.patchTempera(tuning);
+    },
+    patchTuning: state.patchTempera,
+    resetTuning: () => state.resetMode('tempera'),
+  };
+};
+
+/** Compatible selector store: useTemperaTuningStore((s) => s.tuning) */
+export function useTemperaTuningStore(): TemperaTuningSlice;
+export function useTemperaTuningStore<T>(selector: (state: TemperaTuningSlice) => T): T;
+export function useTemperaTuningStore<T>(selector?: (state: TemperaTuningSlice) => T): T | TemperaTuningSlice {
+  const tuning = useVisualizerTuningStore((state) => state.tempera);
+  const patchTuning = useVisualizerTuningStore((state) => state.patchTempera);
+  const resetMode = useVisualizerTuningStore((state) => state.resetMode);
+  const slice: TemperaTuningSlice = {
+    tuning,
+    setTuning: (next) => patchTuning(next),
+    patchTuning,
+    resetTuning: () => resetMode('tempera'),
+  };
+  return selector ? selector(slice) : slice;
 }
 
-export const useTemperaTuningStore = create<TemperaTuningState>((set, get) => ({
-  tuning: readTuning(),
-  setTuning: (tuning) => {
-    set({ tuning });
-    try {
-      localStorage.setItem(KEY, JSON.stringify(tuning));
-    } catch {
-      // ignore quota
-    }
-  },
-  patchTuning: (patch) => {
-    get().setTuning({ ...get().tuning, ...patch });
-  },
-  resetTuning: () => {
-    get().setTuning(DEFAULT_TEMPERA_TUNING);
-  },
-}));
+useTemperaTuningStore.getState = toSlice;

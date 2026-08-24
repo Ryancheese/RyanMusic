@@ -15,14 +15,14 @@ TypeScript + Hono 统一后端，替代历史 PHP。HTTP 接口保持兼容：�
 
 ```bash
 npm install
-npm run dev -- --listen 127.0.0.1 --port 8088 --web-root ../maicong-music
+npm run dev -- --listen 127.0.0.1 --port 8088 --web-root ../web-root
 ```
 
 生产：
 
 ```bash
 npm run build
-node dist/server.mjs --listen 0.0.0.0 --port 18765 --web-root ../maicong-music
+node dist/server.mjs --listen 0.0.0.0 --port 18765 --web-root ../web-root
 ```
 
 ## 测试

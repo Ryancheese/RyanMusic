@@ -23,8 +23,8 @@ function copyManifestPlugin() {
     name: 'ryanmusic-copy-manifest',
     apply: 'build' as const,
     closeBundle() {
-      const from = path.resolve(rootDir, '../maicong-music/static/app/.vite/manifest.json');
-      const to = path.resolve(rootDir, '../maicong-music/static/app/manifest.json');
+      const from = path.resolve(rootDir, '../web-root/static/app/.vite/manifest.json');
+      const to = path.resolve(rootDir, '../web-root/static/app/manifest.json');
       if (fs.existsSync(from)) {
         fs.copyFileSync(from, to);
       }
@@ -87,7 +87,7 @@ export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss(), proxyApiPlugin(), copyManifestPlugin()],
   base: command === 'build' ? '/static/app/' : '/',
   build: {
-    outDir: path.resolve(rootDir, '../maicong-music/static/app'),
+    outDir: path.resolve(rootDir, '../web-root/static/app'),
     emptyOutDir: true,
     manifest: true,
   },

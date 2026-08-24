@@ -2,7 +2,7 @@
 ; 由 windows/build-app.ps1 调用 ISCC 编译
 
 #ifndef AppVersion
-  #define AppVersion "2.0.4"
+  #define AppVersion "2.0.5"
 #endif
 
 #ifndef DistDir
@@ -74,7 +74,7 @@ Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 Filename: "{app}\{#MyAppExeName}"; Description: "立即运行 {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{app}\maicong-music\core\cache"
+Type: filesandordirs; Name: "{app}\web-root\core\cache"
 Type: filesandordirs; Name: "{localappdata}\RyanMusic\WebView2"
 Type: filesandordirs; Name: "{localappdata}\RyanMusic\cache"
 Type: filesandordirs; Name: "{localappdata}\RyanMusic\php"

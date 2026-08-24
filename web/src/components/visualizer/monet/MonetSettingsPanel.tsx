@@ -3,6 +3,7 @@ import { ImagePlus, Trash2 } from 'lucide-react';
 import { DEFAULT_MONET_TUNING, type MonetAudioStyle, type MonetPortraitSource } from '../../../types';
 import { colorWithAlpha } from '../colorMix';
 import { type VisualizerSettingsPanelProps } from '../definition';
+import VisualizerSettingsIntro from '../VisualizerSettingsIntro';
 
 // src/components/visualizer/monet/MonetSettingsPanel.tsx
 // Monet-specific lyric, audio, and portrait controls. Background controls live in the shared background panel.
@@ -126,6 +127,7 @@ const SliderControl: React.FC<SliderControlProps> = ({
 
 export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
+    settingsTitle,
     isDaylight,
     theme,
     controlCardBg,
@@ -202,14 +204,10 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             className="space-y-4 rounded-[24px] border border-white/10 p-4"
             style={{ backgroundColor: controlCardBg }}
         >
-            <div className="space-y-1">
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {t('options.monetSettings')}
-                </div>
-                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.monetSettingsDesc')}
-                </div>
-            </div>
+            <VisualizerSettingsIntro
+                title={settingsTitle ?? t('options.monetSettings')}
+                description={t('options.monetSettingsDesc')}
+            />
 
             {/* Section 1: Lyrics & Typography */}
             <div className="space-y-3.5 rounded-[18px] border border-white/5 p-3.5 bg-black/5 dark:bg-white/5">

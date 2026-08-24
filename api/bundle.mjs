@@ -6652,7 +6652,7 @@ function arg(name, fallback) {
   return fallback;
 }
 var here = dirname2(fileURLToPath(import.meta.url));
-var defaultRoot = resolve(here, "../../maicong-music");
+var defaultRoot = resolve(here, "../../web-root");
 var webRoot = resolve(arg("web-root", process.env.RYANMUSIC_WEB_ROOT || defaultRoot));
 var cacheDir = resolve(
   arg("cache-dir", process.env.RYANMUSIC_CACHE_DIR || join7(webRoot, "core/cache"))

@@ -3,12 +3,12 @@
     "api/index.ts": {
       "memory": 1024,
       "maxDuration": 60,
-      "includeFiles": "maicong-music/**"
+      "includeFiles": "web-root/**"
     }
   },
   "rewrites": [
-    { "source": "/static/(.*)", "destination": "/maicong-music/static/$1" },
-    { "source": "/favicon.ico", "destination": "/maicong-music/favicon.ico" },
+    { "source": "/static/(.*)", "destination": "/web-root/static/$1" },
+    { "source": "/favicon.ico", "destination": "/web-root/favicon.ico" },
     { "source": "/(.*)", "destination": "/api" }
   ]
 }

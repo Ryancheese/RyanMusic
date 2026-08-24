@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, type MotionValue } from 'framer-motion';
+import { useShallow } from 'zustand/react/shallow';
 import type { AudioBands, PlayerStatus, ThemeTokens, Track, VisualizerMode } from '../types';
 import type { VisualizerBackgroundConfig } from './visualizer/backgrounds/definition';
 import { findLatestActiveLineIndex, resolveVisualizerLyrics } from '../lib/lyrics';
 import { useLyricSettingsStore } from '../store/lyricSettingsStore';
-import { useTemperaTuningStore } from '../store/temperaTuningStore';
+import { useLyricsAppearanceStore } from '../store/lyricsAppearanceStore';
+import { useVisualizerTuningStore } from '../store/visualizerTuningStore';
 import { coverRefreshUrl } from '../api';
 import { toFoliaTheme } from '../lib/visualizer';
 import VisualizerRenderer from './visualizer/VisualizerRenderer';
@@ -59,13 +61,48 @@ const PlayerView: React.FC<PlayerViewProps> = ({
   const lyricFilterPattern = useLyricSettingsStore((state) => (
     state.filterEnabled ? state.filterPattern : ''
   ));
-  const temperaTuning = useTemperaTuningStore((state) => state.tuning);
+  const appearance = useLyricsAppearanceStore(useShallow((state) => ({
+    fontStyle: state.fontStyle,
+    fontScale: state.fontScale,
+    fontWeight: state.fontWeight,
+    fontFallbackFamilies: state.fontFallbackFamilies,
+    customFont: state.customFont,
+    animationIntensity: state.animationIntensity,
+    visualizerOpacity: state.visualizerOpacity,
+    subtitleContentMode: state.subtitleContentMode,
+    subtitleFontScale: state.subtitleFontScale,
+    subtitleOverlayOpacity: state.subtitleOverlayOpacity,
+    subtitleOverlayBackground: state.subtitleOverlayBackground,
+    hideTranslationSubtitle: state.hideTranslationSubtitle,
+    showHarmonySubtitle: state.showHarmonySubtitle,
+    harmonySubtitleBackground: state.harmonySubtitleBackground,
+    keywordColoringEnabled: state.keywordColoringEnabled,
+    wordColors: state.wordColors,
+    letterSpacingEm: state.letterSpacingEm,
+  })));
+  const visualizerTunings = useVisualizerTuningStore(useShallow((state) => ({
+    classic: state.classic,
+    cadenza: state.cadenza,
+    partita: state.partita,
+    fume: state.fume,
+    claddagh: state.claddagh,
+    cappella: state.cappella,
+    tilt: state.tilt,
+    diorama: state.diorama,
+    monet: state.monet,
+    pendolo: state.pendolo,
+    sonnet: state.sonnet,
+    tempera: state.tempera,
+  })));
   const resolvedLyrics = useMemo(
     () => resolveVisualizerLyrics(track, lyricFilterPattern),
     [lyricFilterPattern, track],
   );
   const lines = resolvedLyrics.lines;
-  const foliaTheme = useMemo(() => toFoliaTheme(theme, accent), [accent, theme]);
+  const foliaTheme = useMemo(
+    () => toFoliaTheme(theme, accent, appearance),
+    [accent, appearance, theme],
+  );
   const [lineIndex, setLineIndex] = useState(-1);
   const coverUrl = track ? (track.pic || coverRefreshUrl(track.type, track.songid)) : undefined;
   const showSongLoading = Boolean(track && (buffering || (playerStatus === 'loading' && !track.url)));
@@ -87,7 +124,14 @@ const PlayerView: React.FC<PlayerViewProps> = ({
   return (
     <div className="absolute inset-0 z-20 h-full w-full overflow-hidden" onClick={onToggleChrome}>
       {track && track.url ? (
-        <div className="absolute inset-0 h-full w-full">
+        <div
+          className="absolute inset-0 h-full w-full"
+          style={{
+            letterSpacing: appearance.letterSpacingEm
+              ? `${appearance.letterSpacingEm}em`
+              : undefined,
+          }}
+        >
           <VisualizerRenderer
             mode={visualizerMode}
             currentTime={currentTime}
@@ -107,7 +151,17 @@ const PlayerView: React.FC<PlayerViewProps> = ({
             isPlayerChromeHidden={chromeHidden}
             onLyricLineSeek={onLyricLineSeek}
             background={background}
-            visualizerTunings={{ tempera: temperaTuning }}
+            lyricsFontScale={appearance.fontScale}
+            subtitleFontScale={appearance.subtitleFontScale}
+            subtitleOverlayOpacity={appearance.subtitleOverlayOpacity}
+            subtitleOverlayBackground={appearance.subtitleOverlayBackground}
+            hideTranslationSubtitle={appearance.hideTranslationSubtitle}
+            showSubtitleTranslation={appearance.subtitleContentMode !== 'none'}
+            subtitleContentMode={appearance.subtitleContentMode}
+            showHarmonySubtitle={appearance.showHarmonySubtitle}
+            harmonySubtitleBackground={appearance.harmonySubtitleBackground}
+            visualizerOpacity={appearance.visualizerOpacity}
+            visualizerTunings={visualizerTunings}
           />
           <CommentAtmosphereOverlay
             track={track}

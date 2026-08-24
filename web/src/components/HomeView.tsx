@@ -3,8 +3,6 @@ import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { ArrowLeft, ChevronDown, CircleHelp, Hexagon, LayoutGrid, List, LogOut, Palette, RefreshCw, Search, Settings, SunMoon, UserRound } from 'lucide-react';
 import { AlbumWaterfall, type AlbumWaterfallItem } from './AlbumWaterfall';
 import GlassChromeButton from './GlassChromeButton';
-import ThemeAccentPicker from './ThemeAccentPicker';
-import AppSettingsPanel from './AppSettingsPanel';
 import type { HomeTab, LibraryCardStyle, LibraryLayoutMode, ThemeTokens } from '../types';
 import { coverImageUrl, coverRefreshUrl, postAction } from '../api';
 import type { CloudPlaylist } from '../api';
@@ -70,6 +68,8 @@ interface HomeViewProps {
   onAccountsChanged: () => void;
   onOpenLegal: (tab: LegalTab) => void;
   onCheckUpdate: () => void;
+  onOpenAccentPicker: () => void;
+  onOpenSettings: () => void;
   netease: AccountStatus | null;
   qq: AccountStatus | null;
   kugou?: AccountStatus | null;
@@ -111,12 +111,12 @@ const HomeView: React.FC<HomeViewProps> = ({
   onAccountsChanged,
   onOpenLegal,
   onCheckUpdate,
+  onOpenAccentPicker,
+  onOpenSettings,
   netease,
   qq,
   kugou = null,
 }) => {
-  const [accentOpen, setAccentOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [tabDir, setTabDir] = useState(1);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
@@ -387,10 +387,10 @@ const HomeView: React.FC<HomeViewProps> = ({
           </motion.span>
         </AnimatePresence>
       </GlassChromeButton>
-      <GlassChromeButton size="sm" onClick={() => setSettingsOpen(true)} title="设置" aria-label="设置">
+      <GlassChromeButton size="sm" onClick={onOpenSettings} title="设置" aria-label="设置">
         <Settings size={16} />
       </GlassChromeButton>
-      <GlassChromeButton size="sm" onClick={() => setAccentOpen(true)} title="主题色" aria-label="主题色">
+      <GlassChromeButton size="sm" onClick={onOpenAccentPicker} title="主题色" aria-label="主题色">
         <Palette size={16} style={{ color: 'var(--text-accent)' }} />
       </GlassChromeButton>
       <GlassChromeButton size="sm" onClick={onCheckUpdate} title="检查更新" aria-label="检查更新" className="relative">
@@ -570,16 +570,6 @@ const HomeView: React.FC<HomeViewProps> = ({
         </AnimatePresence>
       </div>
 
-      <ThemeAccentPicker
-        open={accentOpen}
-        isDaylight={isDaylight}
-        onClose={() => setAccentOpen(false)}
-      />
-      <AppSettingsPanel
-        open={settingsOpen}
-        isDaylight={isDaylight}
-        onClose={() => setSettingsOpen(false)}
-      />
     </div>
   );
 };

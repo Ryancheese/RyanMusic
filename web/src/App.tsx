@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type Track, type VisualizerMode } from './types';
-import { buildDownloadUrl, canNativeSave, fetchKugouStatus, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type LyricSearchCandidate, type PlayQuality } from './api';
+import { buildDownloadUrl, canNativeSave, coverImageUrl, coverRefreshUrl, fetchKugouStatus, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type LyricSearchCandidate, type PlayQuality } from './api';
 import { accentWashVars, contrastText, extractAccentFromImage } from './lib/color';
 import { isMobileViewport, isWindowsApp, prefersLightweightVisualizer } from './lib/media';
 import WindowControls from './components/WindowControls';
@@ -32,6 +32,8 @@ import LegalModal from './components/LegalModal';
 import UpdateModal from './components/UpdateModal';
 import WhatsNewModal from './components/WhatsNewModal';
 import ToastHost from './components/ToastHost';
+import ThemeAccentPicker from './components/ThemeAccentPicker';
+import AppSettingsPanel from './components/AppSettingsPanel';
 import { parseLegalTab, type LegalTab } from './legal';
 import { checkAppUpdate, installAppUpdate, type AppUpdateInfo } from './lib/update';
 import type { AccountProviderId } from './lib/accountProviders';
@@ -117,6 +119,8 @@ const App: React.FC = () => {
   const lyricRequestGen = useRef(0);
   const durationRef = useRef(0);
   const [accent, setAccent] = useState<string | null>(null);
+  const [accentPickerOpen, setAccentPickerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [accountIntent, setAccountIntent] = useState<AccountProviderId>('netease');
   const [legalOpen, setLegalOpen] = useState(false);
@@ -214,12 +218,17 @@ const App: React.FC = () => {
   const customColor = useThemeAccentStore((state) => state.customColor);
   const uiTint = useThemeAccentStore((state) => state.uiTint);
   const bgWash = useThemeAccentStore((state) => state.bgWash);
+  const coverAccentEnabled = useThemeAccentStore((state) => state.coverAccentEnabled);
   const userAccent = useMemo(
     () => resolveAccent(isDaylight),
     [customColor, isDaylight, presetId, resolveAccent],
   );
+  const effectiveAccent = useMemo(
+    () => (coverAccentEnabled && accent ? accent : userAccent),
+    [accent, coverAccentEnabled, userAccent],
+  );
 
-  const onAccent = useMemo(() => contrastText(userAccent), [userAccent]);
+  const onAccent = useMemo(() => contrastText(effectiveAccent), [effectiveAccent]);
   const washVars = useMemo(() => accentWashVars(bgWash), [bgWash]);
 
   useEffect(() => {
@@ -241,7 +250,7 @@ const App: React.FC = () => {
     root.style.setProperty('--bg-color', theme.backgroundColor);
     root.style.setProperty('--text-primary', theme.primaryColor);
     root.style.setProperty('--text-secondary', theme.secondaryColor);
-    root.style.setProperty('--text-accent', userAccent);
+    root.style.setProperty('--text-accent', effectiveAccent);
     root.style.setProperty('--text-on-accent', onAccent);
     root.style.setProperty('--accent-ui-mix', `${uiTint}%`);
     root.style.setProperty('--accent-ui-soft', `${Math.round(uiTint * 0.38)}%`);
@@ -259,7 +268,7 @@ const App: React.FC = () => {
     } catch {
       // non-mac / no bridge
     }
-  }, [bgWash, isDaylight, onAccent, theme.backgroundColor, theme.primaryColor, theme.secondaryColor, uiTint, userAccent, washVars]);
+  }, [bgWash, effectiveAccent, isDaylight, onAccent, theme.backgroundColor, theme.primaryColor, theme.secondaryColor, uiTint, washVars]);
 
   // WKWebView：祖先 CSS user-select:none 会让搜索框也无法选中；改用 selectstart 只拦非输入区
   useEffect(() => {
@@ -281,7 +290,7 @@ const App: React.FC = () => {
         '--bg-color': theme.backgroundColor,
         '--text-primary': theme.primaryColor,
         '--text-secondary': theme.secondaryColor,
-        '--text-accent': userAccent,
+        '--text-accent': effectiveAccent,
         '--text-on-accent': onAccent,
         '--accent-ui-mix': `${uiTint}%`,
         '--accent-ui-soft': `${Math.round(uiTint * 0.38)}%`,
@@ -290,7 +299,7 @@ const App: React.FC = () => {
         backgroundColor: theme.backgroundColor,
         color: theme.primaryColor,
       }) as React.CSSProperties,
-    [bgWash, onAccent, theme, uiTint, userAccent, washVars],
+    [bgWash, effectiveAccent, onAccent, theme, uiTint, washVars],
   );
 
   const preferredQualityRef = useRef(preferredQuality);
@@ -954,12 +963,24 @@ const App: React.FC = () => {
   }, [crossPlayFallback, index, netease?.loggedIn, netease?.vip, qq?.loggedIn, qq?.vip, queue]);
 
   useEffect(() => {
-    if (!track?.pic) {
+    if (!track) {
       setAccent(null);
       return;
     }
-    void extractAccentFromImage(track.pic).then(setAccent);
-  }, [track?.pic]);
+    const raw = track.pic || coverRefreshUrl(track.type, track.songid);
+    const src = coverImageUrl(raw, 128);
+    if (!src) {
+      setAccent(null);
+      return;
+    }
+    let cancelled = false;
+    void extractAccentFromImage(src).then((color) => {
+      if (!cancelled) setAccent(color);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [track?.pic, track?.songid, track?.type]);
 
   useEffect(() => {
     if (!track || !('mediaSession' in navigator)) return;
@@ -1185,6 +1206,8 @@ const App: React.FC = () => {
           onAccountsChanged={refreshAccounts}
           onOpenLegal={openLegal}
           onCheckUpdate={() => void openUpdate()}
+          onOpenAccentPicker={() => setAccentPickerOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
           netease={netease}
           qq={qq}
           kugou={kugou}
@@ -1198,7 +1221,7 @@ const App: React.FC = () => {
           chromeHidden={chromeHidden}
           isDaylight={isDaylight}
           theme={theme}
-          accent={accent || userAccent}
+          accent={effectiveAccent}
           visualizerMode={visualizerMode}
           background={backgroundConfig}
           onVisualizerModeChange={(mode) => {
@@ -1349,6 +1372,17 @@ const App: React.FC = () => {
         progressStage={updateProgressStage}
         onClose={() => setUpdateOpen(false)}
         onInstall={() => void runInstallUpdate()}
+      />
+
+      <ThemeAccentPicker
+        open={accentPickerOpen}
+        isDaylight={isDaylight}
+        onClose={() => setAccentPickerOpen(false)}
+      />
+      <AppSettingsPanel
+        open={settingsOpen}
+        isDaylight={isDaylight}
+        onClose={() => setSettingsOpen(false)}
       />
 
       <FloatingPlayerControls

@@ -3,6 +3,7 @@ import { DEFAULT_TEMPERA_TUNING, type TemperaColorMode, type TemperaTuning } fro
 import { colorWithAlpha } from '../colorMix';
 import type { VisualizerSettingsPanelProps } from '../definition';
 import VisualizerPresetGroup, { type VisualizerPresetOption } from '../VisualizerPresetGroup';
+import VisualizerSettingsIntro from '../VisualizerSettingsIntro';
 import { TemperaRangeControl, TemperaSettingsSection } from './TemperaSettingsControls';
 import TemperaImageLayerControls from './TemperaImageLayerControls';
 
@@ -10,6 +11,7 @@ import TemperaImageLayerControls from './TemperaImageLayerControls';
 // Keeps Tempera's tuning controls adjacent to the mode implementation.
 const TemperaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     t,
+    settingsTitle,
     isDaylight,
     theme,
     rangeInputClass,
@@ -53,14 +55,10 @@ const TemperaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             className="rounded-[24px] border border-white/10 p-4 space-y-4"
             style={{ backgroundColor: controlCardBg }}
         >
-            <div className="space-y-1">
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {t('options.temperaSettings')}
-                </div>
-                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.temperaSettingsDesc')}
-                </div>
-            </div>
+            <VisualizerSettingsIntro
+                title={settingsTitle ?? t('options.temperaSettings')}
+                description={t('options.temperaSettingsDesc')}
+            />
 
             <TemperaSettingsSection title={t('options.temperaImageSection') || '画布图片'}>
                 <TemperaImageLayerControls

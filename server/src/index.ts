@@ -16,7 +16,7 @@ function arg(name: string, fallback: string): string {
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
-const defaultRoot = resolve(here, '../../maicong-music');
+const defaultRoot = resolve(here, '../../web-root');
 const webRoot = resolve(arg('web-root', process.env.RYANMUSIC_WEB_ROOT || defaultRoot));
 const cacheDir = resolve(
   arg('cache-dir', process.env.RYANMUSIC_CACHE_DIR || join(webRoot, 'core/cache')),

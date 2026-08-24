@@ -544,6 +544,7 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
   const dimColor = theme.secondaryColor || 'rgba(255,255,255,0.34)';
   const accent = theme.accentColor || litColor;
   const lightLyrics = isDaylight;
+  const activeGlowBufferPx = Math.round(typeScale.activePx * 0.38);
 
   return (
     <VisualizerShell
@@ -595,7 +596,7 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
                       y: entry.y,
                       opacity: isActive ? 1 : dist === 1 ? 0.42 : 0.28,
                       scale: isActive ? 1 : dist === 1 ? 0.92 : 0.86,
-                      filter: isActive ? 'blur(0px)' : dist === 1 ? 'blur(0.6px)' : 'blur(1px)',
+                      filter: isActive ? 'none' : dist === 1 ? 'blur(0.6px)' : 'blur(1px)',
                     }}
                     transition={SPOTLIGHT_SCROLL_TRANSITION}
                     className="absolute left-0 top-0 w-full origin-left text-left will-change-transform"
@@ -605,6 +606,7 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
                       fontWeight: isActive ? fontWeight : 560,
                       letterSpacing: isActive ? '-0.01em' : '0',
                       lineHeight: 1.25,
+                      overflow: isActive ? 'visible' : 'hidden',
                     }}
                   >
                     <div
@@ -612,6 +614,14 @@ const VisualizerSpotlight: React.FC<VisualizerSharedProps> = (props) => {
                         textShadow: isActive && !lightLyrics
                           ? `0 2px 28px rgba(0,0,0,0.28), 0 0 24px color-mix(in srgb, ${accent} 22%, transparent)`
                           : 'none',
+                        ...(isActive ? {
+                          marginLeft: -activeGlowBufferPx,
+                          marginRight: -activeGlowBufferPx,
+                          paddingLeft: activeGlowBufferPx,
+                          paddingRight: activeGlowBufferPx,
+                          paddingTop: Math.round(activeGlowBufferPx * 0.35),
+                          paddingBottom: Math.round(activeGlowBufferPx * 0.2),
+                        } : null),
                       }}
                     >
                       {isInterludeLine(entry.line) ? (
