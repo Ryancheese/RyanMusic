@@ -3,9 +3,9 @@ import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { ArrowLeft, ChevronDown, CircleHelp, Hexagon, LayoutGrid, List, LogOut, Palette, RefreshCw, Search, Settings, SunMoon, UserRound } from 'lucide-react';
 import { AlbumWaterfall, type AlbumWaterfallItem } from './AlbumWaterfall';
 import GlassChromeButton from './GlassChromeButton';
-import type { HomeTab, LibraryCardStyle, LibraryLayoutMode, ThemeTokens } from '../types';
+import type { HomeTab, LibraryCardStyle, LibraryLayoutMode, NeteaseLibrarySection, ThemeTokens } from '../types';
 import { coverImageUrl, coverRefreshUrl, postAction } from '../api';
-import type { CloudPlaylist } from '../api';
+import type { CloudPlaylist, NeteaseRecommendItem } from '../api';
 import type { LibraryEntry } from '../store/libraryStore';
 import type { AccountStatus } from '../api';
 import type { LegalTab } from '../legal';
@@ -42,26 +42,34 @@ interface HomeViewProps {
   theme: ThemeTokens;
   isDaylight: boolean;
   homeTab: HomeTab;
+  neteaseLibrarySection: NeteaseLibrarySection;
   layoutMode: LibraryLayoutMode;
   cardStyle: LibraryCardStyle;
   neteasePlaylists: CloudPlaylist[];
   qqPlaylists: CloudPlaylist[];
+  neteaseRecommendItems: NeteaseRecommendItem[];
+  qqRecommendItems: NeteaseRecommendItem[];
   neteaseOpen: CloudPlaylist | null;
   qqOpen: CloudPlaylist | null;
   neteaseTracks: LibraryEntry[];
   qqTracks: LibraryEntry[];
   cloudLoading: boolean;
   cloudSyncing: boolean;
+  recommendSyncing: boolean;
   cloudError: string;
+  recommendError: string;
   hasCurrentTrack: boolean;
   searchQuery: string;
   updateAvailable?: boolean;
   onSearchQueryChange: (query: string) => void;
   onOpenSearch: (submit?: boolean) => void;
   onHomeTabChange: (tab: HomeTab) => void;
+  onNeteaseLibrarySectionChange: (section: NeteaseLibrarySection) => void;
   onLayoutModeChange: (mode: LibraryLayoutMode) => void;
   onSelectEntry: (entry: LibraryEntry, queue: LibraryEntry[]) => void;
   onOpenPlaylist: (playlist: CloudPlaylist) => void;
+  onOpenRecommend: (item: NeteaseRecommendItem) => void;
+  onPlayPersonalFm: () => void;
   onBackPlaylist: () => void;
   onToggleTheme: () => void;
   onOpenAccount: (provider?: AccountProviderId) => void;
@@ -75,6 +83,11 @@ interface HomeViewProps {
   kugou?: AccountStatus | null;
 }
 
+const NETEASE_LIBRARY_SECTIONS: { id: NeteaseLibrarySection; label: string }[] = [
+  { id: 'playlists', label: '歌单' },
+  { id: 'recommend', label: '推荐' },
+];
+
 const LAYOUT_MODES: { id: LibraryLayoutMode; label: string; icon: React.ReactNode }[] = [
   { id: 'honeycomb', label: '蜂窝', icon: <Hexagon size={13} /> },
   { id: 'square', label: '方形', icon: <LayoutGrid size={13} /> },
@@ -85,26 +98,34 @@ const HomeView: React.FC<HomeViewProps> = ({
   theme,
   isDaylight,
   homeTab,
+  neteaseLibrarySection,
   layoutMode,
   cardStyle,
   neteasePlaylists,
   qqPlaylists,
+  neteaseRecommendItems,
+  qqRecommendItems,
   neteaseOpen,
   qqOpen,
   neteaseTracks,
   qqTracks,
   cloudLoading,
   cloudSyncing,
+  recommendSyncing,
   cloudError,
+  recommendError,
   hasCurrentTrack,
   searchQuery,
   updateAvailable = false,
   onSearchQueryChange,
   onOpenSearch,
   onHomeTabChange,
+  onNeteaseLibrarySectionChange,
   onLayoutModeChange,
   onSelectEntry,
   onOpenPlaylist,
+  onOpenRecommend,
+  onPlayPersonalFm,
   onBackPlaylist,
   onToggleTheme,
   onOpenAccount,
@@ -118,6 +139,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   kugou = null,
 }) => {
   const [tabDir, setTabDir] = useState(1);
+  const [sectionDir, setSectionDir] = useState(1);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const glassOpacity = useControlAppearanceStore((state) => state.opacity);
@@ -125,6 +147,9 @@ const HomeView: React.FC<HomeViewProps> = ({
   const openPlaylist = homeTab === 'netease' ? neteaseOpen : qqOpen;
   const cloudPlaylists = homeTab === 'netease' ? neteasePlaylists : qqPlaylists;
   const cloudTracks = homeTab === 'netease' ? neteaseTracks : qqTracks;
+  const activeRecommendItems = homeTab === 'netease' ? neteaseRecommendItems : qqRecommendItems;
+  const librarySection = neteaseLibrarySection;
+  const browsingRecommend = librarySection === 'recommend' && !openPlaylist;
   const loggedIn = homeTab === 'netease' ? Boolean(netease?.loggedIn) : Boolean(qq?.loggedIn);
   const activeAccount = homeTab === 'qq' ? qq : netease;
   const activeAvatar = activeAccount?.loggedIn && activeAccount.avatar
@@ -143,6 +168,12 @@ const HomeView: React.FC<HomeViewProps> = ({
     if (next === homeTab) return;
     setTabDir(next === 'qq' ? 1 : -1);
     onHomeTabChange(next);
+  };
+
+  const switchLibrarySection = (next: NeteaseLibrarySection) => {
+    if (next === neteaseLibrarySection) return;
+    setSectionDir(next === 'recommend' ? 1 : -1);
+    onNeteaseLibrarySectionChange(next);
   };
 
   useEffect(() => {
@@ -186,6 +217,20 @@ const HomeView: React.FC<HomeViewProps> = ({
     }))
   ), [cloudPlaylists, ownerLabel]);
 
+  const recommendItems: AlbumWaterfallItem[] = useMemo(() => (
+    activeRecommendItems.map((item) => ({
+      id: `rc-${item.id}`,
+      name: item.name,
+      description: item.description
+        || (item.recommendKind === 'daily'
+          ? '根据你的口味生成，每天更新'
+          : item.recommendKind === 'fm'
+            ? '无限私人电台'
+            : `${item.trackCount || 0} 首`),
+      coverUrl: coverImageUrl(item.cover, 400),
+    }))
+  ), [activeRecommendItems]);
+
   const trackItems: AlbumWaterfallItem[] = useMemo(() => (
     cloudTracks.map((item) => ({
       id: `${item.type}-${item.songid}`,
@@ -198,11 +243,21 @@ const HomeView: React.FC<HomeViewProps> = ({
 
   const inputBg = isDaylight ? 'bg-black/[0.04]' : 'bg-white/[0.06]';
   const layoutRailStyle = chromeButtonStyle(glassOpacity, glassBlur);
-  const syncCopy = cloudSyncing || cloudLoading ? '正在同步歌单…' : '';
+  const syncCopy = cloudSyncing || cloudLoading || recommendSyncing ? '正在同步…' : '';
   const playlistEmptyCopy = !loggedIn
     ? '登录后即可同步账号歌单'
     : syncCopy || cloudError || '还没有歌单，打开登录面板可重新同步';
-  const trackEmptyCopy = syncCopy || cloudError || '这个歌单是空的';
+  const recommendEmptyCopy = !loggedIn
+    ? '登录后即可查看每日推荐与私人 FM'
+    : syncCopy || recommendError || '暂无推荐内容';
+  const trackEmptyCopy = syncCopy || cloudError || recommendError || '这个歌单是空的';
+  const listSummary = openPlaylist
+    ? openPlaylist.name
+    : browsingRecommend
+      ? `${activeRecommendItems.length} 个推荐`
+      : loggedIn
+        ? `${cloudPlaylists.length} 个歌单`
+        : '未登录';
 
   const themeButtons = (
     <>
@@ -416,11 +471,48 @@ const HomeView: React.FC<HomeViewProps> = ({
         style={{ paddingTop: 'max(2.5rem, calc(var(--safe-top) + 0.75rem))' }}
       >
         <div className="titlebar-no-drag flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <div>
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="shrink-0">
               <div className="text-[11px] tracking-[0.35em] opacity-50">RYAN</div>
               <div className="text-lg font-semibold tracking-[0.18em]">MUSIC</div>
             </div>
+            {loggedIn ? (
+              <div
+                className="mx-auto inline-flex items-center gap-0.5 rounded-full p-0.5 md:mx-0"
+                style={layoutRailStyle}
+              >
+                <LayoutGroup id="home-netease-section-tabs">
+                  {NETEASE_LIBRARY_SECTIONS.map((section) => {
+                    const active = librarySection === section.id;
+                    return (
+                      <button
+                        key={section.id}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => switchLibrarySection(section.id)}
+                        className="relative rounded-full px-3.5 py-1.5 text-[11px] transition sm:text-xs"
+                      >
+                        {active ? (
+                          <motion.span
+                            layoutId="home-active-netease-section-pill"
+                            className={`absolute inset-0 rounded-full shadow-sm ${
+                              isDaylight ? 'bg-white/90' : 'bg-white/20'
+                            }`}
+                            transition={{ type: 'spring', stiffness: 460, damping: 36 }}
+                          />
+                        ) : null}
+                        <span className={`relative z-10 ${
+                          active ? (isDaylight ? 'text-black' : 'text-white') : 'opacity-55 hover:opacity-90'
+                        }`}
+                        >
+                          {section.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </LayoutGroup>
+              </div>
+            ) : null}
             <div className="ml-auto flex items-center gap-2 md:hidden">{themeButtons}</div>
           </div>
 
@@ -456,11 +548,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             </GlassChromeButton>
           ) : null}
           <span className="truncate text-[11px] opacity-60">
-            {openPlaylist
-              ? openPlaylist.name
-              : loggedIn
-                ? `${cloudPlaylists.length} 个歌单`
-                : '未登录'}
+            {listSummary}
           </span>
           <div
             className="ml-auto inline-flex items-center gap-0.5 rounded-full p-0.5"
@@ -506,7 +594,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       <div className="relative z-[2] min-h-0 w-full flex-1 overflow-hidden" style={{ isolation: 'isolate' }}>
         {/* 歌单列表：平台切换带动画；进详情时隐藏保活层由下方 tracks 覆盖 */}
         <AnimatePresence mode="wait" initial={false} custom={tabDir}>
-          {!openPlaylist ? (
+          {!openPlaylist && !browsingRecommend ? (
             <motion.div
               key={`playlists-${homeTab}`}
               className="absolute inset-0 flex flex-col overflow-hidden"
@@ -529,6 +617,47 @@ const HomeView: React.FC<HomeViewProps> = ({
                 isDaylight={isDaylight}
                 isLoading={cloudSyncing || cloudLoading}
                 emptyMessage={playlistEmptyCopy}
+                hasFloatingPlayer={hasCurrentTrack}
+                layoutMode={layoutMode}
+                cardStyle={cardStyle}
+              />
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
+        <AnimatePresence mode="wait" initial={false} custom={sectionDir}>
+          {browsingRecommend ? (
+            <motion.div
+              key="netease-recommend"
+              className="absolute inset-0 flex flex-col overflow-hidden"
+              custom={sectionDir}
+              variants={LIBRARY_SLIDE}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={LIBRARY_SLIDE_TRANSITION}
+            >
+              <AlbumWaterfall
+                key={`recommend-${layoutMode}`}
+                scrollKey={`${layoutMode}:netease:recommend`}
+                items={recommendItems}
+                onSelect={(item, index) => {
+                  const recommendItem = activeRecommendItems.find((entry) => `rc-${entry.id}` === item.id)
+                    || activeRecommendItems[index];
+                  if (!recommendItem) return;
+                  if (recommendItem.recommendKind === 'fm') {
+                    onPlayPersonalFm();
+                    return;
+                  }
+                  if (recommendItem.recommendKind === 'daily') {
+                    onOpenRecommend(recommendItem);
+                    return;
+                  }
+                  onOpenPlaylist(recommendItem);
+                }}
+                isDaylight={isDaylight}
+                isLoading={recommendSyncing || cloudLoading}
+                emptyMessage={recommendEmptyCopy}
                 hasFloatingPlayer={hasCurrentTrack}
                 layoutMode={layoutMode}
                 cardStyle={cardStyle}

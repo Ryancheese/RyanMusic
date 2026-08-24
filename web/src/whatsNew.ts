@@ -1,12 +1,12 @@
 /** 当前应用版本（与 Info.plist / Windows Version / server package 保持一致） */
-export const APP_VERSION = '2.0.5';
+export const APP_VERSION = '2.0.6';
 
 const SEEN_KEY = 'ryanmusic-whats-new-seen';
 
 /** 本版启动后弹窗展示的更新说明 */
-export const WHATS_NEW_NOTES = `• 支持酷狗登录与多平台歌曲评论
-• 歌词样式与可视化器设置面板体验优化
-• 修复凝彩间奏圆点显示问题`;
+export const WHATS_NEW_NOTES = `• 网易云 / QQ 音乐推荐歌单、每日推荐与私人 FM
+• 云音乐库分区切换：我的歌单 / 推荐
+• 提供 Intel Mac 安装包（x64 DMG）`;
 
 export function shouldShowWhatsNew(currentVersion = APP_VERSION): boolean {
   try {

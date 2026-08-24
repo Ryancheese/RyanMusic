@@ -1,6 +1,6 @@
 {
-  "_VividLightBlend-BygFljjQ.js": {
-    "file": "assets/VividLightBlend-BygFljjQ.js",
+  "_VividLightBlend-Cdd138uV.js": {
+    "file": "assets/VividLightBlend-Cdd138uV.js",
     "name": "VividLightBlend",
     "imports": [
       "index.html"
@@ -11,7 +11,7 @@
     "name": "sonnetPrintFilters"
   },
   "index.html": {
-    "file": "assets/index-C7zh4CdV.js",
+    "file": "assets/index-BdGZv7Tj.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -20,7 +20,7 @@
       "src/components/visualizer/tempera/createTemperaPixiRuntime.ts"
     ],
     "css": [
-      "assets/index-moJ-ogEF.css"
+      "assets/index-CJEVfxt8.css"
     ],
     "assets": [
       "assets/avatar10-CEta-Hap.png",
@@ -50,36 +50,36 @@
     ]
   },
   "node_modules/pixi.js/lib/environment-browser/browserAll.mjs": {
-    "file": "assets/browserAll-BSmPVCj0.js",
+    "file": "assets/browserAll-Bmeot359.js",
     "name": "browserAll",
     "src": "node_modules/pixi.js/lib/environment-browser/browserAll.mjs",
     "isDynamicEntry": true,
     "imports": [
-      "_VividLightBlend-BygFljjQ.js",
+      "_VividLightBlend-Cdd138uV.js",
       "node_modules/pixi.js/lib/index.mjs",
       "node_modules/pixi.js/lib/environment-webworker/webworkerAll.mjs",
       "index.html"
     ]
   },
   "node_modules/pixi.js/lib/environment-webworker/webworkerAll.mjs": {
-    "file": "assets/webworkerAll-BymbHDhJ.js",
+    "file": "assets/webworkerAll-bQFPnHLq.js",
     "name": "webworkerAll",
     "src": "node_modules/pixi.js/lib/environment-webworker/webworkerAll.mjs",
     "isDynamicEntry": true,
     "imports": [
       "node_modules/pixi.js/lib/index.mjs",
-      "_VividLightBlend-BygFljjQ.js",
+      "_VividLightBlend-Cdd138uV.js",
       "index.html"
     ]
   },
   "node_modules/pixi.js/lib/index.mjs": {
-    "file": "assets/index-BaTJJ6LH.js",
+    "file": "assets/index-a-c6xs1J.js",
     "name": "index",
     "src": "node_modules/pixi.js/lib/index.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_VividLightBlend-BygFljjQ.js"
+      "_VividLightBlend-Cdd138uV.js"
     ],
     "dynamicImports": [
       "node_modules/pixi.js/lib/environment-browser/browserAll.mjs",
@@ -183,21 +183,21 @@
     "src": "src/components/visualizer/cappella/emo/vibe3.png"
   },
   "src/components/visualizer/sonnet/createSonnetPixiRuntime.ts": {
-    "file": "assets/createSonnetPixiRuntime-3W_FUiR_.js",
+    "file": "assets/createSonnetPixiRuntime-CzeYD-TT.js",
     "name": "createSonnetPixiRuntime",
     "src": "src/components/visualizer/sonnet/createSonnetPixiRuntime.ts",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
       "_sonnetPrintFilters-CtEx3DMO.js",
-      "_VividLightBlend-BygFljjQ.js"
+      "_VividLightBlend-Cdd138uV.js"
     ],
     "dynamicImports": [
       "node_modules/pixi.js/lib/index.mjs"
     ]
   },
   "src/components/visualizer/tempera/createTemperaPixiRuntime.ts": {
-    "file": "assets/createTemperaPixiRuntime-CSkAAOWn.js",
+    "file": "assets/createTemperaPixiRuntime-D4-WRIYJ.js",
     "name": "createTemperaPixiRuntime",
     "src": "src/components/visualizer/tempera/createTemperaPixiRuntime.ts",
     "isDynamicEntry": true,

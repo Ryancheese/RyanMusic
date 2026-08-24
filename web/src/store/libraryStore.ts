@@ -1,5 +1,11 @@
 import { create } from 'zustand';
-import type { HomeTab, LibraryCardStyle, LibraryLayoutMode, LibraryListColumns } from '../types';
+import type {
+  HomeTab,
+  LibraryCardStyle,
+  LibraryLayoutMode,
+  LibraryListColumns,
+  NeteaseLibrarySection,
+} from '../types';
 
 export interface LibraryEntry {
   type: import('../types').MusicSource;
@@ -28,6 +34,7 @@ function purgeLegacyCache() {
 
 function readPersistedUi(): {
   homeTab: HomeTab;
+  neteaseLibrarySection: NeteaseLibrarySection;
   layoutMode: LibraryLayoutMode;
   cardStyle: LibraryCardStyle;
   listColumns: LibraryListColumns;
@@ -40,8 +47,12 @@ function readPersistedUi(): {
       layoutMode?: string;
       cardStyle?: string;
       listColumns?: string;
+      neteaseLibrarySection?: string;
     };
     const homeTab: HomeTab = parsed.homeTab === 'qq' ? 'qq' : 'netease';
+    const neteaseLibrarySection: NeteaseLibrarySection = parsed.neteaseLibrarySection === 'recommend'
+      ? 'recommend'
+      : 'playlists';
 
     // 旧「卡片」布局 → 方形 + 铭牌；其它布局默认纯封面，除非已存铭牌
     let layoutMode: LibraryLayoutMode = 'square';
@@ -64,9 +75,15 @@ function readPersistedUi(): {
 
     const listColumns: LibraryListColumns = parsed.listColumns === 'multi' ? 'multi' : 'single';
 
-    return { homeTab, layoutMode, cardStyle, listColumns };
+    return { homeTab, neteaseLibrarySection, layoutMode, cardStyle, listColumns };
   } catch {
-    return { homeTab: 'netease', layoutMode: 'square', cardStyle: 'plaque', listColumns: 'single' };
+    return {
+      homeTab: 'netease',
+      neteaseLibrarySection: 'playlists',
+      layoutMode: 'square',
+      cardStyle: 'plaque',
+      listColumns: 'single',
+    };
   }
 }
 
@@ -80,10 +97,12 @@ try {
 
 interface LibraryState {
   homeTab: HomeTab;
+  neteaseLibrarySection: NeteaseLibrarySection;
   layoutMode: LibraryLayoutMode;
   cardStyle: LibraryCardStyle;
   listColumns: LibraryListColumns;
   setHomeTab: (tab: HomeTab) => void;
+  setNeteaseLibrarySection: (section: NeteaseLibrarySection) => void;
   setLayoutMode: (mode: LibraryLayoutMode) => void;
   setCardStyle: (style: LibraryCardStyle) => void;
   setListColumns: (columns: LibraryListColumns) => void;
@@ -91,10 +110,12 @@ interface LibraryState {
 
 export const useLibraryStore = create<LibraryState>((set) => ({
   homeTab: initial.homeTab,
+  neteaseLibrarySection: initial.neteaseLibrarySection,
   layoutMode: initial.layoutMode,
   cardStyle: initial.cardStyle,
   listColumns: initial.listColumns,
   setHomeTab: (homeTab) => set({ homeTab }),
+  setNeteaseLibrarySection: (neteaseLibrarySection) => set({ neteaseLibrarySection }),
   setLayoutMode: (layoutMode) => set({ layoutMode }),
   setCardStyle: (cardStyle) => set({ cardStyle }),
   setListColumns: (listColumns) => set({ listColumns }),
@@ -103,6 +124,7 @@ export const useLibraryStore = create<LibraryState>((set) => ({
 useLibraryStore.subscribe((state) => {
   localStorage.setItem(UI_KEY, JSON.stringify({
     homeTab: state.homeTab,
+    neteaseLibrarySection: state.neteaseLibrarySection,
     layoutMode: state.layoutMode,
     cardStyle: state.cardStyle,
     listColumns: state.listColumns,

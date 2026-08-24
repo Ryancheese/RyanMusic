@@ -68,6 +68,12 @@ export class NeteaseAccount {
         return this.qrCheck(post.key || '');
       case 'netease_playlists':
         return this.playlists();
+      case 'netease_recommend_feed':
+        return this.recommendFeed(post);
+      case 'netease_daily_songs':
+        return this.dailySongs();
+      case 'netease_personal_fm':
+        return this.personalFm();
       case 'netease_likelist':
         return this.likelist(post);
       case 'netease_like':
@@ -359,6 +365,113 @@ export class NeteaseAccount {
     let ids = raw.split(',').map((n) => Number(n)).filter((n) => n > 0);
     if (ids.length > 10) ids = ids.slice(0, 10);
     return ok({ tracks: await this.netease.songsByIdsV3(ids, auth.cookie) });
+  }
+
+  private coverFromSong(song: any): string {
+    const pic = String(song?.al?.picUrl || song?.album?.picUrl || song?.picUrl || '');
+    return pic || '';
+  }
+
+  private async recommendFeed(post: Record<string, string>) {
+    const auth = this.requireAuth();
+    if (!auth) return fail(401, '请先登录网易云');
+    let limit = Number(post.limit || 24);
+    if (limit <= 0) limit = 24;
+    if (limit > 35) limit = 35;
+
+    const [dailyRes, fmRes, personalizedRes] = await Promise.all([
+      weapiRequest('/weapi/v3/discovery/recommend/songs', {}, auth.cookie),
+      weapiRequest('/weapi/v1/radio/timeline', { limit: 3 }, auth.cookie),
+      weapiRequest('/weapi/personalized/playlist', { limit, total: true, n: 1000 }, auth.cookie),
+    ]);
+
+    const dailySongs = dailyRes.json?.data?.dailySongs
+      || dailyRes.json?.recommendDailySongs
+      || dailyRes.json?.data?.songs
+      || [];
+    const fmSongs = fmRes.json?.data || fmRes.json?.result || [];
+    const personalized = personalizedRes.json?.result || [];
+
+    const items: Array<Record<string, unknown>> = [
+      {
+        id: '__daily__',
+        name: '每日推荐',
+        cover: this.coverFromSong(Array.isArray(dailySongs) ? dailySongs[0] : null),
+        trackCount: Array.isArray(dailySongs) ? dailySongs.length : 0,
+        recommendKind: 'daily',
+        description: '根据你的口味生成，每天更新',
+      },
+      {
+        id: '__fm__',
+        name: '私人 FM',
+        cover: this.coverFromSong(Array.isArray(fmSongs) ? fmSongs[0] : null),
+        trackCount: Array.isArray(fmSongs) ? fmSongs.length : 0,
+        recommendKind: 'fm',
+        description: '无限私人电台',
+      },
+    ];
+
+    if (Array.isArray(personalized)) {
+      for (const pl of personalized) {
+        items.push({
+          id: String(pl.id || ''),
+          name: String(pl.name || '推荐歌单'),
+          cover: String(pl.coverImgUrl || pl.picUrl || ''),
+          trackCount: Number(pl.trackCount || 0),
+          recommendKind: 'playlist',
+          description: String(pl.copywriter || pl.reason || pl.creator?.nickname || '个性推荐'),
+        });
+      }
+    }
+
+    if (Number(dailyRes.json?.code ?? 0) !== 200 && Number(fmRes.json?.code ?? 0) !== 200 && !personalized.length) {
+      return fail(502, '拉取推荐内容失败');
+    }
+
+    return ok({ items });
+  }
+
+  private async dailySongs() {
+    const auth = this.requireAuth();
+    if (!auth) return fail(401, '请先登录网易云');
+    const res = await weapiRequest('/weapi/v3/discovery/recommend/songs', {}, auth.cookie);
+    const code = Number(res.json?.code ?? 0);
+    if (code !== 200) {
+      return fail(502, String(res.json?.message || res.error || '拉取每日推荐失败'));
+    }
+    const raw = res.json?.data?.dailySongs
+      || res.json?.recommendDailySongs
+      || res.json?.data?.songs
+      || [];
+    if (!Array.isArray(raw) || !raw.length) {
+      return ok({ name: '每日推荐', total: 0, tracks: [] });
+    }
+    const ids = raw.map((song: any) => Number(song.id)).filter((id: number) => id > 0);
+    const tracks = await this.netease.songsByIdsV3(ids, auth.cookie);
+    return ok({
+      id: '__daily__',
+      name: '每日推荐',
+      total: tracks.length,
+      tracks,
+    });
+  }
+
+  private async personalFm() {
+    const auth = this.requireAuth();
+    if (!auth) return fail(401, '请先登录网易云');
+    let res = await weapiRequest('/weapi/v1/radio/timeline', { limit: 10 }, auth.cookie);
+    let raw = res.json?.data;
+    if (!Array.isArray(raw) || !raw.length) {
+      res = await weapiRequest('/weapi/personal_fm', {}, auth.cookie);
+      raw = res.json?.data;
+    }
+    const code = Number(res.json?.code ?? 0);
+    if (code !== 200 || !Array.isArray(raw) || !raw.length) {
+      return fail(502, String(res.json?.message || res.error || '拉取私人 FM 失败'));
+    }
+    const ids = raw.map((song: any) => Number(song.id || song.song?.id)).filter((id: number) => id > 0);
+    const tracks = await this.netease.songsByIdsV3(ids, auth.cookie);
+    return ok({ tracks });
   }
 }
 

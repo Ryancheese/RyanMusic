@@ -3,14 +3,20 @@ import type { MusicSource } from '../types';
 import type { LibraryEntry } from './libraryStore';
 import {
   coverRefreshUrl,
+  fetchNeteaseDailySongs,
   fetchNeteaseLikelist,
+  fetchNeteasePersonalFm,
   fetchNeteasePlaylistDetail,
   fetchNeteasePlaylists,
+  fetchNeteaseRecommendFeed,
   fetchQqLikelist,
+  fetchQqPersonalFm,
   fetchQqPlaylistDetail,
   fetchQqPlaylists,
+  fetchQqRecommendFeed,
   type CloudPlaylist,
   type CloudTrack,
+  type NeteaseRecommendItem,
 } from '../api';
 import { touchPlaylistRecent } from './playlistRecentStore';
 
@@ -78,20 +84,31 @@ function getTrackCache(provider: 'netease' | 'qq', playlistId: string): Playlist
 interface CloudState {
   neteasePlaylists: CloudPlaylist[];
   qqPlaylists: CloudPlaylist[];
+  neteaseRecommendItems: NeteaseRecommendItem[];
+  qqRecommendItems: NeteaseRecommendItem[];
   neteaseOpen: CloudPlaylist | null;
   qqOpen: CloudPlaylist | null;
   neteaseTracks: LibraryEntry[];
   qqTracks: LibraryEntry[];
   neteaseSyncing: boolean;
   qqSyncing: boolean;
+  neteaseRecommendSyncing: boolean;
+  qqRecommendSyncing: boolean;
   neteaseLoading: boolean;
   qqLoading: boolean;
   neteaseError: string;
   qqError: string;
+  neteaseRecommendError: string;
+  qqRecommendError: string;
   syncNetease: () => Promise<void>;
+  syncNeteaseRecommend: () => Promise<void>;
   syncQq: () => Promise<void>;
+  syncQqRecommend: () => Promise<void>;
   openNeteasePlaylist: (playlist: CloudPlaylist) => Promise<void>;
+  openNeteaseRecommend: (item: NeteaseRecommendItem) => Promise<void>;
+  playNeteasePersonalFm: () => Promise<LibraryEntry[]>;
   openQqPlaylist: (playlist: CloudPlaylist) => Promise<void>;
+  playQqPersonalFm: () => Promise<LibraryEntry[]>;
   closeNeteasePlaylist: () => void;
   closeQqPlaylist: () => void;
   clearProvider: (provider: MusicSource) => void;
@@ -221,16 +238,22 @@ async function collectQqTracks(playlist: CloudPlaylist): Promise<{ name: string;
 export const useCloudStore = create<CloudState>((set, get) => ({
   neteasePlaylists: readMeta(NETEASE_KEY).playlists,
   qqPlaylists: readMeta(QQ_KEY).playlists,
+  neteaseRecommendItems: [],
+  qqRecommendItems: [],
   neteaseOpen: null,
   qqOpen: null,
   neteaseTracks: [],
   qqTracks: [],
   neteaseSyncing: false,
   qqSyncing: false,
+  neteaseRecommendSyncing: false,
+  qqRecommendSyncing: false,
   neteaseLoading: false,
   qqLoading: false,
   neteaseError: '',
   qqError: '',
+  neteaseRecommendError: '',
+  qqRecommendError: '',
   syncNetease: async () => {
     set({ neteaseSyncing: true, neteaseError: '' });
     const res = await fetchNeteasePlaylists();
@@ -258,6 +281,25 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     writeMeta(NETEASE_KEY, { playlists, syncedAt: Date.now() });
     set({ neteasePlaylists: playlists });
   },
+  syncNeteaseRecommend: async () => {
+    set({ neteaseRecommendSyncing: true, neteaseRecommendError: '' });
+    const res = await fetchNeteaseRecommendFeed();
+    if (res.code !== 200 || !res.data) {
+      set({
+        neteaseRecommendSyncing: false,
+        neteaseRecommendError: res.error || '拉取推荐失败',
+      });
+      return;
+    }
+    const items = (res.data.items || []).filter((item) => item?.id && item.recommendKind);
+    set({
+      neteaseRecommendItems: items,
+      neteaseRecommendSyncing: false,
+      neteaseRecommendError: items.length ? '' : '暂无推荐内容',
+      neteaseOpen: null,
+      neteaseTracks: [],
+    });
+  },
   syncQq: async () => {
     set({ qqSyncing: true, qqError: '' });
     const res = await fetchQqPlaylists();
@@ -284,6 +326,32 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     });
     writeMeta(QQ_KEY, { playlists, syncedAt: Date.now() });
     set({ qqPlaylists: playlists });
+  },
+  syncQqRecommend: async () => {
+    set({ qqRecommendSyncing: true, qqRecommendError: '' });
+    const res = await fetchQqRecommendFeed();
+    if (res.code !== 200 || !res.data) {
+      set({ qqRecommendSyncing: false, qqRecommendError: res.error || '拉取 QQ 推荐失败' });
+      return;
+    }
+    const items = (res.data.items || []).filter((item) => item?.id && item.recommendKind);
+    set({
+      qqRecommendItems: items,
+      qqRecommendSyncing: false,
+      qqRecommendError: items.length ? '' : '暂无推荐内容',
+      qqOpen: null,
+      qqTracks: [],
+    });
+  },
+  playQqPersonalFm: async () => {
+    set({ qqRecommendError: '' });
+    const res = await fetchQqPersonalFm();
+    if (res.code !== 200 || !res.data?.tracks?.length) {
+      const message = res.error || '拉取 QQ 音乐推荐失败';
+      set({ qqRecommendError: message });
+      throw new Error(message);
+    }
+    return toEntries(res.data.tracks, 'qq');
   },
   openNeteasePlaylist: async (playlist) => {
     touchPlaylistRecent('netease', playlist.id);
@@ -321,6 +389,50 @@ export const useCloudStore = create<CloudState>((set, get) => ({
           : (error instanceof Error ? error.message : '加载歌单失败'),
       });
     }
+  },
+  openNeteaseRecommend: async (item) => {
+    if (item.recommendKind !== 'daily') return;
+    const virtual: CloudPlaylist = {
+      id: item.id,
+      name: item.name,
+      cover: item.cover,
+      recommendKind: 'daily',
+    };
+    set({
+      neteaseLoading: true,
+      neteaseError: '',
+      neteaseOpen: virtual,
+      neteaseTracks: [],
+    });
+    try {
+      const res = await fetchNeteaseDailySongs();
+      if (res.code !== 200 || !res.data) {
+        throw new Error(res.error || '加载每日推荐失败');
+      }
+      const tracks = toEntries(res.data.tracks, 'netease');
+      const cover = item.cover?.trim() || coverFromTrack(res.data.tracks?.[0], 'netease');
+      set({
+        neteaseLoading: false,
+        neteaseOpen: { ...virtual, name: res.data.name || item.name, cover },
+        neteaseTracks: tracks,
+        neteaseError: tracks.length ? '' : '今日推荐为空',
+      });
+    } catch (error) {
+      set({
+        neteaseLoading: false,
+        neteaseError: error instanceof Error ? error.message : '加载每日推荐失败',
+      });
+    }
+  },
+  playNeteasePersonalFm: async () => {
+    set({ neteaseRecommendError: '' });
+    const res = await fetchNeteasePersonalFm();
+    if (res.code !== 200 || !res.data?.tracks?.length) {
+      const message = res.error || '拉取私人 FM 失败';
+      set({ neteaseRecommendError: message });
+      throw new Error(message);
+    }
+    return toEntries(res.data.tracks, 'netease');
   },
   openQqPlaylist: async (playlist) => {
     touchPlaylistRecent('qq', playlist.id);
@@ -369,11 +481,14 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       writeTrackCache(cache);
       set({
         neteasePlaylists: [],
+        neteaseRecommendItems: [],
         neteaseOpen: null,
         neteaseTracks: [],
         neteaseError: '',
+        neteaseRecommendError: '',
         neteaseLoading: false,
         neteaseSyncing: false,
+        neteaseRecommendSyncing: false,
       });
       return;
     }
@@ -383,11 +498,14 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     writeTrackCache(cache);
     set({
       qqPlaylists: [],
+      qqRecommendItems: [],
       qqOpen: null,
       qqTracks: [],
       qqError: '',
+      qqRecommendError: '',
       qqLoading: false,
       qqSyncing: false,
+      qqRecommendSyncing: false,
     });
   },
 }));

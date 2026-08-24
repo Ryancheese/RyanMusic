@@ -11,6 +11,7 @@
 | 平台 | 文件 |
 |------|------|
 | macOS Apple Silicon | `RyanMusic-mac-arm64.dmg` |
+| macOS Intel | `RyanMusic-mac-x64.dmg` |
 | Windows | `RyanMusic-Setup-x64.exe` |
 | Android | `RyanMusic-android.apk` |
 

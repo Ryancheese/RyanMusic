@@ -155,6 +155,8 @@ const App: React.FC = () => {
 
   const homeTab = useLibraryStore((state) => state.homeTab);
   const setHomeTab = useLibraryStore((state) => state.setHomeTab);
+  const neteaseLibrarySection = useLibraryStore((state) => state.neteaseLibrarySection);
+  const setNeteaseLibrarySection = useLibraryStore((state) => state.setNeteaseLibrarySection);
   const layoutMode = useLibraryStore((state) => state.layoutMode);
   const cardStyle = useLibraryStore((state) => state.cardStyle);
   const setLayoutMode = useLibraryStore((state) => state.setLayoutMode);
@@ -166,20 +168,31 @@ const App: React.FC = () => {
 
   const neteasePlaylists = useCloudStore((state) => state.neteasePlaylists);
   const qqPlaylists = useCloudStore((state) => state.qqPlaylists);
+  const neteaseRecommendItems = useCloudStore((state) => state.neteaseRecommendItems);
+  const qqRecommendItems = useCloudStore((state) => state.qqRecommendItems);
   const neteaseOpen = useCloudStore((state) => state.neteaseOpen);
   const qqOpen = useCloudStore((state) => state.qqOpen);
   const neteaseTracks = useCloudStore((state) => state.neteaseTracks);
   const qqTracks = useCloudStore((state) => state.qqTracks);
   const neteaseSyncing = useCloudStore((state) => state.neteaseSyncing);
   const qqSyncing = useCloudStore((state) => state.qqSyncing);
+  const neteaseRecommendSyncing = useCloudStore((state) => state.neteaseRecommendSyncing);
+  const qqRecommendSyncing = useCloudStore((state) => state.qqRecommendSyncing);
   const neteaseLoading = useCloudStore((state) => state.neteaseLoading);
   const qqLoading = useCloudStore((state) => state.qqLoading);
   const neteaseError = useCloudStore((state) => state.neteaseError);
   const qqError = useCloudStore((state) => state.qqError);
+  const neteaseRecommendError = useCloudStore((state) => state.neteaseRecommendError);
+  const qqRecommendError = useCloudStore((state) => state.qqRecommendError);
   const syncNetease = useCloudStore((state) => state.syncNetease);
+  const syncNeteaseRecommend = useCloudStore((state) => state.syncNeteaseRecommend);
+  const syncQqRecommend = useCloudStore((state) => state.syncQqRecommend);
   const syncQq = useCloudStore((state) => state.syncQq);
   const openNeteasePlaylist = useCloudStore((state) => state.openNeteasePlaylist);
+  const openNeteaseRecommend = useCloudStore((state) => state.openNeteaseRecommend);
+  const playNeteasePersonalFm = useCloudStore((state) => state.playNeteasePersonalFm);
   const openQqPlaylist = useCloudStore((state) => state.openQqPlaylist);
+  const playQqPersonalFm = useCloudStore((state) => state.playQqPersonalFm);
   const closeNeteasePlaylist = useCloudStore((state) => state.closeNeteasePlaylist);
   const closeQqPlaylist = useCloudStore((state) => state.closeQqPlaylist);
 
@@ -688,6 +701,18 @@ const App: React.FC = () => {
   }, [netease?.loggedIn, syncNetease]);
 
   useEffect(() => {
+    if (netease?.loggedIn && neteaseLibrarySection === 'recommend') {
+      void syncNeteaseRecommend();
+    }
+  }, [netease?.loggedIn, neteaseLibrarySection, syncNeteaseRecommend]);
+
+  useEffect(() => {
+    if (qq?.loggedIn && neteaseLibrarySection === 'recommend') {
+      void syncQqRecommend();
+    }
+  }, [qq?.loggedIn, neteaseLibrarySection, syncQqRecommend]);
+
+  useEffect(() => {
     if (qq?.loggedIn) void syncQq();
   }, [qq?.loggedIn, syncQq]);
 
@@ -1154,17 +1179,22 @@ const App: React.FC = () => {
           theme={theme}
           isDaylight={isDaylight}
           homeTab={homeTab}
+          neteaseLibrarySection={neteaseLibrarySection}
           layoutMode={layoutMode}
           cardStyle={cardStyle}
           neteasePlaylists={neteasePlaylists}
           qqPlaylists={qqPlaylists}
+          neteaseRecommendItems={neteaseRecommendItems}
+          qqRecommendItems={qqRecommendItems}
           neteaseOpen={neteaseOpen}
           qqOpen={qqOpen}
           neteaseTracks={neteaseTracks}
           qqTracks={qqTracks}
           cloudLoading={homeTab === 'netease' ? neteaseLoading : homeTab === 'qq' ? qqLoading : false}
           cloudSyncing={homeTab === 'netease' ? neteaseSyncing : homeTab === 'qq' ? qqSyncing : false}
+          recommendSyncing={homeTab === 'netease' ? neteaseRecommendSyncing : homeTab === 'qq' ? qqRecommendSyncing : false}
           cloudError={homeTab === 'netease' ? neteaseError : homeTab === 'qq' ? qqError : ''}
+          recommendError={homeTab === 'netease' ? neteaseRecommendError : homeTab === 'qq' ? qqRecommendError : ''}
           hasCurrentTrack={Boolean(track)}
           searchQuery={query}
           updateAvailable={Boolean(updateInfo?.hasUpdate)}
@@ -1174,6 +1204,11 @@ const App: React.FC = () => {
             if (submit && query.trim()) void runSearch(query);
           }}
           onHomeTabChange={setHomeTab}
+          onNeteaseLibrarySectionChange={(section) => {
+            if (neteaseOpen) closeNeteasePlaylist();
+            if (qqOpen) closeQqPlaylist();
+            setNeteaseLibrarySection(section);
+          }}
           onLayoutModeChange={setLayoutMode}
           onSelectEntry={(entry, queueEntries) => {
             if (homeTab === 'netease' && neteaseOpen) {
@@ -1189,6 +1224,27 @@ const App: React.FC = () => {
           onOpenPlaylist={(item) => {
             if (homeTab === 'qq') void openQqPlaylist(item);
             else void openNeteasePlaylist(item);
+          }}
+          onOpenRecommend={(item) => {
+            if (homeTab === 'netease') {
+              void openNeteaseRecommend(item);
+            } else if (homeTab === 'qq' && item.recommendKind === 'playlist') {
+              void openQqPlaylist(item);
+            }
+          }}
+          onPlayPersonalFm={() => {
+            const fm = homeTab === 'qq' ? playQqPersonalFm : playNeteasePersonalFm;
+            void fm()
+              .then((entries) => {
+                if (!entries.length) return;
+                returnToSearchRef.current = false;
+                void playLibraryEntry(entries[0], entries);
+                setView('player');
+                setChromeHidden(false);
+              })
+              .catch((error) => {
+                showToast({ kind: 'error', title: error instanceof Error ? error.message : '拉取推荐失败' });
+              });
           }}
           onBackPlaylist={() => {
             if (homeTab === 'qq') closeQqPlaylist();
@@ -1315,21 +1371,25 @@ const App: React.FC = () => {
         onLoggedIn={(provider) => {
           if (provider === 'netease' || provider === 'qq') {
             setHomeTab(provider);
-            if (provider === 'netease') void syncNetease();
-            else void syncQq();
+            if (provider === 'netease') {
+              void syncNetease();
+              if (neteaseLibrarySection === 'recommend') void syncNeteaseRecommend();
+            } else void syncQq();
           }
         }}
         onSync={async (provider) => {
           if (provider !== 'netease' && provider !== 'qq') return;
           setHomeTab(provider);
-          if (provider === 'netease') await syncNetease();
-          else await syncQq();
+          if (provider === 'netease') {
+            await syncNetease();
+            if (neteaseLibrarySection === 'recommend') await syncNeteaseRecommend();
+          } else await syncQq();
         }}
-        syncing={neteaseSyncing || qqSyncing}
+        syncing={neteaseSyncing || qqSyncing || neteaseRecommendSyncing}
         syncMessage={
-          neteaseSyncing || qqSyncing
-            ? '正在同步歌单…'
-            : [neteaseError, qqError].filter(Boolean).join(' ')
+          neteaseSyncing || qqSyncing || neteaseRecommendSyncing
+            ? '正在同步…'
+            : [neteaseError, qqError, neteaseRecommendError].filter(Boolean).join(' ')
         }
       />
 

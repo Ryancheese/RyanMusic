@@ -17,27 +17,52 @@ SRC_SWIFT="$ROOT/macos/AppMain.swift"
 
 BUNDLE_NODE=1
 MAKE_DMG=0
+FORCE_ARCH=""
 # 与官方 Node LTS 对齐；安装包内嵌后用户无需系统安装 Node
 NODE_BUNDLE_VERSION="${NODE_BUNDLE_VERSION:-22.18.0}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --bundle-node) BUNDLE_NODE=1; shift ;;
+    --no-bundle-node) BUNDLE_NODE=0; shift ;;
+    --dmg) MAKE_DMG=1; shift ;;
+    --arch=*) FORCE_ARCH="${1#*=}"; shift ;;
+    --arch)
+      FORCE_ARCH="${2:-}"
+      if [[ -z "$FORCE_ARCH" ]]; then
+        echo "error: --arch requires a value (arm64|x64)" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    -h|--help)
+      echo "Usage: $0 [--bundle-node|--no-bundle-node] [--arch arm64|x64] [--dmg]"
+      exit 0
+      ;;
+    *)
+      echo "error: unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
 ARCH_NAME="$(uname -m)"
+if [[ -n "$FORCE_ARCH" ]]; then
+  case "$FORCE_ARCH" in
+    arm64|aarch64) ARCH_NAME="arm64" ;;
+    x64|x86_64|intel) ARCH_NAME="x86_64" ;;
+    *)
+      echo "error: unsupported --arch $FORCE_ARCH (use arm64 or x64)" >&2
+      exit 1
+      ;;
+  esac
+fi
 case "$ARCH_NAME" in
   arm64|aarch64) ARCH_LABEL="arm64"; NODE_DIST_ARCH="arm64" ;;
   x86_64) ARCH_LABEL="x64"; NODE_DIST_ARCH="x64" ;;
   *) ARCH_LABEL="$ARCH_NAME"; NODE_DIST_ARCH="$ARCH_NAME" ;;
 esac
 DMG_PATH="$DIST_DIR/${APP_NAME}-mac-${ARCH_LABEL}.dmg"
-
-for arg in "$@"; do
-  case "$arg" in
-    --bundle-node) BUNDLE_NODE=1 ;;
-    --no-bundle-node) BUNDLE_NODE=0 ;;
-    --dmg) MAKE_DMG=1 ;;
-    -h|--help)
-      echo "Usage: $0 [--bundle-node|--no-bundle-node] [--dmg]"
-      exit 0
-      ;;
-  esac
-done
 
 is_system_lib() {
   case "$1" in

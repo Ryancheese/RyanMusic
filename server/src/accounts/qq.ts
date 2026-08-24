@@ -86,6 +86,10 @@ export class QqAccount {
         return this.qrCheck();
       case 'qq_playlists':
         return this.playlists();
+      case 'qq_recommend_feed':
+        return this.recommendFeed(post);
+      case 'qq_personal_fm':
+        return this.personalFm();
       case 'qq_likelist':
         return this.likelist();
       case 'qq_like':
@@ -866,6 +870,173 @@ export class QqAccount {
       });
     }
     return ok({ playlistId, dirId, songid: String(songId), added: true });
+  }
+
+  private musiculPayload(auth: { uin: string; cookie: string }, reqs: Record<string, unknown>) {
+    const map = cookieToMap(auth.cookie);
+    const pSkey = map.p_skey || map.pskey || map.skey || '';
+    const gtk = getGtk(pSkey || map.qqmusic_key || '');
+    return {
+      comm: {
+        g_tk: gtk,
+        uin: Number(auth.uin) || auth.uin,
+        format: 'json',
+        platform: 'yqq.json',
+        ct: 24,
+        cv: 0,
+      },
+      ...reqs,
+    };
+  }
+
+  private async musiculPost(auth: { uin: string; cookie: string }, reqs: Record<string, unknown>) {
+    const payload = this.musiculPayload(auth, reqs);
+    return request('POST', 'https://u.y.qq.com/cgi-bin/musicu.fcg', {
+      headers: {
+        Referer: 'https://y.qq.com/',
+        Origin: 'https://y.qq.com',
+        Cookie: auth.cookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  private async recommendFeed(post: Record<string, string>) {
+    const auth = this.read();
+    if (!auth) return fail(401, '请先登录 QQ 音乐');
+    let limit = Number(post.limit || 24);
+    if (limit <= 0) limit = 24;
+    if (limit > 35) limit = 35;
+
+    const [radarRes, radioRes, feedRes] = await Promise.all([
+      // 私人雷达（每日推荐等价物）
+      this.musiculPost(auth, {
+        req_0: {
+          module: 'music.recommend.TrackRelationServer',
+          method: 'GetRadarSong',
+          param: { Page: 1 },
+        },
+      }),
+      // 猜你喜欢 FM
+      this.musiculPost(auth, {
+        req_0: {
+          module: 'music.radioProxy.MbTrackRadioSvr',
+          method: 'get_radio_track',
+          param: { IsGetTrackInfo: 1, IsSetTrack: 0 },
+        },
+      }),
+      // 个性化推荐歌单
+      this.qqGet(
+        `https://c.y.qq.com/rsc/fcgi-bin/fcg_get_homepage_recommend_playlist?${new URLSearchParams({
+          uin: auth.uin,
+          sin: '0',
+          ein: String(limit - 1),
+          format: 'json',
+        })}`,
+        auth.cookie,
+      ),
+    ]);
+
+    const radarSongs: any[] = radarRes.json?.req_0?.data?.TrackInfoList || [];
+    const radioSongs: any[] = radioRes.json?.req_0?.data?.TrackList || [];
+    const playlists: any[] = feedRes.json?.data?.list || feedRes.json?.data?.playList || [];
+
+    const items: Array<Record<string, unknown>> = [
+      {
+        id: '__qq_radar__',
+        name: '私人雷达',
+        cover: radarSongs[0]?.AlbumMID
+          ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${radarSongs[0].AlbumMID}.jpg`
+          : '',
+        trackCount: radarSongs.length || 30,
+        recommendKind: 'daily',
+        description: '根据你的喜好智能推荐，每天更新',
+      },
+      {
+        id: '__qq_fm__',
+        name: '猜你喜欢',
+        cover: radioSongs[0]?.AlbumMID
+          ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${radioSongs[0].AlbumMID}.jpg`
+          : '',
+        trackCount: radioSongs.length || 6,
+        recommendKind: 'fm',
+        description: '无限随机电台',
+      },
+    ];
+
+    for (const pl of playlists) {
+      const id = String(pl.tid || pl.disstid || pl.id || '');
+      if (!id) continue;
+      items.push({
+        id,
+        name: String(pl.title || pl.dissname || '推荐歌单'),
+        cover: String(pl.picUrl || pl.imgurl || pl.cover_url_medium || pl.logo || ''),
+        trackCount: Number(pl.song_cnt || pl.songNum || 0),
+        recommendKind: 'playlist',
+        description: String(pl.desc || pl.description || pl.reason || '个性推荐'),
+      });
+    }
+
+    if (!radarSongs.length && !radioSongs.length && !playlists.length) {
+      return fail(502, '拉取 QQ 音乐推荐失败');
+    }
+
+    return ok({ items });
+  }
+
+  private async personalFm() {
+    const auth = this.read();
+    if (!auth) return fail(401, '请先登录 QQ 音乐');
+
+    // 私人雷达歌曲（等价网易云每日推荐，获取可播放曲目列表）
+    const radarRes = await this.musiculPost(auth, {
+      req_0: {
+        module: 'music.recommend.TrackRelationServer',
+        method: 'GetRadarSong',
+        param: { Page: 1 },
+      },
+    });
+
+    const rawList: any[] = radarRes.json?.req_0?.data?.TrackInfoList || [];
+    if (!rawList.length) {
+      // 回退到猜你喜欢
+      const radioRes = await this.musiculPost(auth, {
+        req_0: {
+          module: 'music.radioProxy.MbTrackRadioSvr',
+          method: 'get_radio_track',
+          param: { IsGetTrackInfo: 1, IsSetTrack: 0 },
+        },
+      });
+      const radioList: any[] = radioRes.json?.req_0?.data?.TrackList || [];
+      if (!radioList.length) return fail(502, '拉取 QQ 音乐推荐歌曲失败');
+      const tracks = radioList
+        .map((item: any) => this.qq.trackFromSong({
+          songmid: item.SongMID || item.mid,
+          songname: item.SongName || item.name,
+          singer: Array.isArray(item.SingerList)
+            ? item.SingerList.map((s: any) => ({ name: s.Name || s.name }))
+            : [],
+          albummid: item.AlbumMID || item.albumMid,
+          interval: item.Interval || item.interval || 0,
+        }))
+        .filter(Boolean);
+      return ok({ tracks });
+    }
+
+    const tracks = rawList
+      .map((item: any) => this.qq.trackFromSong({
+        songmid: item.SongMID || item.mid,
+        songname: item.SongName || item.name,
+        singer: Array.isArray(item.SingerList)
+          ? item.SingerList.map((s: any) => ({ name: s.Name || s.name }))
+          : [],
+        albummid: item.AlbumMID || item.albumMid,
+        interval: item.Interval || item.interval || 0,
+      }))
+      .filter(Boolean);
+
+    return ok({ tracks });
   }
 
   private async playlistDetail(id: string) {

@@ -25,9 +25,10 @@
 |------|------|------|
 | Windows | `RyanMusic-Setup-x64.exe` | 双击按安装向导完成（Node 后端；需 WebView2） |
 | macOS Apple Silicon | `RyanMusic-mac-arm64.dmg` | 拖到「应用程序」；首次请右键 → 打开 |
+| macOS Intel | `RyanMusic-mac-x64.dmg` | 拖到「应用程序」；首次请右键 → 打开 |
 | Android | `RyanMusic-android.apk` | 允许「安装未知应用」后安装（arm64） |
 
-> Intel Mac 需有源码仓访问权限后使用下方「一键安装」脚本；普通用户请直接下载 DMG。
+> Intel Mac 请下载 `RyanMusic-mac-x64.dmg`；也可在有源码仓权限时使用下方「一键安装」脚本。
 
 > 若源码仓已设为 Private，详见 [docs/private-repo-and-releases.md](docs/private-repo-and-releases.md)。
 
