@@ -66,12 +66,13 @@ interface HomeViewProps {
   onOpenPlaylist: (playlist: CloudPlaylist) => void;
   onBackPlaylist: () => void;
   onToggleTheme: () => void;
-  onOpenAccount: () => void;
+  onOpenAccount: (provider?: AccountProviderId) => void;
   onAccountsChanged: () => void;
   onOpenLegal: (tab: LegalTab) => void;
   onCheckUpdate: () => void;
   netease: AccountStatus | null;
   qq: AccountStatus | null;
+  kugou?: AccountStatus | null;
 }
 
 const LAYOUT_MODES: { id: LibraryLayoutMode; label: string; icon: React.ReactNode }[] = [
@@ -112,6 +113,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   onCheckUpdate,
   netease,
   qq,
+  kugou = null,
 }) => {
   const [accentOpen, setAccentOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -163,7 +165,9 @@ const HomeView: React.FC<HomeViewProps> = ({
 
   const logoutProvider = async (provider: AccountProviderId) => {
     const meta = providerMeta(provider);
-    useCloudStore.getState().clearProvider(provider);
+    if (provider === 'netease' || provider === 'qq') {
+      useCloudStore.getState().clearProvider(provider);
+    }
     onAccountsChanged();
     await postAction(meta.logoutAction);
     onAccountsChanged();
@@ -275,8 +279,8 @@ const HomeView: React.FC<HomeViewProps> = ({
               }`}
             >
               {ACCOUNT_PROVIDERS.map((provider) => {
-                const account = accountOf(provider.id, netease, qq);
-                const active = homeTab === provider.id;
+                const account = accountOf(provider.id, netease, qq, kugou);
+                const active = provider.hasCloudLibrary && homeTab === provider.id;
                 const avatar = account?.loggedIn && account.avatar
                   ? (coverImageUrl(account.avatar, 72) || account.avatar)
                   : '';
@@ -294,14 +298,17 @@ const HomeView: React.FC<HomeViewProps> = ({
                       type="button"
                       role="menuitem"
                       onClick={() => {
-                        if (account?.loggedIn) {
-                          switchHomeTab(provider.id);
-                          setAccountMenuOpen(false);
-                        } else {
-                          setAccountMenuOpen(false);
-                          onHomeTabChange(provider.id);
-                          onOpenAccount();
+                        setAccountMenuOpen(false);
+                        if (provider.hasCloudLibrary && (provider.id === 'netease' || provider.id === 'qq')) {
+                          if (account?.loggedIn) {
+                            switchHomeTab(provider.id);
+                          } else {
+                            onHomeTabChange(provider.id);
+                            onOpenAccount(provider.id);
+                          }
+                          return;
                         }
+                        onOpenAccount(provider.id);
                       }}
                       className="flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-lg px-1 text-left"
                     >

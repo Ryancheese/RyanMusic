@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ALargeSmall, ArrowDownUp, AudioLines, Clock3, Columns2, Flame, Gauge, HardDrive, Hexagon, Keyboard, LayoutGrid, Link2, List, MessageCircleHeart, Palette, Rows2, SlidersHorizontal, SquareStack, Trash2, Users, X } from 'lucide-react';
+import { ALargeSmall, ArrowDownUp, AudioLines, Clock3, Columns2, Flame, Gauge, HardDrive, Hexagon, Keyboard, LayoutGrid, Link2, List, MessageCircleHeart, Music, Palette, Rows2, SlidersHorizontal, SquareStack, Trash2, Users, X } from 'lucide-react';
 import {
   LYRIC_SOURCE_OPTIONS,
   useLyricSettingsStore,
@@ -10,7 +10,7 @@ import {
 } from '../utils/lyrics/filtering';
 import { useControlAppearanceStore } from '../store/controlAppearanceStore';
 import { usePlaybackSettingsStore } from '../store/playbackSettingsStore';
-import { COMMENT_FONT_SCALE_MAX, COMMENT_FONT_SCALE_MIN, COMMENT_MIX_OPTIONS, COMMENT_READ_ORDER_OPTIONS, CROWD_COUNT_OPTIONS, useCommentAtmosphereStore } from '../store/commentAtmosphereStore';
+import { COMMENT_FONT_SCALE_MAX, COMMENT_FONT_SCALE_MIN, COMMENT_MIX_OPTIONS, COMMENT_PLATFORM_OPTIONS, COMMENT_READ_ORDER_OPTIONS, CROWD_COUNT_OPTIONS, useCommentAtmosphereStore } from '../store/commentAtmosphereStore';
 import { useLibraryStore } from '../store/libraryStore';
 import { useThemeAccentStore } from '../store/themeStore';
 import {
@@ -199,6 +199,10 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
   const setCommentFontScale = useCommentAtmosphereStore((state) => state.setFontScale);
   const commentMixBias = useCommentAtmosphereStore((state) => state.mixBias);
   const setCommentMixBias = useCommentAtmosphereStore((state) => state.setMixBias);
+  const commentSource = useCommentAtmosphereStore((state) => state.commentSource);
+  const setCommentSource = useCommentAtmosphereStore((state) => state.setCommentSource);
+  const autoBestComment = useCommentAtmosphereStore((state) => state.autoBestComment);
+  const setAutoBestComment = useCommentAtmosphereStore((state) => state.setAutoBestComment);
   const opacity = useControlAppearanceStore((state) => state.opacity);
   const blur = useControlAppearanceStore((state) => state.blur);
   const hoverBoost = useControlAppearanceStore((state) => state.hoverBoost);
@@ -470,13 +474,64 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                   </div>
                 </div>
 
+                <ToggleRow
+                  icon={<Music size={15} />}
+                  title="自动匹配最佳评论平台"
+                  description="开启后比较网易云、QQ 音乐、酷狗的评论数量，优先用评论最多的平台；关闭后使用下方指定平台，找不到再兜底。"
+                  enabled={autoBestComment}
+                  isDaylight={isDaylight}
+                  card={card}
+                  idle={idle}
+                  onToggle={() => setAutoBestComment(!autoBestComment)}
+                />
+
+                <div className={`rounded-2xl px-3 py-3 ${card} ${autoBestComment ? 'opacity-45' : ''}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${idle}`}>
+                      <Music size={15} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold">评论平台</div>
+                      <div className="mt-1 text-[11px] leading-relaxed opacity-50">
+                        {autoBestComment
+                          ? '当前为自动匹配。关闭上方开关后，可在此指定平台（只拉该平台，不再兜底）。'
+                          : '只使用所选平台的评论；该平台没有评论时显示空，不会自动换成其它平台。'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {COMMENT_PLATFORM_OPTIONS.map((item) => {
+                      const active = item.id === commentSource;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          disabled={autoBestComment}
+                          onClick={() => setCommentSource(item.id)}
+                          className={`rounded-2xl px-3 py-2.5 text-sm transition disabled:cursor-not-allowed ${active && !autoBestComment ? '' : idle}`}
+                          style={
+                            active && !autoBestComment
+                              ? {
+                                  background: 'color-mix(in srgb, var(--text-accent) 16%, transparent)',
+                                  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--text-accent) 55%, transparent)',
+                                }
+                              : undefined
+                          }
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className={`rounded-2xl px-3 py-3 ${card}`}>
                   <div className="flex items-start gap-3">
                     <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${idle}`}>
                       {commentMixBias === 'latest' ? <Clock3 size={15} /> : <Flame size={15} />}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold">评论来源偏好</div>
+                      <div className="text-sm font-semibold">热评 / 最新偏好</div>
                       <div className="mt-1 text-[11px] leading-relaxed opacity-50">
                         最近优先约 70% 最新评论；热度优先约 70% 热评。热评数量少时会循环出现，最新评论会持续往后翻页。
                       </div>

@@ -79,7 +79,7 @@ function signParams(params: Record<string, string | number>): string {
   return md5(str);
 }
 
-async function requestKugou(
+export async function requestKugou(
   url: string,
   params: Record<string, string | number>,
   module: string,
@@ -92,9 +92,9 @@ async function requestKugou(
 
   if (module !== 'Lyric') {
     Object.assign(finalParams, {
-      userid: '0',
+      userid: finalParams.userid ?? '0',
       appid: '3116',
-      token: '',
+      token: finalParams.token ?? '',
       clienttime: clientTimeSec,
       iscorrection: '1',
       uuid: '-',
@@ -154,7 +154,7 @@ function mapSearchResult(info: any): KugouSongCandidate | null {
   const id = Number(info?.ID || info?.album_audio_id || 0);
   const hash = String(info?.FileHash || info?.hash || '').trim();
   const name = String(info?.SongName || info?.songname || '').replace(/<[^>]+>/g, '').trim();
-  if (!id || !hash || !name) return null;
+  if (!hash || !name) return null;
   return {
     id,
     name,

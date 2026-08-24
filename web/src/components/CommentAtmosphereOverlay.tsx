@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Flame } from 'lucide-react';
-import { coverImageUrl, fetchNeteaseComments, type SongComment } from '../api';
+import { coverImageUrl, fetchSongComments, type SongComment } from '../api';
 import type { Track } from '../types';
 import { useCommentAtmosphereStore, type CommentReadOrder } from '../store/commentAtmosphereStore';
 
@@ -33,7 +33,7 @@ const GAP_MS_MIN = 2800;
 const GAP_MS_MAX = 5200;
 const HOVER_LEAVE_MS = 3000;
 /** 群像：一批评论在该时间窗内先后出现（不是同时弹出） */
-const CROWD_WAVE_MS = 3000;
+const CROWD_WAVE_MS = 4200;
 const TYPEWRITER_MS = 38;
 const AVATAR_PX = 40;
 const AVATAR_GAP_PX = 10;
@@ -55,7 +55,77 @@ function shuffle<T>(items: T[]): T[] {
 }
 
 function normalizeContent(text: string): string {
-  return text.replace(/\r\n/g, '\n').replace(/[^\S\n]+/g, ' ').trim();
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/\[em\]e?\d+\[\/em\]/gi, '')
+    .replace(/\[emot\][^\]]*\[\/emot\]/gi, '')
+    .replace(/\[[A-Za-z]{1,12}\]/g, '')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** 同屏气泡的离散锚点：优先左右错开、上下拉开，避免大气泡叠在一起 */
+function placementSlots(chromeHidden: boolean, panelOpen: boolean): BubblePlacement[] {
+  const leftEdge = 4;
+  const rightEdge = 4;
+  const slots: BubblePlacement[] = [
+    { side: 'left', edgePct: leftEdge, topPct: 10 },
+    { side: 'left', edgePct: leftEdge + 4, topPct: 36 },
+  ];
+  if (!panelOpen) {
+    slots.push(
+      { side: 'right', edgePct: rightEdge, topPct: 12 },
+      { side: 'right', edgePct: rightEdge + 4, topPct: 38 },
+    );
+  }
+  if (chromeHidden) {
+    slots.push({ side: 'left', edgePct: leftEdge + 2, topPct: 62 });
+    if (!panelOpen) {
+      slots.push({ side: 'right', edgePct: rightEdge + 2, topPct: 64 });
+    }
+  }
+  return slots;
+}
+
+function placementConflict(a: BubblePlacement, b: BubblePlacement): boolean {
+  if (a.side === b.side) {
+    return Math.abs(a.topPct - b.topPct) < 24;
+  }
+  // 对侧也要拉开垂直距离，避免视觉上“贴在同一条水平带”
+  return Math.abs(a.topPct - b.topPct) < 12;
+}
+
+/** 避开中部歌词带、底栏胶囊、右侧「正在播放」卡片；找不到空位时返回 null */
+function pickPlacement(
+  existing: BubblePlacement[],
+  chromeHidden: boolean,
+  panelOpen: boolean,
+): BubblePlacement | null {
+  const slots = shuffle(placementSlots(chromeHidden, panelOpen));
+  const free = slots.filter((slot) => existing.every((item) => !placementConflict(item, slot)));
+  if (free.length) {
+    // 轻微已有气泡最远的空位
+    free.sort((a, b) => {
+      const score = (slot: BubblePlacement) => {
+        if (!existing.length) return 0;
+        return Math.min(
+          ...existing.map((item) => {
+            const sidePenalty = item.side === slot.side ? 0 : 18;
+            return Math.abs(item.topPct - slot.topPct) + sidePenalty;
+          }),
+        );
+      };
+      return score(b) - score(a);
+    });
+    const best = free[0];
+    return {
+      side: best.side,
+      edgePct: best.edgePct + rand(-1.2, 1.2),
+      topPct: best.topPct + rand(-2.5, 2.5),
+    };
+  }
+  return null;
 }
 
 function useTypewriter(text: string, enabled: boolean) {
@@ -164,74 +234,13 @@ function useAutoScroll(options: {
   return { viewportRef, contentRef };
 }
 
-/** 避开中部歌词带、底栏胶囊、右侧「正在播放」卡片 */
-function pickPlacement(
-  existing: BubblePlacement[],
-  chromeHidden: boolean,
-  panelOpen: boolean,
-): BubblePlacement {
-  const topBand: [number, number] = [8, 24];
-  const midBand: [number, number] = [28, 44];
-  const zones: Array<{ side: 'left' | 'right'; edge: [number, number]; top: [number, number] }> = [
-    { side: 'left', edge: [3, 14], top: topBand },
-    { side: 'left', edge: [3, 14], top: midBand },
-  ];
-  if (!panelOpen) {
-    zones.push({ side: 'right', edge: [3, 14], top: topBand });
-    zones.push({ side: 'right', edge: [3, 14], top: midBand });
-  }
-
-  if (chromeHidden) {
-    zones.push({ side: 'left', edge: [3, 14], top: [58, 76] });
-    if (!panelOpen) {
-      zones.push({ side: 'right', edge: [3, 14], top: [58, 76] });
-    }
-  }
-
-  const candidates = shuffle(zones).flatMap((zone) => {
-    const samples: BubblePlacement[] = [];
-    for (let i = 0; i < 4; i += 1) {
-      samples.push({
-        side: zone.side,
-        edgePct: rand(zone.edge[0], zone.edge[1]),
-        topPct: rand(zone.top[0], zone.top[1]),
-      });
-    }
-    return samples;
-  });
-
-  for (const candidate of candidates) {
-    const ok = existing.every((item) => {
-      if (item.side === candidate.side) {
-        const dx = Math.abs(item.edgePct - candidate.edgePct);
-        const dy = Math.abs(item.topPct - candidate.topPct);
-        return dx > 16 || dy > 20;
-      }
-      return Math.abs(item.topPct - candidate.topPct) > 14;
-    });
-    if (ok) return candidate;
-  }
-
-  if (existing.length > 0) {
-    const occupiedSide = existing[0].side;
-    const oppositeSide = occupiedSide === 'left' ? 'right' : 'left';
-    const fallbackZone = zones.find((zone) => zone.side === oppositeSide) || zones[0];
-    return {
-      side: fallbackZone.side,
-      edgePct: rand(fallbackZone.edge[0], fallbackZone.edge[1]),
-      topPct: rand(fallbackZone.top[0], fallbackZone.top[1]),
-    };
-  }
-  return candidates[0] || { side: 'left', edgePct: 6, topPct: 14 };
-}
-
 const PAGE_LIMIT = 50;
 const PREFETCH_AHEAD = 12;
 const MIX_WINDOW = 10;
 const MIX_PREFERRED = 7;
 
 function usableComments(list: SongComment[]): SongComment[] {
-  return list.filter((item) => item.content.trim().length >= 8);
+  return list.filter((item) => normalizeContent(item.content).length >= 8);
 }
 
 function uniqueById(list: SongComment[]): SongComment[] {
@@ -464,6 +473,8 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
   const crowdCount = useCommentAtmosphereStore((state) => state.crowdCount);
   const fontScale = useCommentAtmosphereStore((state) => state.fontScale);
   const mixBias = useCommentAtmosphereStore((state) => state.mixBias);
+  const commentSource = useCommentAtmosphereStore((state) => state.commentSource);
+  const autoBestComment = useCommentAtmosphereStore((state) => state.autoBestComment);
   const maxVisible = crowdMode ? crowdCount : 1;
   const bubbleScale = fontScale / 100;
 
@@ -480,6 +491,7 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
   const prefetchPromiseRef = useRef<Promise<void> | null>(null);
   const fetchFailsRef = useRef(0);
   const mixTickRef = useRef(0);
+  const sourceLockRef = useRef<'netease' | 'qq' | 'kugou' | undefined>(undefined);
   const activeRef = useRef<ActiveBubble[]>([]);
   const timersRef = useRef<number[]>([]);
   const removeTimersRef = useRef<Map<string, number>>(new Map());
@@ -517,7 +529,8 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
     const timer = window.setTimeout(() => {
       removeTimersRef.current.delete(key);
       if (hoveringRef.current.has(key)) return;
-      setActive((prev) => prev.filter((item) => item.key !== key));
+      activeRef.current = activeRef.current.filter((item) => item.key !== key);
+      setActive(activeRef.current);
     }, delayMs);
     removeTimersRef.current.set(key, timer);
   }, [clearRemoveTimer]);
@@ -544,6 +557,7 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
     prefetchPromiseRef.current = null;
     fetchFailsRef.current = 0;
     mixTickRef.current = 0;
+    sourceLockRef.current = undefined;
     setFeedReady(false);
     setActive([]);
     clearTimers();
@@ -554,16 +568,22 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
     const currentTrack = track;
 
     const loadPage = async (offset: number) => {
-      const result = await fetchNeteaseComments({
+      const result = await fetchSongComments({
         type: currentTrack.type,
         id: currentTrack.songid,
         title: currentTrack.title,
         artist: currentTrack.author,
         offset,
         limit: PAGE_LIMIT,
+        preferred: commentSource,
+        source: offset > 0
+          ? sourceLockRef.current
+          : (autoBestComment ? undefined : commentSource),
+        mode: autoBestComment && offset === 0 ? 'best' : '',
       });
       if (cancelled) return null;
       if (result.code !== 200 || !result.data) return null;
+      if (offset === 0) sourceLockRef.current = result.data.source;
       return result.data;
     };
 
@@ -608,7 +628,7 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [clearTimers, enabled, readOrder, trackKey]);
+  }, [clearTimers, autoBestComment, commentSource, enabled, readOrder, trackKey]);
 
   const prefetchLatest = useCallback(async () => {
     if (prefetchPromiseRef.current) {
@@ -623,13 +643,15 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
     fetchingRef.current = true;
     const work = (async () => {
       try {
-        const result = await fetchNeteaseComments({
+        const result = await fetchSongComments({
           type: current.type,
           id: current.songid,
           title: current.title,
           artist: current.author,
           offset: nextOffsetRef.current,
           limit: PAGE_LIMIT,
+          preferred: commentSource,
+          source: sourceLockRef.current,
         });
         const now = trackRef.current;
         if (!now || `${now.type}:${now.songid}` !== startedKey) return;
@@ -658,7 +680,7 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
     })();
     prefetchPromiseRef.current = work;
     await work;
-  }, []);
+  }, [autoBestComment, commentSource]);
 
   useEffect(() => {
     clearTimers();
@@ -749,6 +771,11 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
         chromeHidden,
         isPanelOpen,
       );
+      if (!placement) {
+        // 没有空位就不硬叠，等已有气泡散开后再出下一条
+        scheduleNext(rand(GAP_MS_MIN, GAP_MS_MAX));
+        return;
+      }
       const key = `${entry.comment.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const bubble: ActiveBubble = {
         key,
@@ -757,7 +784,9 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
         placement,
       };
 
-      setActive((prev) => [...prev, bubble].slice(-maxVisible));
+      // 同步更新 ref，避免群像连发时仍读到旧布局
+      activeRef.current = [...current, bubble].slice(-maxVisible);
+      setActive(activeRef.current);
 
       const textLen = Array.from(normalizeContent(bubble.comment.content)).length
         + (bubble.comment.reply

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { createApp } from '../src/app.ts';
-import { mapNeteaseComment, isPlaceholderCommentContent } from '../src/comments.ts';
+import { mapNeteaseComment, mapQqComment, mapKugouComment, isPlaceholderCommentContent, commentSourceOrder } from '../src/comments.ts';
 
 test('mapNeteaseComment keeps nickname, likes and first reply', () => {
   const mapped = mapNeteaseComment({
@@ -59,6 +59,51 @@ test('mapNeteaseComment skips mobile-only placeholder comments', () => {
     '这首歌真的太好听了，循环一整天',
   );
   assert.equal(isPlaceholderCommentContent('[评论已删除]'), true);
+});
+
+test('commentSourceOrder puts preferred first then netease/qq/kugou fallback', () => {
+  assert.deepEqual(commentSourceOrder('netease'), ['netease', 'qq', 'kugou']);
+  assert.deepEqual(commentSourceOrder('qq'), ['qq', 'netease', 'kugou']);
+  assert.deepEqual(commentSourceOrder('kugou'), ['kugou', 'netease', 'qq']);
+});
+
+test('mapQqComment maps nickname, likes and nested reply', () => {
+  const mapped = mapQqComment({
+    commentid: 'c1',
+    rootcommentcontent: '这首歌绝了',
+    time: 1710000000,
+    praisenum: 12,
+    nick: '企鹅',
+    avatarurl: 'http://y.gtimg.cn/a.jpg',
+    uin: '10001',
+    location: '上海',
+    middlecommentcontent: [{ nick: '路人', replycontent: '同意' }],
+  });
+  assert.ok(mapped);
+  assert.equal(mapped.id, 'c1');
+  assert.equal(mapped.nickname, '企鹅');
+  assert.equal(mapped.likedCount, 12);
+  assert.equal(mapped.avatar.startsWith('https://'), true);
+  assert.deepEqual(mapped.reply, { nickname: '路人', content: '同意' });
+});
+
+test('mapKugouComment maps user_info and like count', () => {
+  const mapped = mapKugouComment({
+    id: 88,
+    content: '循环到天亮',
+    addtime: '2024-01-02 08:00:00',
+    like: 3,
+    user_info: { user_id: 9, user_name: '酷狗用户甲', user_pic: 'http://imge.kugou.com/{size}/a.jpg' },
+    pcontent: '原评',
+    puser: '乙',
+  });
+  assert.ok(mapped);
+  assert.equal(mapped.id, '88');
+  assert.equal(mapped.nickname, '酷狗用户甲');
+  assert.equal(mapped.likedCount, 3);
+  assert.equal(mapped.avatar.includes('{size}'), false);
+  assert.equal(mapped.avatar.startsWith('https://'), true);
+  assert.deepEqual(mapped.reply, { nickname: '乙', content: '原评' });
 });
 
 function xhr(app: ReturnType<typeof createApp>, body: string) {

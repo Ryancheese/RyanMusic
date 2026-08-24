@@ -1,7 +1,7 @@
 import type { AccountStatus } from '../api';
 
 /** 账号平台（后续可继续往数组里加） */
-export type AccountProviderId = 'netease' | 'qq';
+export type AccountProviderId = 'netease' | 'qq' | 'kugou';
 
 export interface AccountProviderMeta {
   id: AccountProviderId;
@@ -11,6 +11,8 @@ export interface AccountProviderMeta {
   mark: string;
   markClass: string;
   logoutAction: string;
+  /** 是否同步云端歌单到首页 */
+  hasCloudLibrary: boolean;
 }
 
 export const ACCOUNT_PROVIDERS: AccountProviderMeta[] = [
@@ -21,6 +23,7 @@ export const ACCOUNT_PROVIDERS: AccountProviderMeta[] = [
     mark: '云',
     markClass: 'bg-[#e60026] text-white',
     logoutAction: 'netease_logout',
+    hasCloudLibrary: true,
   },
   {
     id: 'qq',
@@ -29,6 +32,16 @@ export const ACCOUNT_PROVIDERS: AccountProviderMeta[] = [
     mark: 'Q',
     markClass: 'bg-[#31c27c] text-white',
     logoutAction: 'qq_logout',
+    hasCloudLibrary: true,
+  },
+  {
+    id: 'kugou',
+    label: '酷狗音乐',
+    shortLabel: '酷狗',
+    mark: '狗',
+    markClass: 'bg-[#00a9ff] text-white',
+    logoutAction: 'kugou_logout',
+    hasCloudLibrary: false,
   },
 ];
 
@@ -40,8 +53,11 @@ export function accountOf(
   id: AccountProviderId,
   netease: AccountStatus | null,
   qq: AccountStatus | null,
+  kugou: AccountStatus | null = null,
 ): AccountStatus | null {
-  return id === 'qq' ? qq : netease;
+  if (id === 'qq') return qq;
+  if (id === 'kugou') return kugou;
+  return netease;
 }
 
 /** 已登录账号的会员说明（主句） */

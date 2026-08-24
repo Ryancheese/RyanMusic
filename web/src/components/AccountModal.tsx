@@ -22,6 +22,7 @@ interface AccountModalProps {
   theme: ThemeTokens;
   netease: AccountStatus | null;
   qq: AccountStatus | null;
+  kugou?: AccountStatus | null;
   /** 打开时优先选中的平台 */
   initialProvider?: AccountProviderId;
   onClose: () => void;
@@ -38,6 +39,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
   theme,
   netease,
   qq,
+  kugou = null,
   initialProvider = 'netease',
   onClose,
   onChanged,
@@ -69,7 +71,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
 
   useEffect(() => {
     if (!open) return;
-    const current = accountOf(tab, netease, qq);
+    const current = accountOf(tab, netease, qq, kugou);
     if (current?.loggedIn) {
       setQr('');
       return;
@@ -79,8 +81,8 @@ const AccountModal: React.FC<AccountModalProps> = ({
     const start = async () => {
       setBusy(true);
       setStatus('正在生成二维码…');
-      const keyAction = tab === 'netease' ? 'netease_qr_key' : 'qq_qr_key';
-      const checkAction = tab === 'netease' ? 'netease_qr_check' : 'qq_qr_check';
+      const keyAction = tab === 'netease' ? 'netease_qr_key' : tab === 'kugou' ? 'kugou_qr_key' : 'qq_qr_key';
+      const checkAction = tab === 'netease' ? 'netease_qr_check' : tab === 'kugou' ? 'kugou_qr_check' : 'qq_qr_check';
       const res = await postAction<Record<string, string>>(keyAction);
       setBusy(false);
       if (stop) return;
@@ -92,6 +94,12 @@ const AccountModal: React.FC<AccountModalProps> = ({
         const qrurl = res.data.qrurl || `https://music.163.com/login?codekey=${encodeURIComponent(res.data.key)}`;
         setQr(`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrurl)}`);
         setStatus('请使用网易云 App 扫码');
+      } else if (tab === 'kugou') {
+        const qrurl = res.data.qrurl || '';
+        setQr(res.data.qrimg || (qrurl
+          ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrurl)}`
+          : ''));
+        setStatus('请使用酷狗 App 扫码');
       } else {
         setQr(res.data.qrimg || '');
         setStatus('请使用 QQ / 微信扫码');
@@ -116,6 +124,21 @@ const AccountModal: React.FC<AccountModalProps> = ({
           } else if (check.error) {
             setStatus(check.error);
           }
+        } else if (tab === 'kugou') {
+          if (st === 1) setStatus(String(data.message || '等待扫码…'));
+          else if (st === 2) setStatus(String(data.message || '已扫码，请在手机上确认'));
+          else if (st === 0) {
+            setStatus(String(data.message || '二维码已过期，请关闭后重开'));
+            window.clearInterval(timer);
+          } else if (st === 4 && data.loggedIn) {
+            setStatus('登录成功');
+            window.clearInterval(timer);
+            onChanged();
+            onLoggedIn?.(tab);
+          } else if (check.code !== 200 && check.error) {
+            setStatus(check.error);
+            window.clearInterval(timer);
+          }
         } else if (st === 66) {
           setStatus(String(data.message || '等待扫码…'));
         } else if (st === 67) {
@@ -139,7 +162,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
       stop = true;
       if (timer) window.clearInterval(timer);
     };
-  }, [open, tab, netease?.loggedIn, qq?.loggedIn, onChanged, onLoggedIn]);
+  }, [open, tab, netease?.loggedIn, qq?.loggedIn, kugou?.loggedIn, onChanged, onLoggedIn]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -159,7 +182,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
 
   if (!open) return null;
 
-  const current = accountOf(tab, netease, qq);
+  const current = accountOf(tab, netease, qq, kugou);
   const loggedIn = Boolean(current?.loggedIn);
   const activeMeta = providerMeta(tab);
   const capsuleAvatar = loggedIn && current?.avatar
@@ -168,14 +191,14 @@ const AccountModal: React.FC<AccountModalProps> = ({
 
   const saveCookie = async () => {
     setBusy(true);
-    const action = tab === 'netease' ? 'netease_cookie_save' : 'qq_cookie_save';
+    const action = tab === 'netease' ? 'netease_cookie_save' : tab === 'kugou' ? 'kugou_cookie_save' : 'qq_cookie_save';
     const res = await postAction(action, { cookie: cookie.trim() });
     setBusy(false);
     if (res.code !== 200) {
       setStatus(res.error || 'Cookie 无效');
       return;
     }
-    setStatus('登录成功，正在同步歌单…');
+    setStatus(tab === 'kugou' ? '登录成功' : '登录成功，正在同步歌单…');
     setCookie('');
     onChanged();
     onLoggedIn?.(tab);
@@ -183,7 +206,9 @@ const AccountModal: React.FC<AccountModalProps> = ({
 
   const logout = async (provider: AccountProviderId) => {
     const meta = providerMeta(provider);
-    useCloudStore.getState().clearProvider(provider);
+    if (provider === 'netease' || provider === 'qq') {
+      useCloudStore.getState().clearProvider(provider);
+    }
     onChanged();
     await postAction(meta.logoutAction);
     onChanged();
@@ -269,7 +294,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
                 }`}
               >
                 {ACCOUNT_PROVIDERS.map((provider) => {
-                  const account = accountOf(provider.id, netease, qq);
+                  const account = accountOf(provider.id, netease, qq, kugou);
                   const active = tab === provider.id;
                   const avatar = account?.loggedIn && account.avatar
                     ? (coverImageUrl(account.avatar, 72) || account.avatar)
@@ -367,14 +392,16 @@ const AccountModal: React.FC<AccountModalProps> = ({
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void onSync?.(tab)}
-                className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-sm"
-              >
-                {syncing ? <RyanLoader size={16} /> : <RefreshCw size={14} />}
-                同步歌单
-              </button>
+              {activeMeta.hasCloudLibrary ? (
+                <button
+                  type="button"
+                  onClick={() => void onSync?.(tab)}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-sm"
+                >
+                  {syncing ? <RyanLoader size={16} /> : <RefreshCw size={14} />}
+                  同步歌单
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => void logout(tab)}
@@ -402,7 +429,9 @@ const AccountModal: React.FC<AccountModalProps> = ({
               <p className="mt-2 text-[11px] opacity-50">
                 {tab === 'netease'
                   ? '浏览器登录 music.163.com，复制请求头 Cookie（需含 MUSIC_U）。仅存本机。'
-                  : '浏览器登录 y.qq.com，复制请求头 Cookie（需含 uin 与 qm_keyst）。仅存本机。'}
+                  : tab === 'kugou'
+                    ? '浏览器登录 kugou.com，复制请求头 Cookie（需含 userid 与 token，或 KuGoo）。仅存本机。'
+                    : '浏览器登录 y.qq.com，复制请求头 Cookie（需含 uin 与 qm_keyst）。仅存本机。'}
               </p>
               <textarea
                 value={cookie}

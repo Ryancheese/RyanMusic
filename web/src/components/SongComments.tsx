@@ -1,7 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Flame, MessageCircle, ThumbsUp } from 'lucide-react';
-import { coverImageUrl, fetchNeteaseComments, type CommentsPayload, type SongComment } from '../api';
+import { coverImageUrl, fetchSongComments, type CommentsPayload, type SongComment } from '../api';
 import type { Track } from '../types';
+import {
+  COMMENT_PLATFORM_OPTIONS,
+  commentPlatformLabel,
+  useCommentAtmosphereStore,
+  type CommentPlatform,
+} from '../store/commentAtmosphereStore';
 import RyanLoader from './RyanLoader';
 
 function formatCount(n: number): string {
@@ -20,6 +26,14 @@ function formatTime(comment: SongComment): string {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+function cleanCommentText(text: string): string {
+  return text
+    .replace(/\[em\]e?\d+\[\/em\]/gi, '')
+    .replace(/\[emot\][^\]]*\[\/emot\]/gi, '')
+    .replace(/[^\S\n]+/g, ' ')
+    .trim();
 }
 
 function CommentRow({
@@ -61,11 +75,11 @@ function CommentRow({
           }`}
           >
             <span className="opacity-70">{comment.reply.nickname}：</span>
-            {comment.reply.content}
+            {cleanCommentText(comment.reply.content)}
           </div>
         ) : null}
         <p className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed">
-          {comment.content}
+          {cleanCommentText(comment.content)}
         </p>
         <div className="mt-1.5 flex items-center justify-between text-[11px] opacity-40">
           <span className="truncate">
@@ -93,6 +107,10 @@ const SongComments: React.FC<SongCommentsProps> = ({ active, track, isDaylight }
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const inflight = useRef(0);
+  const sourceLock = useRef<CommentsPayload['source']>(undefined);
+  const autoBest = useCommentAtmosphereStore((state) => state.autoBestComment);
+  const preferred = useCommentAtmosphereStore((state) => state.commentSource);
+  const selectCommentPlatform = useCommentAtmosphereStore((state) => state.selectCommentPlatform);
   const trackKey = track ? `${track.type}:${track.songid}` : '';
 
   const type = track?.type;
@@ -107,17 +125,25 @@ const SongComments: React.FC<SongCommentsProps> = ({ active, track, isDaylight }
       setLoading(true);
       setError('');
       setPayload(null);
+      sourceLock.current = undefined;
     } else {
       setLoadingMore(true);
     }
+    // 手动选平台时锁定 source，禁止静默兜底到其它平台；自动模式才走 best / 兜底链
+    const locked = offset > 0
+      ? sourceLock.current
+      : (autoBest ? undefined : preferred);
     try {
-      const result = await fetchNeteaseComments({
+      const result = await fetchSongComments({
         type,
         id: songid,
         title,
         artist: author,
         offset,
         limit: 20,
+        preferred,
+        source: locked,
+        mode: autoBest && offset === 0 ? 'best' : '',
       });
       if (seq !== inflight.current) return;
       if (result.code !== 200 || !result.data) {
@@ -127,9 +153,12 @@ const SongComments: React.FC<SongCommentsProps> = ({ active, track, isDaylight }
         }
         return;
       }
+      if (offset === 0) sourceLock.current = result.data.source;
       setError('');
       setPayload((prev) => {
-        if (offset === 0 || !prev || prev.neteaseId !== result.data.neteaseId) return result.data;
+        const sameSource = prev
+          && (prev.sourceId || prev.neteaseId) === (result.data.sourceId || result.data.neteaseId);
+        if (offset === 0 || !prev || !sameSource) return result.data;
         const seen = new Set(prev.comments.map((item) => item.id));
         return {
           ...result.data,
@@ -146,7 +175,7 @@ const SongComments: React.FC<SongCommentsProps> = ({ active, track, isDaylight }
         setLoadingMore(false);
       }
     }
-  }, [author, songid, title, type]);
+  }, [author, autoBest, preferred, songid, title, type]);
 
   useEffect(() => {
     if (!active || !track) return;
@@ -155,6 +184,10 @@ const SongComments: React.FC<SongCommentsProps> = ({ active, track, isDaylight }
       inflight.current += 1;
     };
   }, [active, load, trackKey]);
+
+  const onPickPlatform = (value: 'auto' | CommentPlatform) => {
+    selectCommentPlatform(value);
+  };
 
   const onScroll = (event: React.UIEvent<HTMLDivElement>) => {
     if (!payload?.more || loadingMore || loading) return;
@@ -172,26 +205,68 @@ const SongComments: React.FC<SongCommentsProps> = ({ active, track, isDaylight }
     );
   }
 
+  const chipActive = (value: 'auto' | CommentPlatform) => (
+    value === 'auto' ? autoBest : (!autoBest && preferred === value)
+  );
+
+  const platformBar = (
+    <div className="flex shrink-0 flex-wrap gap-1.5 px-4 pb-2 pt-2.5">
+      {([
+        { id: 'auto' as const, label: '自动' },
+        ...COMMENT_PLATFORM_OPTIONS.map((item) => ({ id: item.id, label: item.short })),
+      ]).map((item) => {
+        const on = chipActive(item.id);
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onPickPlatform(item.id)}
+            className={`rounded-full px-2.5 py-1 text-[11px] transition ${
+              on ? '' : (isDaylight ? 'bg-black/5 opacity-55 hover:opacity-80' : 'bg-white/8 opacity-55 hover:opacity-80')
+            }`}
+            style={
+              on
+                ? {
+                    background: 'color-mix(in srgb, var(--text-accent) 18%, transparent)',
+                    boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--text-accent) 55%, transparent)',
+                    color: 'var(--text-accent)',
+                  }
+                : undefined
+            }
+          >
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <RyanLoader size={36} label="正在拉取评论" />
+      <div className="flex h-full min-h-0 flex-col">
+        {platformBar}
+        <div className="flex flex-1 items-center justify-center">
+          <RyanLoader size={36} label="正在拉取评论" />
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-        <MessageCircle size={22} className="opacity-30" />
-        <p className="text-sm opacity-50">{error}</p>
-        <button
-          type="button"
-          onClick={() => void load(0)}
-          className={`rounded-full px-3 py-1 text-xs ${isDaylight ? 'bg-black/6' : 'bg-white/10'}`}
-        >
-          重试
-        </button>
+      <div className="flex h-full min-h-0 flex-col">
+        {platformBar}
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+          <MessageCircle size={22} className="opacity-30" />
+          <p className="text-sm opacity-50">{error}</p>
+          <button
+            type="button"
+            onClick={() => void load(0)}
+            className={`rounded-full px-3 py-1 text-xs ${isDaylight ? 'bg-black/6' : 'bg-white/10'}`}
+          >
+            重试
+          </button>
+        </div>
       </div>
     );
   }
@@ -203,13 +278,16 @@ const SongComments: React.FC<SongCommentsProps> = ({ active, track, isDaylight }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-2 px-4 pb-1 pt-2.5 text-[11px] opacity-45">
+      {platformBar}
+      <div className="flex shrink-0 items-center justify-between gap-2 px-4 pb-1 text-[11px] opacity-45">
         <span>
-          {payload ? `共 ${formatCount(payload.total)} 条` : '网易云评论'}
+          {payload
+            ? `共 ${formatCount(payload.total)} 条 · ${commentPlatformLabel(payload.source)}${autoBest ? '（自动）' : ''}`
+            : '歌曲评论'}
         </span>
         {payload?.matched ? (
           <span className="min-w-0 truncate" title={`${payload.matched.title} - ${payload.matched.author}`}>
-            匹配自网易云 · {payload.matched.title}
+            匹配 · {payload.matched.title}
           </span>
         ) : (
           <span>热评 + 最新</span>

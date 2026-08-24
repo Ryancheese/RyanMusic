@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync
 import { join } from 'node:path';
 
 /** 登录态目录：清理缓存时保留 */
-const PRESERVE_DIRS = new Set(['netease_auth', 'qq_auth']);
+const PRESERVE_DIRS = new Set(['netease_auth', 'qq_auth', 'kugou_auth']);
 
 export const CACHE_CATEGORY_IDS = ['lyrics', 'play', 'comments', 'other'] as const;
 export type CacheCategoryId = (typeof CACHE_CATEGORY_IDS)[number];

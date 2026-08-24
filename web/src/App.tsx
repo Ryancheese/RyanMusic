@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type Track, type VisualizerMode } from './types';
-import { buildDownloadUrl, canNativeSave, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type LyricSearchCandidate, type PlayQuality } from './api';
+import { buildDownloadUrl, canNativeSave, fetchKugouStatus, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type LyricSearchCandidate, type PlayQuality } from './api';
 import { accentWashVars, contrastText, extractAccentFromImage } from './lib/color';
 import { isMobileViewport, isWindowsApp, prefersLightweightVisualizer } from './lib/media';
 import WindowControls from './components/WindowControls';
@@ -34,6 +34,7 @@ import WhatsNewModal from './components/WhatsNewModal';
 import ToastHost from './components/ToastHost';
 import { parseLegalTab, type LegalTab } from './legal';
 import { checkAppUpdate, installAppUpdate, type AppUpdateInfo } from './lib/update';
+import type { AccountProviderId } from './lib/accountProviders';
 import {
   APP_VERSION,
   WHATS_NEW_NOTES,
@@ -117,6 +118,7 @@ const App: React.FC = () => {
   const durationRef = useRef(0);
   const [accent, setAccent] = useState<string | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [accountIntent, setAccountIntent] = useState<AccountProviderId>('netease');
   const [legalOpen, setLegalOpen] = useState(false);
   const [legalTab, setLegalTab] = useState<LegalTab>('help');
   const [updateOpen, setUpdateOpen] = useState(false);
@@ -127,6 +129,7 @@ const App: React.FC = () => {
   const [updateProgressStage, setUpdateProgressStage] = useState('');
   const [netease, setNetease] = useState<AccountStatus | null>(null);
   const [qq, setQq] = useState<AccountStatus | null>(null);
+  const [kugou, setKugou] = useState<AccountStatus | null>(null);
   const lastQueryRef = useRef('');
   const returnToSearchRef = useRef(false);
 
@@ -647,10 +650,15 @@ const App: React.FC = () => {
   useEffect(() => {
     let alive = true;
     const load = async () => {
-      const [ne, qqStatus] = await Promise.all([fetchNeteaseStatus(), fetchQqStatus()]);
+      const [ne, qqStatus, kgStatus] = await Promise.all([
+        fetchNeteaseStatus(),
+        fetchQqStatus(),
+        fetchKugouStatus(),
+      ]);
       if (!alive) return;
       setNetease(ne.code === 200 ? ne.data : { loggedIn: false });
       setQq(qqStatus.code === 200 ? qqStatus.data : { loggedIn: false });
+      setKugou(kgStatus.code === 200 ? kgStatus.data : { loggedIn: false });
     };
     void load();
     return () => {
@@ -659,9 +667,10 @@ const App: React.FC = () => {
   }, []);
 
   const refreshAccounts = useCallback(() => {
-    void Promise.all([fetchNeteaseStatus(), fetchQqStatus()]).then(([ne, qqStatus]) => {
+    void Promise.all([fetchNeteaseStatus(), fetchQqStatus(), fetchKugouStatus()]).then(([ne, qqStatus, kgStatus]) => {
       setNetease(ne.code === 200 ? ne.data : { loggedIn: false });
       setQq(qqStatus.code === 200 ? qqStatus.data : { loggedIn: false });
+      setKugou(kgStatus.code === 200 ? kgStatus.data : { loggedIn: false });
     });
   }, []);
 
@@ -1169,12 +1178,16 @@ const App: React.FC = () => {
             setIsDaylight(next);
             localStorage.setItem(THEME_KEY, next ? 'daylight' : 'midnight');
           }}
-          onOpenAccount={() => setAccountOpen(true)}
+          onOpenAccount={(provider) => {
+            setAccountIntent(provider || homeTab);
+            setAccountOpen(true);
+          }}
           onAccountsChanged={refreshAccounts}
           onOpenLegal={openLegal}
           onCheckUpdate={() => void openUpdate()}
           netease={netease}
           qq={qq}
+          kugou={kugou}
         />
       </div>
 
@@ -1272,15 +1285,19 @@ const App: React.FC = () => {
         theme={theme}
         netease={netease}
         qq={qq}
-        initialProvider={homeTab}
+        kugou={kugou}
+        initialProvider={accountIntent}
         onClose={() => setAccountOpen(false)}
         onChanged={refreshAccounts}
         onLoggedIn={(provider) => {
-          setHomeTab(provider);
-          if (provider === 'netease') void syncNetease();
-          else void syncQq();
+          if (provider === 'netease' || provider === 'qq') {
+            setHomeTab(provider);
+            if (provider === 'netease') void syncNetease();
+            else void syncQq();
+          }
         }}
         onSync={async (provider) => {
+          if (provider !== 'netease' && provider !== 'qq') return;
           setHomeTab(provider);
           if (provider === 'netease') await syncNetease();
           else await syncQq();

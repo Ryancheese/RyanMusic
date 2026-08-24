@@ -14,15 +14,19 @@ test('clearSafe removes rebuildable cache but keeps auth sessions', () => {
   writeFileSync(join(root, 'netease_auth', 'session.json'), '{"ok":1}');
   mkdirSync(join(root, 'qq_auth'), { recursive: true });
   writeFileSync(join(root, 'qq_auth', 'session.json'), '{"ok":1}');
+  mkdirSync(join(root, 'kugou_auth'), { recursive: true });
+  writeFileSync(join(root, 'kugou_auth', 'session.json'), '{"ok":1}');
 
   const result = cache.clearSafe();
   assert.ok(result.removedEntries >= 2);
   assert.ok(result.preserved.includes('netease_auth'));
   assert.ok(result.preserved.includes('qq_auth'));
+  assert.ok(result.preserved.includes('kugou_auth'));
   assert.equal(existsSync(join(root, 'netease_play_v4')), false);
   assert.equal(existsSync(join(root, 'qq_lyric_v2')), false);
   assert.equal(existsSync(join(root, 'netease_auth', 'session.json')), true);
   assert.equal(existsSync(join(root, 'qq_auth', 'session.json')), true);
+  assert.equal(existsSync(join(root, 'kugou_auth', 'session.json')), true);
 });
 
 test('clearSafe can clear a single cache category', () => {

@@ -150,6 +150,10 @@ export function fetchQqStatus() {
   return postAction<AccountStatus>('qq_status');
 }
 
+export function fetchKugouStatus() {
+  return postAction<AccountStatus>('kugou_status');
+}
+
 export interface CloudPlaylist {
   id: string;
   name: string;
@@ -395,6 +399,8 @@ export interface SongComment {
   reply: { nickname: string; content: string } | null;
 }
 
+export type CommentSource = 'netease' | 'qq' | 'kugou';
+
 export interface CommentsPayload {
   total: number;
   more: boolean;
@@ -402,17 +408,23 @@ export interface CommentsPayload {
   limit: number;
   hotComments: SongComment[];
   comments: SongComment[];
+  source?: CommentSource;
+  sourceId?: string;
   neteaseId: string;
-  matched: { type: 'netease'; songid: string; title: string; author: string } | null;
+  matched: { type: CommentSource; songid: string; title: string; author: string } | null;
 }
 
-export function fetchNeteaseComments(options: {
+export function fetchSongComments(options: {
   type: MusicSource;
   id: string;
   title?: string;
   artist?: string;
   offset?: number;
   limit?: number;
+  preferred?: CommentSource;
+  source?: CommentSource;
+  /** 自动选择评论数最多的平台 */
+  mode?: 'best' | '';
 }) {
   return postAction<CommentsPayload>('netease_comments', {
     type: options.type,
@@ -421,6 +433,9 @@ export function fetchNeteaseComments(options: {
     artist: options.artist || '',
     offset: String(options.offset || 0),
     limit: String(options.limit || 20),
+    preferred: options.preferred || '',
+    source: options.source || '',
+    mode: options.mode || '',
   });
 }
 

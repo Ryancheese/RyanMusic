@@ -2,6 +2,8 @@ import type { TemperaGlyphPlacement } from './temperaLayout';
 import type { TemperaPalette } from './temperaPalette';
 import type { TemperaDecorFragment, TemperaDecorWatermark } from './types';
 import type { TemperaGlyphMotionInput } from './temperaMotion';
+import { toPixiColor } from './temperaShapes';
+import { isInterludeDotChar } from '../../../utils/lyrics/parserCore';
 
 // src/components/visualizer/tempera/temperaTextView.ts
 // Builds one Pixi Text node per grapheme plus an offset ghost copy for print misregistration.
@@ -15,10 +17,13 @@ import type { TemperaGlyphMotionInput } from './temperaMotion';
 type PixiModule = typeof import('pixi.js');
 
 export interface TemperaGlyphView {
-    display: import('pixi.js').Text;
-    shadow: import('pixi.js').Text | null;
+    /** Text for lyric glyphs; Graphics circle for interlude dots (macOS fonts ruin "."). */
+    display: import('pixi.js').Container;
+    shadow: import('pixi.js').Container | null;
     /** Motion echoes trailing back along the entrance vector; empty when echoes are off. */
-    echoes: import('pixi.js').Text[];
+    echoes: import('pixi.js').Container[];
+    /** Motion solver must keep scaleX === scaleY so drawn dots stay circular. */
+    keepCircular: boolean;
     /** Everything the per-frame motion solver needs; the runtime never reads layout again. */
     motion: TemperaGlyphMotionInput;
     baseX: number;
@@ -51,6 +56,19 @@ const SHADOW_OFFSET_X = 0.06;
 const SHADOW_OFFSET_Y = 0.08;
 /** The ghost is tinted by the filter, so only its opacity is its own. */
 const SHADOW_ALPHA = 0.34;
+
+const buildInterludeDot = (
+    pixi: PixiModule,
+    radius: number,
+    color: string,
+    alpha = 1,
+): import('pixi.js').Graphics => {
+    const node = new pixi.Graphics();
+    node.circle(0, 0, radius);
+    node.fill({ color: toPixiColor(pixi, color), alpha });
+    return node;
+};
+
 export const buildTemperaTextViews = (
     pixi: PixiModule,
     options: TemperaTextViewOptions,
@@ -62,45 +80,68 @@ export const buildTemperaTextViews = (
 
     options.placements.forEach(placement => {
         if (placement.char.trim().length === 0) return;
-        const baseStyle = {
-            fontFamily,
-            fontWeight: weightToken,
-            fontSize: placement.fontSize,
-        };
-        const display = new Text({
-            text: placement.char,
-            style: new TextStyle({ ...baseStyle, fill: placement.color ?? palette.ink }),
-        });
-        display.anchor.set(0.5);
-        display.position.set(placement.x, placement.y);
-        display.rotation = placement.rotation;
+        const fillColor = placement.color ?? palette.ink;
+        const keepCircular = isInterludeDotChar(placement.char);
 
-        // Unblurred offset copy at partial alpha; the filter tints it with the glyph, so it
-        // reads as an off-register second printing plate.
-        let shadow: import('pixi.js').Text | null = null;
-        if (options.shadowEnabled) {
-            shadow = new Text({
-                text: placement.char,
-                style: new TextStyle({ ...baseStyle, fill: palette.ink }),
-            });
-            shadow.anchor.set(0.5);
-            shadow.rotation = placement.rotation;
-            options.textLayer.addChildAt(shadow, 0);
-        }
+        let display: import('pixi.js').Container;
+        let shadow: import('pixi.js').Container | null = null;
+        const echoes: import('pixi.js').Container[] = [];
 
-        // Motion echoes: dimmed copies parked further back along the entrance vector. The
-        // runtime scales their offset per index, so they read as a trail rather than a blur.
-        const echoes: import('pixi.js').Text[] = [];
-        for (let index = 0; index < options.echoCount; index += 1) {
-            const echo = new Text({
+        if (keepCircular) {
+            // Geometry circle: CJK fallback fonts turn "." into squares / almonds on macOS.
+            const radius = Math.max(2.5, placement.fontSize * 0.14);
+            display = buildInterludeDot(pixi, radius, fillColor);
+            display.position.set(placement.x, placement.y);
+            display.rotation = placement.rotation;
+            if (options.shadowEnabled) {
+                shadow = buildInterludeDot(pixi, radius, palette.ink, SHADOW_ALPHA);
+                shadow.rotation = placement.rotation;
+                options.textLayer.addChildAt(shadow, 0);
+            }
+            for (let index = 0; index < options.echoCount; index += 1) {
+                const echo = buildInterludeDot(pixi, radius, placement.color ?? palette.tone4, 0.55);
+                echo.rotation = placement.rotation;
+                echo.visible = false;
+                options.echoLayer.addChild(echo);
+                echoes.push(echo);
+            }
+        } else {
+            const baseStyle = {
+                fontFamily,
+                fontWeight: weightToken,
+                fontSize: placement.fontSize,
+            };
+            const text = new Text({
                 text: placement.char,
-                style: new TextStyle({ ...baseStyle, fill: placement.color ?? palette.tone4 }),
+                style: new TextStyle({ ...baseStyle, fill: fillColor }),
             });
-            echo.anchor.set(0.5);
-            echo.rotation = placement.rotation;
-            echo.visible = false;
-            options.echoLayer.addChild(echo);
-            echoes.push(echo);
+            text.anchor.set(0.5);
+            text.position.set(placement.x, placement.y);
+            text.rotation = placement.rotation;
+            display = text;
+
+            if (options.shadowEnabled) {
+                const shadowText = new Text({
+                    text: placement.char,
+                    style: new TextStyle({ ...baseStyle, fill: palette.ink }),
+                });
+                shadowText.anchor.set(0.5);
+                shadowText.rotation = placement.rotation;
+                options.textLayer.addChildAt(shadowText, 0);
+                shadow = shadowText;
+            }
+
+            for (let index = 0; index < options.echoCount; index += 1) {
+                const echo = new Text({
+                    text: placement.char,
+                    style: new TextStyle({ ...baseStyle, fill: placement.color ?? palette.tone4 }),
+                });
+                echo.anchor.set(0.5);
+                echo.rotation = placement.rotation;
+                echo.visible = false;
+                options.echoLayer.addChild(echo);
+                echoes.push(echo);
+            }
         }
 
         (placement.color ? options.keywordLayer : options.textLayer).addChild(display);
@@ -108,6 +149,7 @@ export const buildTemperaTextViews = (
             display,
             shadow,
             echoes,
+            keepCircular,
             motion: {
                 startTime: placement.startTime,
                 settleTime: placement.settleTime,
@@ -202,6 +244,6 @@ export const buildTemperaWatermark = (
     node.anchor.set(0.5);
     node.position.set(watermark.x * options.width, watermark.y * options.height);
     node.rotation = watermark.rotation;
-    node.alpha = 0.16;
+    node.alpha = 0.55;
     options.layer.addChild(node);
 };

@@ -2,6 +2,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { join, normalize, extname } from 'node:path';
 import { Readable } from 'node:stream';
 import { Hono } from 'hono';
+import { KugouAccount } from './accounts/kugou.ts';
 import { NeteaseAccount } from './accounts/netease.ts';
 import { QqAccount } from './accounts/qq.ts';
 import { FileCache } from './cache.ts';
@@ -41,6 +42,8 @@ function isAllowedCoverUrl(url: string): boolean {
       || host.endsWith('qq.com')
       || host.endsWith('myqcloud.com')
       || host.endsWith('music.126.net')
+      || host.endsWith('kugou.com')
+      || host.endsWith('kgimg.com')
     );
   } catch {
     return false;
@@ -107,6 +110,7 @@ export function createApp(options: AppOptions) {
   const qq = new QqService(cache, secret);
   const neteaseAccount = new NeteaseAccount(cache, netease);
   const qqAccount = new QqAccount(cache, qq);
+  const kugouAccount = new KugouAccount(cache);
   const lyrics = new LyricsService(
     cache,
     netease,
@@ -329,9 +333,10 @@ export function createApp(options: AppOptions) {
           const { loadSongComments } = await import('./comments.ts');
           const result = await loadSongComments(
             netease,
+            qq,
             cache,
             post,
-            neteaseAccount.sessionCookie() || '',
+            { netease: neteaseAccount.sessionCookie() || '' },
           );
           return jsonResponse(result.data, result.code, result.error);
         }
@@ -340,6 +345,10 @@ export function createApp(options: AppOptions) {
       }
       if (action.startsWith('qq_')) {
         const result = await qqAccount.handle(action, post);
+        return jsonResponse(result.data, result.code, result.error);
+      }
+      if (action.startsWith('kugou_')) {
+        const result = await kugouAccount.handle(action, post);
         return jsonResponse(result.data, result.code, result.error);
       }
       if (action === 'lyrics_search') {

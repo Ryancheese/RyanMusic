@@ -437,16 +437,19 @@ export class TemperaPixiRuntime {
             const frame = resolveTemperaGlyphMotion(glyph.motion, time, motion);
             const x = glyph.baseX + frame.x;
             const y = glyph.baseY + frame.y;
+            // Interlude dots are drawn as circles; non-uniform scale would squash them into almonds.
+            const scaleX = glyph.keepCircular ? Math.max(frame.scaleX, frame.scaleY) : frame.scaleX;
+            const scaleY = glyph.keepCircular ? scaleX : frame.scaleY;
             glyph.display.alpha = frame.alpha;
             glyph.display.visible = frame.visible;
             glyph.display.position.set(x, y);
-            glyph.display.scale.set(frame.scaleX, frame.scaleY);
+            glyph.display.scale.set(scaleX, scaleY);
             glyph.display.rotation = frame.rotation;
             if (glyph.shadow) {
                 glyph.shadow.alpha = frame.alpha * 0.34;
                 glyph.shadow.visible = frame.visible;
                 glyph.shadow.position.set(x + glyph.shadowDX, y + glyph.shadowDY);
-                glyph.shadow.scale.set(frame.scaleX, frame.scaleY);
+                glyph.shadow.scale.set(scaleX, scaleY);
                 glyph.shadow.rotation = frame.rotation;
             }
             // Echoes trail further back along the entrance vector the deeper they sit.
@@ -460,7 +463,7 @@ export class TemperaPixiRuntime {
                     glyph.baseX + frame.echoX * depth,
                     glyph.baseY + frame.echoY * depth,
                 );
-                echo.scale.set(frame.scaleX, frame.scaleY);
+                echo.scale.set(scaleX, scaleY);
                 echo.rotation = frame.rotation;
             });
         });
