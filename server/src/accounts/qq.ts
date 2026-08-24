@@ -90,6 +90,10 @@ export class QqAccount {
         return this.recommendFeed(post);
       case 'qq_personal_fm':
         return this.personalFm();
+      case 'qq_daily_songs':
+        return this.dailySongs();
+      case 'qq_radar_songs':
+        return this.radarSongs();
       case 'qq_likelist':
         return this.likelist();
       case 'qq_like':
@@ -912,6 +916,232 @@ export class QqAccount {
     return data?.TrackInfoList || [];
   }
 
+  private radarTrackKey(track: any): string {
+    return String(
+      track?.mid
+      || track?.songmid
+      || track?.id
+      || track?.songid
+      || track?.SongID
+      || '',
+    ).trim();
+  }
+
+  private async fetchRadarRawList(
+    auth: { uin: string; cookie: string },
+    maxTracks = 30,
+  ): Promise<any[]> {
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (let page = 1; page <= 4 && out.length < maxTracks; page++) {
+      const radarRes = await this.musiculPost(auth, {
+        req_0: {
+          module: 'music.recommend.TrackRelationServer',
+          method: 'GetRadarSong',
+          param: { Page: page },
+        },
+      });
+      const data = radarRes.json?.req_0?.data;
+      const rawList = this.radarTracksFromResponse(data);
+      if (!rawList.length) break;
+      for (const item of rawList) {
+        const key = this.radarTrackKey(item);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(item);
+        if (out.length >= maxTracks) break;
+      }
+      if (!data?.HasMore) break;
+    }
+    return out;
+  }
+
+  private dailyMixTitleHints(): string[] {
+    return ['每日30', '每日 30', '今日私享', 'daily mix', 'daily30'];
+  }
+
+  private isDailyMixText(...parts: unknown[]): boolean {
+    const text = parts.map((part) => String(part || '')).join(' ').toLowerCase();
+    return this.dailyMixTitleHints().some((hint) => text.includes(hint.toLowerCase()));
+  }
+
+  private playlistIdFromValue(value: unknown): string {
+    if (value == null) return '';
+    const raw = String(value).trim();
+    if (/^\d{6,}$/.test(raw)) return raw;
+    const fromUrl = raw.match(/(?:disstid|dissid|playlist\/)(\d{6,})/i);
+    return fromUrl?.[1] || '';
+  }
+
+  private playlistIdFromObject(obj: any): string {
+    if (!obj || typeof obj !== 'object') return '';
+    const candidates = [
+      obj.disstid,
+      obj.dissid,
+      obj.tid,
+      obj.id,
+      obj.diss_id,
+      obj.playlist_id,
+      obj?.basic?.tid,
+      obj?.basic?.disstid,
+      obj?.Playlist?.basic?.tid,
+      obj?.miscellany?.disstid,
+      obj?.miscellany?.tid,
+      obj.jump_url,
+      obj.url,
+      obj.scheme,
+      obj.link,
+    ];
+    for (const candidate of candidates) {
+      const id = this.playlistIdFromValue(candidate);
+      if (id) return id;
+    }
+    return '';
+  }
+
+  private coverFromPlaylistObject(obj: any): string {
+    if (!obj || typeof obj !== 'object') return '';
+    const cover = obj?.cover || obj?.pic || obj?.picUrl || obj?.imgurl || {};
+    if (typeof cover === 'string') return cover.startsWith('//') ? `https:${cover}` : cover;
+    return String(
+      cover?.medium_url
+      || cover?.default_url
+      || cover?.big_url
+      || cover?.url
+      || '',
+    );
+  }
+
+  private deepFindDailyMix(
+    node: any,
+    depth = 0,
+    titleContext: string[] = [],
+  ): { id: string; name: string; cover: string; trackCount: number } | null {
+    if (!node || depth > 12) return null;
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const found = this.deepFindDailyMix(item, depth + 1, titleContext);
+        if (found) return found;
+      }
+      return null;
+    }
+    if (typeof node !== 'object') return null;
+
+    const texts = [...titleContext];
+    for (const key of ['title', 'subtitle', 'main_title', 'sub_title', 'title_content', 'title_template', 'name', 'desc']) {
+      if (node[key]) texts.push(String(node[key]));
+    }
+    const id = this.playlistIdFromObject(node);
+    if (id && this.isDailyMixText(...texts)) {
+      return {
+        id,
+        name: String(node?.title || node?.main_title || node?.title_content || '每日30首'),
+        cover: this.coverFromPlaylistObject(node),
+        trackCount: Number(node?.song_cnt || node?.songnum || node?.track_count || 30) || 30,
+      };
+    }
+    for (const value of Object.values(node)) {
+      const found = this.deepFindDailyMix(value, depth + 1, texts.slice(-6));
+      if (found) return found;
+    }
+    return null;
+  }
+
+  private parseDailyMixFromFeed(data: any): { id: string; name: string; cover: string; trackCount: number } | null {
+    const shelves: any[] = data?.v_shelf || data?.shelves || [];
+    for (const shelf of shelves) {
+      const niches: any[] = shelf?.v_niche || shelf?.niches || [];
+      for (const niche of niches) {
+        const cards: any[] = niche?.v_card || niche?.cards || [];
+        for (const card of cards) {
+          const titleParts = [
+            card?.title,
+            card?.subtitle,
+            card?.main_title,
+            card?.sub_title,
+            card?.title_content,
+            card?.title_template,
+            card?.name,
+            niche?.title_content,
+            niche?.title_template,
+            shelf?.title_content,
+          ];
+          if (!this.isDailyMixText(...titleParts)) continue;
+          const id = this.playlistIdFromObject(card);
+          if (!id) continue;
+          return {
+            id,
+            name: String(card?.title || card?.main_title || card?.title_content || '每日30首'),
+            cover: this.coverFromPlaylistObject(card),
+            trackCount: Number(card?.song_cnt || card?.songnum || card?.track_count || 30) || 30,
+          };
+        }
+      }
+    }
+    return this.deepFindDailyMix(data);
+  }
+
+  private async fetchDailyMixFromHomepage(cookie: string): Promise<{ id: string; name: string; cover: string; trackCount: number } | null> {
+    const res = await this.qqGet('https://c.y.qq.com/node/musicmac/v6/index.html', cookie);
+    const html = res.body || '';
+    const patterns = [
+      /playlist__name[^>]*>\s*今日私享[\s\S]{0,800}?data-rid=["'](\d+)["']/i,
+      /data-rid=["'](\d+)["'][\s\S]{0,800}?playlist__name[^>]*>\s*今日私享/i,
+      /每日\s*30[\s\S]{0,800}?data-rid=["'](\d+)["']/i,
+    ];
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match?.[1]) {
+        return { id: match[1], name: '每日30首', cover: '', trackCount: 30 };
+      }
+    }
+    return null;
+  }
+
+  private async resolveDailyMix(auth: { uin: string; cookie: string }) {
+    try {
+      const feedRes = await this.musiculPost(auth, {
+        req_0: {
+          module: 'music.recommend.RecommendFeed',
+          method: 'get_recommend_feed',
+          param: { direction: 0, page: 1, s_num: 0, v_cache: [] },
+        },
+      });
+      const fromFeed = this.parseDailyMixFromFeed(feedRes.json?.req_0?.data);
+      if (fromFeed?.id) return fromFeed;
+    } catch {
+      // ignore and fall back
+    }
+    return this.fetchDailyMixFromHomepage(auth.cookie);
+  }
+
+  private async fetchRadioRawList(
+    auth: { uin: string; cookie: string },
+    maxTracks = 20,
+  ): Promise<any[]> {
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (let i = 0; i < 4 && out.length < maxTracks; i++) {
+      const radioRes = await this.musiculPost(auth, {
+        req_0: {
+          module: 'music.radioProxy.MbTrackRadioSvr',
+          method: 'get_radio_track',
+          param: { IsGetTrackInfo: 1, IsSetTrack: 0 },
+        },
+      });
+      const rawList = this.radioTracksFromResponse(radioRes.json?.req_0?.data);
+      if (!rawList.length) break;
+      for (const item of rawList) {
+        const key = this.radarTrackKey(item);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(item);
+        if (out.length >= maxTracks) break;
+      }
+    }
+    return out;
+  }
+
   private radioTracksFromResponse(data: any): any[] {
     return data?.tracks || data?.TrackList || [];
   }
@@ -962,16 +1192,9 @@ export class QqAccount {
     if (limit <= 0) limit = 24;
     if (limit > 35) limit = 35;
 
-    const [radarRes, radioRes, feedRes] = await Promise.all([
-      // 私人雷达（每日推荐等价物）
-      this.musiculPost(auth, {
-        req_0: {
-          module: 'music.recommend.TrackRelationServer',
-          method: 'GetRadarSong',
-          param: { Page: 1 },
-        },
-      }),
-      // 猜你喜欢 FM
+    const [dailyMix, radarPreview, radioRes, feedRes] = await Promise.all([
+      this.resolveDailyMix(auth),
+      this.fetchRadarRawList(auth, 1),
       this.musiculPost(auth, {
         req_0: {
           module: 'music.radioProxy.MbTrackRadioSvr',
@@ -979,7 +1202,6 @@ export class QqAccount {
           param: { IsGetTrackInfo: 1, IsSetTrack: 0 },
         },
       }),
-      // 个性化推荐歌单
       this.musiculPost(auth, {
         req_0: {
           module: 'music.playlist.PlaylistSquare',
@@ -989,68 +1211,99 @@ export class QqAccount {
       }),
     ]);
 
-    const radarSongs = this.radarTracksFromResponse(radarRes.json?.req_0?.data);
     const radioSongs = this.radioTracksFromResponse(radioRes.json?.req_0?.data);
     const playlists = this.recommendPlaylistsFromFeed(feedRes.json?.req_0?.data, limit);
 
-    const items: Array<Record<string, unknown>> = [
-      {
-        id: '__qq_radar__',
-        name: '私人雷达',
-        cover: this.albumCoverFromTrack(radarSongs[0]),
-        trackCount: radarSongs.length || 30,
-        recommendKind: 'daily',
-        description: '根据你的喜好智能推荐，每天更新',
-      },
-      {
-        id: '__qq_fm__',
-        name: '猜你喜欢',
-        cover: this.albumCoverFromTrack(radioSongs[0]),
-        trackCount: radioSongs.length || 6,
-        recommendKind: 'fm',
-        description: '无限随机电台',
-      },
-    ];
-
+    const items: Array<Record<string, unknown>> = [];
+    items.push({
+      id: dailyMix?.id || '__qq_daily__',
+      name: dailyMix?.name || '每日30首',
+      cover: dailyMix?.cover || '',
+      trackCount: dailyMix?.trackCount || 30,
+      recommendKind: 'daily',
+      description: '根据你的口味生成，每天更新',
+    });
+    items.push({
+      id: '__qq_radar__',
+      name: '私人雷达',
+      cover: this.albumCoverFromTrack(radarPreview[0]),
+      trackCount: 30,
+      recommendKind: 'radar',
+      description: '根据你的喜好智能推荐，持续发现新歌',
+    });
+    items.push({
+      id: '__qq_fm__',
+      name: '猜你喜欢',
+      cover: this.albumCoverFromTrack(radioSongs[0]),
+      trackCount: radioSongs.length || 6,
+      recommendKind: 'fm',
+      description: '无限随机电台',
+    });
     items.push(...playlists);
 
-    if (!radarSongs.length && !radioSongs.length && !playlists.length) {
+    if (!dailyMix?.id && !radarPreview.length && !radioSongs.length && !playlists.length) {
       return fail(502, '拉取 QQ 音乐推荐失败');
     }
 
     return ok({ items });
   }
 
+  private async dailySongs() {
+    const auth = this.read();
+    if (!auth) return fail(401, '请先登录 QQ 音乐');
+
+    const mix = await this.resolveDailyMix(auth);
+    if (!mix?.id) return fail(502, '拉取每日30首失败');
+
+    const tracks = await this.playlistTracks(mix.id, auth.cookie);
+    const meta = await this.qqGet(
+      `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?${new URLSearchParams({
+        type: '1',
+        utf8: '1',
+        disstid: mix.id,
+        format: 'json',
+      })}`,
+      auth.cookie,
+    );
+    const cover = mix.cover?.trim()
+      || this.albumCoverFromTrack(meta.json?.cdlist?.[0]?.songlist?.[0])
+      || '';
+
+    return ok({
+      id: '__qq_daily__',
+      name: String(meta.json?.cdlist?.[0]?.dissname || mix.name || '每日30首'),
+      cover,
+      total: tracks.length,
+      tracks,
+    });
+  }
+
+  private async radarSongs() {
+    const auth = this.read();
+    if (!auth) return fail(401, '请先登录 QQ 音乐');
+
+    const rawList = await this.fetchRadarRawList(auth, 30);
+    if (!rawList.length) return fail(502, '拉取私人雷达失败');
+
+    const tracks = rawList
+      .map((item: any) => this.qq.trackFromSong(item))
+      .filter(Boolean);
+
+    return ok({
+      id: '__qq_radar__',
+      name: '私人雷达',
+      cover: this.albumCoverFromTrack(rawList[0]),
+      total: tracks.length,
+      tracks,
+    });
+  }
+
   private async personalFm() {
     const auth = this.read();
     if (!auth) return fail(401, '请先登录 QQ 音乐');
 
-    // 私人雷达歌曲（等价网易云每日推荐，获取可播放曲目列表）
-    const radarRes = await this.musiculPost(auth, {
-      req_0: {
-        module: 'music.recommend.TrackRelationServer',
-        method: 'GetRadarSong',
-        param: { Page: 1 },
-      },
-    });
-
-    const rawList = this.radarTracksFromResponse(radarRes.json?.req_0?.data);
-    if (!rawList.length) {
-      // 回退到猜你喜欢
-      const radioRes = await this.musiculPost(auth, {
-        req_0: {
-          module: 'music.radioProxy.MbTrackRadioSvr',
-          method: 'get_radio_track',
-          param: { IsGetTrackInfo: 1, IsSetTrack: 0 },
-        },
-      });
-      const radioList = this.radioTracksFromResponse(radioRes.json?.req_0?.data);
-      if (!radioList.length) return fail(502, '拉取 QQ 音乐推荐歌曲失败');
-      const tracks = radioList
-        .map((item: any) => this.qq.trackFromSong(item))
-        .filter(Boolean);
-      return ok({ tracks });
-    }
+    const rawList = await this.fetchRadioRawList(auth, 20);
+    if (!rawList.length) return fail(502, '拉取猜你喜欢失败');
 
     const tracks = rawList
       .map((item: any) => this.qq.trackFromSong(item))
@@ -1060,9 +1313,12 @@ export class QqAccount {
   }
 
   private async playlistDetail(id: string) {
+    const trimmed = id.trim();
+    if (trimmed === '__qq_radar__') return this.radarSongs();
+    if (trimmed === '__qq_daily__') return this.dailySongs();
     const auth = this.read();
     if (!auth) return fail(401, '请先登录 QQ 音乐');
-    if (!/^\d+$/.test(id.trim())) return fail(400, '歌单 ID 无效');
+    if (!/^\d+$/.test(trimmed)) return fail(400, '歌单 ID 无效');
     const tracks = await this.playlistTracks(id.trim(), auth.cookie);
     const meta = await this.qqGet(
       `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?${new URLSearchParams({

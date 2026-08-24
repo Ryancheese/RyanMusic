@@ -122,7 +122,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
   }, [currentTime, lines]);
 
   return (
-    <div className="absolute inset-0 z-20 h-full w-full overflow-hidden" onClick={onToggleChrome}>
+    <div className="absolute inset-0 z-20 h-full w-full overflow-hidden" onClick={onToggleChrome} data-tour="stage">
       {track && track.url ? (
         <div
           className="absolute inset-0 h-full w-full"

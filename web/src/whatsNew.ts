@@ -1,12 +1,14 @@
 /** 当前应用版本（与 Info.plist / Windows Version / server package 保持一致） */
-export const APP_VERSION = '2.0.6';
+export const APP_VERSION = '2.0.7';
 
 const SEEN_KEY = 'ryanmusic-whats-new-seen';
 
 /** 本版启动后弹窗展示的更新说明 */
-export const WHATS_NEW_NOTES = `• 网易云 / QQ 音乐推荐歌单、每日推荐与私人 FM
-• 云音乐库分区切换：我的歌单 / 推荐
-• 提供 Intel Mac 安装包（x64 DMG）`;
+export const WHATS_NEW_NOTES = `• 新用户界面引导，可在设置或帮助里再看一遍
+• 歌单 / 推荐切换增加过渡动画
+• 舞台评论同一首歌只出现一次，点舞台不再打断
+• 凝彩歌词省略号间距更疏
+• 修复 QQ 音乐推荐接口`;
 
 export function shouldShowWhatsNew(currentVersion = APP_VERSION): boolean {
   try {

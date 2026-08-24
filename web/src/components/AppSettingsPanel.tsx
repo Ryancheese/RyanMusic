@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ALargeSmall, ArrowDownUp, AudioLines, Clock3, Columns2, Flame, Gauge, HardDrive, Hexagon, Keyboard, LayoutGrid, Link2, List, MessageCircleHeart, Music, Palette, Rows2, SlidersHorizontal, SquareStack, Trash2, Users, X } from 'lucide-react';
+import { ALargeSmall, ArrowDownUp, AudioLines, Clock3, Columns2, Flame, Gauge, HardDrive, Hexagon, Keyboard, LayoutGrid, Link2, List, MessageCircleHeart, Music, Palette, Rows2, SlidersHorizontal, Sparkles, SquareStack, Trash2, Users, X } from 'lucide-react';
 import {
   LYRIC_SOURCE_OPTIONS,
   useLyricSettingsStore,
@@ -43,6 +43,7 @@ interface AppSettingsPanelProps {
   open: boolean;
   isDaylight: boolean;
   onClose: () => void;
+  onReplayGuide?: () => void;
 }
 
 type SettingsTab = 'lyrics' | 'playback' | 'chrome' | 'storage';
@@ -171,7 +172,7 @@ const CARD_STYLE_OPTIONS: { id: LibraryCardStyle; label: string }[] = [
   { id: 'plaque', label: LIBRARY_CARD_STYLE_LABELS.plaque },
 ];
 
-const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, onClose }) => {
+const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, onClose, onReplayGuide }) => {
   const [tab, setTab] = useState<SettingsTab>('lyrics');
   const preferredSource = useLyricSettingsStore((state) => state.preferredSource);
   const setPreferredSource = useLyricSettingsStore((state) => state.setPreferredSource);
@@ -535,7 +536,7 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold">热评 / 最新偏好</div>
                       <div className="mt-1 text-[11px] leading-relaxed opacity-50">
-                        最近优先约 70% 最新评论；热度优先约 70% 热评。热评数量少时会循环出现，最新评论会持续往后翻页。
+                        最近优先约 70% 最新评论；热度优先约 70% 热评。同一首歌播放过程中每条评论只出现一次，不会回头再飘。
                       </div>
                     </div>
                   </div>
@@ -751,6 +752,23 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
 
             {tab === 'chrome' ? (
               <div className="space-y-5">
+                {onReplayGuide ? (
+                  <button
+                    type="button"
+                    onClick={onReplayGuide}
+                    className={`flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition ${card} hover:brightness-110`}
+                  >
+                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${idle}`}>
+                      <Sparkles size={15} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold">界面引导</div>
+                      <div className="mt-1 text-[11px] leading-relaxed opacity-50">
+                        再走一遍首页按钮、封面墙和歌词舞台上的功能说明。
+                      </div>
+                    </div>
+                  </button>
+                ) : null}
                 <div className={`rounded-2xl px-3 py-3 ${card}`}>
                   <div className="mb-1 flex items-center gap-2 text-[11px] opacity-55">
                     <SquareStack size={14} />

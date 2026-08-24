@@ -2,6 +2,7 @@ import type { TemperaGlyphPlacement } from './temperaLayout';
 import type { TemperaPalette } from './temperaPalette';
 import type { TemperaDecorFragment, TemperaDecorWatermark } from './types';
 import type { TemperaGlyphMotionInput } from './temperaMotion';
+import { resolveTemperaDotRadius } from './temperaMeasure';
 import { toPixiColor } from './temperaShapes';
 import { isInterludeDotChar } from '../../../utils/lyrics/parserCore';
 
@@ -89,7 +90,7 @@ export const buildTemperaTextViews = (
 
         if (keepCircular) {
             // Geometry circle: CJK fallback fonts turn "." into squares / almonds on macOS.
-            const radius = Math.max(2.5, placement.fontSize * 0.14);
+            const radius = resolveTemperaDotRadius(placement.fontSize);
             display = buildInterludeDot(pixi, radius, fillColor);
             display.position.set(placement.x, placement.y);
             display.rotation = placement.rotation;

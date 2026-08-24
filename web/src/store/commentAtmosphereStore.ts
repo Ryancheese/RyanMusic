@@ -8,7 +8,7 @@ export type CommentPlatform = 'netease' | 'qq' | 'kugou';
 
 export const COMMENT_READ_ORDER_OPTIONS: { id: CommentReadOrder; label: string; hint: string }[] = [
   { id: 'sequential', label: '顺序', hint: '按接口返回的先后读' },
-  { id: 'random', label: '随机', hint: '打乱后循环读' },
+  { id: 'random', label: '随机', hint: '打乱后依次读，不重复' },
   { id: 'reverse', label: '倒序', hint: '从列表末尾往前读' },
 ];
 

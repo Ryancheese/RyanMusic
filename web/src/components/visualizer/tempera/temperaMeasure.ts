@@ -1,4 +1,5 @@
 import { layoutWithLines, prepareWithSegments } from '@chenglou/pretext';
+import { isInterludeDotChar } from '../../../utils/lyrics/parserCore';
 import type { TemperaSegment } from './types';
 
 // src/components/visualizer/tempera/temperaMeasure.ts
@@ -15,6 +16,18 @@ export const createTemperaMeasureContext = (
     fontFamily: string,
     fontWeight: number,
 ): TemperaMeasureContext => ({ cache: new Map(), fontFamily, fontWeight });
+
+/** Drawn as circles; must stay smaller than the advance so "......" does not fuse. */
+const TEMPERA_DOT_RADIUS_EM = 0.12;
+const TEMPERA_DOT_ADVANCE_EM = 0.52;
+
+export const resolveTemperaDotRadius = (fontSize: number) => (
+    Math.max(2.2, fontSize * TEMPERA_DOT_RADIUS_EM)
+);
+
+export const resolveTemperaDotAdvance = (fontSize: number) => (
+    Math.max(6, fontSize * TEMPERA_DOT_ADVANCE_EM)
+);
 
 const measureText = (ctx: TemperaMeasureContext, text: string, fontSize: number) => {
     const fontSpec = `${ctx.fontWeight} ${fontSize}px ${ctx.fontFamily}`;
@@ -33,9 +46,11 @@ const measureText = (ctx: TemperaMeasureContext, text: string, fontSize: number)
     return width;
 };
 
-export const measureTemperaGrapheme = (ctx: TemperaMeasureContext, char: string, fontSize: number) => (
-    char.trim().length === 0 ? fontSize * 0.3 : measureText(ctx, char, fontSize)
-);
+export const measureTemperaGrapheme = (ctx: TemperaMeasureContext, char: string, fontSize: number) => {
+    if (char.trim().length === 0) return fontSize * 0.3;
+    if (isInterludeDotChar(char)) return resolveTemperaDotAdvance(fontSize);
+    return measureText(ctx, char, fontSize);
+};
 
 export interface TemperaWordGlyph {
     char: string;
@@ -78,9 +93,10 @@ export const buildTemperaWordUnit = (
     const scaledSize = fontSize * scale;
     const raw = glyphs.map(grapheme => measureTemperaGrapheme(ctx, grapheme.char, scaledSize));
     const rawTotal = raw.reduce((sum, value) => sum + value, 0);
+    const hasDots = glyphs.some(grapheme => isInterludeDotChar(grapheme.char));
     const shaped = measureText(ctx, segment.text.replace(/\s+$/u, ''), scaledSize);
-    // Distribute the shaping difference proportionally instead of nudging a single glyph.
-    const correction = rawTotal > 0 ? shaped / rawTotal : 1;
+    // Period metrics are far narrower than the drawn circles; do not squash dots back to ".".
+    const correction = hasDots || rawTotal <= 0 ? 1 : shaped / rawTotal;
     let offset = 0;
     const placed = glyphs.map((grapheme, index) => {
         const width = raw[index] * correction;

@@ -193,6 +193,7 @@ const SidePanel: React.FC<SidePanelProps> = ({
                 ? 'fixed inset-x-0 bottom-0 h-[min(82dvh,calc(100%-4rem))] rounded-t-3xl border-0'
                 : 'relative w-[min(26rem,calc(100vw-1.5rem))] rounded-3xl border border-white/10'
             }`}
+            data-tour="now-playing"
             style={{
               ...(isMobile
                 ? { paddingBottom: 'var(--safe-bottom)' }

@@ -313,6 +313,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
       className={`pointer-events-none absolute left-1/2 z-60 flex w-full -translate-x-1/2 justify-center px-3 transition-all duration-300 ${
         currentView === 'home' ? 'max-w-[calc(100vw-1.5rem)] md:max-w-lg' : 'max-w-[calc(100vw-1.25rem)]'
       }`}
+      data-tour="dock"
       initial={false}
       animate={{ opacity: hideDock ? 0 : 1, y: hideDock ? 24 : 0, scale: hideDock ? 0.97 : 1 }}
       transition={{ duration: 0.26, ease: 'easeOut' }}
@@ -332,6 +333,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
             type="button"
             aria-label="返回"
             className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full outline-none ring-0"
+            data-tour="player-back"
             style={chromeButtonStyle(opacity, blur)}
             initial={false}
             animate={{
@@ -534,6 +536,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
               type="button"
               aria-label={panelOpen ? '收起正在播放' : '展开正在播放'}
               className="relative z-20 flex h-12 w-12 items-center justify-center rounded-full outline-none ring-0"
+              data-tour="player-panel"
               style={chromeButtonStyle(opacity, blur, panelOpen)}
               initial={false}
               animate={{ scale: sideHover === 'right' ? sideHoverScale : 1 }}

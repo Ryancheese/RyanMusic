@@ -139,7 +139,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   kugou = null,
 }) => {
   const [tabDir, setTabDir] = useState(1);
-  const [sectionDir, setSectionDir] = useState(1);
+  const [browseDir, setBrowseDir] = useState(1);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const glassOpacity = useControlAppearanceStore((state) => state.opacity);
@@ -166,13 +166,15 @@ const HomeView: React.FC<HomeViewProps> = ({
 
   const switchHomeTab = (next: HomeTab) => {
     if (next === homeTab) return;
-    setTabDir(next === 'qq' ? 1 : -1);
+    const dir = next === 'qq' ? 1 : -1;
+    setTabDir(dir);
+    setBrowseDir(dir);
     onHomeTabChange(next);
   };
 
   const switchLibrarySection = (next: NeteaseLibrarySection) => {
     if (next === neteaseLibrarySection) return;
-    setSectionDir(next === 'recommend' ? 1 : -1);
+    setBrowseDir(next === 'recommend' ? 1 : -1);
     onNeteaseLibrarySectionChange(next);
   };
 
@@ -224,9 +226,11 @@ const HomeView: React.FC<HomeViewProps> = ({
       description: item.description
         || (item.recommendKind === 'daily'
           ? '根据你的口味生成，每天更新'
-          : item.recommendKind === 'fm'
-            ? '无限私人电台'
-            : `${item.trackCount || 0} 首`),
+          : item.recommendKind === 'radar'
+            ? '根据你的喜好智能推荐，持续发现新歌'
+            : item.recommendKind === 'fm'
+              ? '无限私人电台'
+              : `${item.trackCount || 0} 首`),
       coverUrl: coverImageUrl(item.cover, 400),
     }))
   ), [activeRecommendItems]);
@@ -261,7 +265,7 @@ const HomeView: React.FC<HomeViewProps> = ({
 
   const themeButtons = (
     <>
-      <div className="relative" ref={accountMenuRef}>
+      <div className="relative z-30" ref={accountMenuRef} data-tour="account">
         <GlassChromeButton
           size="pill"
           onClick={() => setAccountMenuOpen((open) => !open)}
@@ -428,7 +432,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           ) : null}
         </AnimatePresence>
       </div>
-      <GlassChromeButton size="sm" onClick={onToggleTheme} title="切换日夜主题" aria-label="切换日夜主题">
+      <GlassChromeButton size="sm" onClick={onToggleTheme} title="切换日夜主题" aria-label="切换日夜主题" data-tour="theme">
         <AnimatePresence mode="wait" initial={false}>
           <motion.span
             key={isDaylight ? 'day' : 'night'}
@@ -442,19 +446,19 @@ const HomeView: React.FC<HomeViewProps> = ({
           </motion.span>
         </AnimatePresence>
       </GlassChromeButton>
-      <GlassChromeButton size="sm" onClick={onOpenSettings} title="设置" aria-label="设置">
+      <GlassChromeButton size="sm" onClick={onOpenSettings} title="设置" aria-label="设置" data-tour="settings">
         <Settings size={16} />
       </GlassChromeButton>
-      <GlassChromeButton size="sm" onClick={onOpenAccentPicker} title="主题色" aria-label="主题色">
+      <GlassChromeButton size="sm" onClick={onOpenAccentPicker} title="主题色" aria-label="主题色" data-tour="accent">
         <Palette size={16} style={{ color: 'var(--text-accent)' }} />
       </GlassChromeButton>
-      <GlassChromeButton size="sm" onClick={onCheckUpdate} title="检查更新" aria-label="检查更新" className="relative">
+      <GlassChromeButton size="sm" onClick={onCheckUpdate} title="检查更新" aria-label="检查更新" className="relative" data-tour="update">
         <RefreshCw size={16} />
         {updateAvailable ? (
           <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-sky-400" />
         ) : null}
       </GlassChromeButton>
-      <GlassChromeButton size="sm" onClick={() => onOpenLegal('help')} title="使用帮助" aria-label="使用帮助">
+      <GlassChromeButton size="sm" onClick={() => onOpenLegal('help')} title="使用帮助" aria-label="使用帮助" data-tour="help">
         <CircleHelp size={16} />
       </GlassChromeButton>
     </>
@@ -467,7 +471,7 @@ const HomeView: React.FC<HomeViewProps> = ({
     >
       <div className="titlebar-drag pointer-events-none absolute inset-x-0 top-0 z-20 h-8" />
       <div
-        className="relative z-10 px-4 pb-2 md:px-8"
+        className="relative px-4 pb-2 md:px-8"
         style={{ paddingTop: 'max(2.5rem, calc(var(--safe-top) + 0.75rem))' }}
       >
         <div className="titlebar-no-drag flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -480,6 +484,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               <div
                 className="mx-auto inline-flex items-center gap-0.5 rounded-full p-0.5 md:mx-0"
                 style={layoutRailStyle}
+                data-tour="sections"
               >
                 <LayoutGroup id="home-netease-section-tabs">
                   {NETEASE_LIBRARY_SECTIONS.map((section) => {
@@ -519,6 +524,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           <div className="flex items-center gap-2 md:justify-end">
             <form
               className="relative min-w-0 flex-1 md:w-56 md:flex-none md:focus-within:w-72"
+              data-tour="search"
               onSubmit={(event) => {
                 event.preventDefault();
                 onOpenSearch(true);
@@ -553,6 +559,7 @@ const HomeView: React.FC<HomeViewProps> = ({
           <div
             className="ml-auto inline-flex items-center gap-0.5 rounded-full p-0.5"
             style={layoutRailStyle}
+            data-tour="layout"
           >
             <LayoutGroup id="home-layout-tabs">
               {LAYOUT_MODES.map((mode) => {
@@ -591,78 +598,76 @@ const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </div>
 
-      <div className="relative z-[2] min-h-0 w-full flex-1 overflow-hidden" style={{ isolation: 'isolate' }}>
-        {/* 歌单列表：平台切换带动画；进详情时隐藏保活层由下方 tracks 覆盖 */}
-        <AnimatePresence mode="wait" initial={false} custom={tabDir}>
-          {!openPlaylist && !browsingRecommend ? (
-            <motion.div
-              key={`playlists-${homeTab}`}
-              className="absolute inset-0 flex flex-col overflow-hidden"
-              custom={tabDir}
-              variants={LIBRARY_SLIDE}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={LIBRARY_SLIDE_TRANSITION}
-            >
-              <AlbumWaterfall
-                key={`playlists-${layoutMode}-${homeTab}`}
-                scrollKey={`${layoutMode}:${homeTab}:playlists`}
-                items={playlistItems}
-                onSelect={(item, index) => {
-                  const playlistItem = cloudPlaylists.find((entry) => `pl-${entry.id}` === item.id)
-                    || cloudPlaylists[index];
-                  if (playlistItem) onOpenPlaylist(playlistItem);
-                }}
-                isDaylight={isDaylight}
-                isLoading={cloudSyncing || cloudLoading}
-                emptyMessage={playlistEmptyCopy}
-                hasFloatingPlayer={hasCurrentTrack}
-                layoutMode={layoutMode}
-                cardStyle={cardStyle}
-              />
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-
-        <AnimatePresence mode="wait" initial={false} custom={sectionDir}>
-          {browsingRecommend ? (
-            <motion.div
-              key="netease-recommend"
-              className="absolute inset-0 flex flex-col overflow-hidden"
-              custom={sectionDir}
-              variants={LIBRARY_SLIDE}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={LIBRARY_SLIDE_TRANSITION}
-            >
-              <AlbumWaterfall
-                key={`recommend-${layoutMode}`}
-                scrollKey={`${layoutMode}:netease:recommend`}
-                items={recommendItems}
-                onSelect={(item, index) => {
-                  const recommendItem = activeRecommendItems.find((entry) => `rc-${entry.id}` === item.id)
-                    || activeRecommendItems[index];
-                  if (!recommendItem) return;
-                  if (recommendItem.recommendKind === 'fm') {
-                    onPlayPersonalFm();
-                    return;
-                  }
-                  if (recommendItem.recommendKind === 'daily') {
-                    onOpenRecommend(recommendItem);
-                    return;
-                  }
-                  onOpenPlaylist(recommendItem);
-                }}
-                isDaylight={isDaylight}
-                isLoading={recommendSyncing || cloudLoading}
-                emptyMessage={recommendEmptyCopy}
-                hasFloatingPlayer={hasCurrentTrack}
-                layoutMode={layoutMode}
-                cardStyle={cardStyle}
-              />
-            </motion.div>
+      <div className="relative min-h-0 w-full flex-1 overflow-hidden" data-tour="library">
+        {/* 歌单 / 推荐同一层进出，切换时交叉滑入；进详情时由下方 tracks 覆盖 */}
+        <AnimatePresence initial={false} custom={browseDir}>
+          {!openPlaylist ? (
+            browsingRecommend ? (
+              <motion.div
+                key={`recommend-${homeTab}`}
+                className="absolute inset-0 flex flex-col overflow-hidden"
+                custom={browseDir}
+                variants={LIBRARY_SLIDE}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={LIBRARY_SLIDE_TRANSITION}
+              >
+                <AlbumWaterfall
+                  key={`recommend-${layoutMode}-${homeTab}`}
+                  scrollKey={`${layoutMode}:${homeTab}:recommend`}
+                  items={recommendItems}
+                  onSelect={(item, index) => {
+                    const recommendItem = activeRecommendItems.find((entry) => `rc-${entry.id}` === item.id)
+                      || activeRecommendItems[index];
+                    if (!recommendItem) return;
+                    if (recommendItem.recommendKind === 'fm') {
+                      onPlayPersonalFm();
+                      return;
+                    }
+                    if (recommendItem.recommendKind === 'daily' || recommendItem.recommendKind === 'radar') {
+                      onOpenRecommend(recommendItem);
+                      return;
+                    }
+                    onOpenPlaylist(recommendItem);
+                  }}
+                  isDaylight={isDaylight}
+                  isLoading={recommendSyncing || cloudLoading}
+                  emptyMessage={recommendEmptyCopy}
+                  hasFloatingPlayer={hasCurrentTrack}
+                  layoutMode={layoutMode}
+                  cardStyle={cardStyle}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`playlists-${homeTab}`}
+                className="absolute inset-0 flex flex-col overflow-hidden"
+                custom={browseDir}
+                variants={LIBRARY_SLIDE}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={LIBRARY_SLIDE_TRANSITION}
+              >
+                <AlbumWaterfall
+                  key={`playlists-${layoutMode}-${homeTab}`}
+                  scrollKey={`${layoutMode}:${homeTab}:playlists`}
+                  items={playlistItems}
+                  onSelect={(item, index) => {
+                    const playlistItem = cloudPlaylists.find((entry) => `pl-${entry.id}` === item.id)
+                      || cloudPlaylists[index];
+                    if (playlistItem) onOpenPlaylist(playlistItem);
+                  }}
+                  isDaylight={isDaylight}
+                  isLoading={cloudSyncing || cloudLoading}
+                  emptyMessage={playlistEmptyCopy}
+                  hasFloatingPlayer={hasCurrentTrack}
+                  layoutMode={layoutMode}
+                  cardStyle={cardStyle}
+                />
+              </motion.div>
+            )
           ) : null}
         </AnimatePresence>
 

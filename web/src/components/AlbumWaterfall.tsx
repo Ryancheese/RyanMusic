@@ -598,13 +598,11 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         className="app-scroll hide-scrollbar relative min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto"
         style={{
           paddingBottom: hasFloatingPlayer ? 'var(--player-dock-safe)' : '1.5rem',
-          isolation: 'isolate',
-          contain: 'paint',
         }}
         onScroll={persistScroll}
       >
         <div
-          className="mx-auto grid w-full gap-4 px-4 pb-4 sm:gap-5 sm:px-6 md:gap-6 md:px-8"
+          className="mx-auto grid w-full gap-4 px-4 pt-1 pb-4 sm:gap-5 sm:px-6 md:gap-6 md:px-8"
           style={{
             maxWidth: 1280,
             gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 156px), 1fr))',
@@ -693,16 +691,14 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         className="app-scroll hide-scrollbar relative min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto"
         style={{
           paddingBottom: hasFloatingPlayer ? 'var(--player-dock-safe)' : '1.5rem',
-          isolation: 'isolate',
-          contain: 'paint',
         }}
         onScroll={persistScroll}
       >
         <div
           className={
             listMulti
-              ? 'mx-auto grid w-full max-w-6xl grid-cols-1 gap-2 px-4 pb-4 sm:grid-cols-2 sm:gap-3 md:px-8 xl:grid-cols-3'
-              : 'mx-auto flex w-full max-w-3xl flex-col gap-2 px-4 pb-4 md:px-8'
+              ? 'mx-auto grid w-full max-w-6xl grid-cols-1 gap-2 px-4 pt-1 pb-4 sm:grid-cols-2 sm:gap-3 md:px-8 xl:grid-cols-3'
+              : 'mx-auto flex w-full max-w-3xl flex-col gap-2 px-4 pt-1 pb-4 md:px-8'
           }
         >
           {showSkeleton
@@ -778,8 +774,6 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       className="relative min-h-0 w-full flex-1 cursor-grab overflow-hidden touch-none select-none active:cursor-grabbing"
       style={{
         paddingBottom: hasFloatingPlayer ? '5.5rem' : '1.5rem',
-        isolation: 'isolate',
-        contain: 'paint',
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

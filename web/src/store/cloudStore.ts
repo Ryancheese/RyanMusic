@@ -9,10 +9,12 @@ import {
   fetchNeteasePlaylistDetail,
   fetchNeteasePlaylists,
   fetchNeteaseRecommendFeed,
+  fetchQqDailySongs,
   fetchQqLikelist,
   fetchQqPersonalFm,
   fetchQqPlaylistDetail,
   fetchQqPlaylists,
+  fetchQqRadarSongs,
   fetchQqRecommendFeed,
   type CloudPlaylist,
   type CloudTrack,
@@ -108,6 +110,8 @@ interface CloudState {
   openNeteaseRecommend: (item: NeteaseRecommendItem) => Promise<void>;
   playNeteasePersonalFm: () => Promise<LibraryEntry[]>;
   openQqPlaylist: (playlist: CloudPlaylist) => Promise<void>;
+  openQqRecommend: (item: NeteaseRecommendItem) => Promise<void>;
+  openQqRadar: (item: NeteaseRecommendItem) => Promise<void>;
   playQqPersonalFm: () => Promise<LibraryEntry[]>;
   closeNeteasePlaylist: () => void;
   closeQqPlaylist: () => void;
@@ -223,6 +227,28 @@ async function collectNeteaseTracks(playlist: CloudPlaylist): Promise<{ name: st
 }
 
 async function collectQqTracks(playlist: CloudPlaylist): Promise<{ name: string; tracks: LibraryEntry[]; cover: string }> {
+  if (playlist.id === '__qq_radar__' || playlist.recommendKind === 'radar') {
+    const res = await fetchQqRadarSongs();
+    if (res.code !== 200 || !res.data) {
+      throw new Error(res.error || '加载私人雷达失败');
+    }
+    return {
+      name: res.data.name || playlist.name,
+      tracks: toEntries(res.data.tracks, 'qq'),
+      cover: playlist.cover?.trim() || res.data.cover?.trim() || coverFromTrack(res.data.tracks?.[0], 'qq'),
+    };
+  }
+  if (playlist.id === '__qq_daily__' || playlist.recommendKind === 'daily') {
+    const res = await fetchQqDailySongs();
+    if (res.code !== 200 || !res.data) {
+      throw new Error(res.error || '加载每日30首失败');
+    }
+    return {
+      name: res.data.name || playlist.name,
+      tracks: toEntries(res.data.tracks, 'qq'),
+      cover: playlist.cover?.trim() || res.data.cover?.trim() || coverFromTrack(res.data.tracks?.[0], 'qq'),
+    };
+  }
   const liked = playlist.dirid === 201;
   const res = liked ? await fetchQqLikelist() : await fetchQqPlaylistDetail(playlist.id);
   if (res.code !== 200 || !res.data) {
@@ -433,6 +459,74 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       throw new Error(message);
     }
     return toEntries(res.data.tracks, 'netease');
+  },
+  openQqRecommend: async (item) => {
+    if (item.recommendKind !== 'daily') return;
+    const virtual: CloudPlaylist = {
+      id: item.id,
+      name: item.name,
+      cover: item.cover,
+      recommendKind: 'daily',
+    };
+    set({
+      qqLoading: true,
+      qqError: '',
+      qqOpen: virtual,
+      qqTracks: [],
+    });
+    try {
+      const res = await fetchQqDailySongs();
+      if (res.code !== 200 || !res.data) {
+        throw new Error(res.error || '加载每日30首失败');
+      }
+      const tracks = toEntries(res.data.tracks, 'qq');
+      const cover = item.cover?.trim() || res.data.cover?.trim() || coverFromTrack(res.data.tracks?.[0], 'qq');
+      set({
+        qqLoading: false,
+        qqOpen: { ...virtual, name: res.data.name || item.name, cover },
+        qqTracks: tracks,
+        qqError: tracks.length ? '' : '今日推荐为空',
+      });
+    } catch (error) {
+      set({
+        qqLoading: false,
+        qqError: error instanceof Error ? error.message : '加载每日30首失败',
+      });
+    }
+  },
+  openQqRadar: async (item) => {
+    if (item.recommendKind !== 'radar') return;
+    const virtual: CloudPlaylist = {
+      id: item.id,
+      name: item.name,
+      cover: item.cover,
+      recommendKind: 'radar',
+    };
+    set({
+      qqLoading: true,
+      qqError: '',
+      qqOpen: virtual,
+      qqTracks: [],
+    });
+    try {
+      const res = await fetchQqRadarSongs();
+      if (res.code !== 200 || !res.data) {
+        throw new Error(res.error || '加载私人雷达失败');
+      }
+      const tracks = toEntries(res.data.tracks, 'qq');
+      const cover = item.cover?.trim() || res.data.cover?.trim() || coverFromTrack(res.data.tracks?.[0], 'qq');
+      set({
+        qqLoading: false,
+        qqOpen: { ...virtual, name: res.data.name || item.name, cover },
+        qqTracks: tracks,
+        qqError: tracks.length ? '' : '私人雷达为空',
+      });
+    } catch (error) {
+      set({
+        qqLoading: false,
+        qqError: error instanceof Error ? error.message : '加载私人雷达失败',
+      });
+    }
   },
   openQqPlaylist: async (playlist) => {
     touchPlaylistRecent('qq', playlist.id);

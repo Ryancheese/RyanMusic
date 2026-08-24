@@ -165,12 +165,12 @@ export interface CloudPlaylist {
   order?: number;
   createTime?: number;
   description?: string;
-  /** 网易云推荐区虚拟条目 */
-  recommendKind?: 'daily' | 'fm' | 'playlist';
+  /** 网易云 / QQ 推荐区虚拟条目 */
+  recommendKind?: 'daily' | 'radar' | 'fm' | 'playlist';
 }
 
 export interface NeteaseRecommendItem extends CloudPlaylist {
-  recommendKind: 'daily' | 'fm' | 'playlist';
+  recommendKind: 'daily' | 'radar' | 'fm' | 'playlist';
 }
 
 export interface CloudTrack {
@@ -186,6 +186,7 @@ export interface CloudPlaylistDetail {
   id?: string;
   playlistId?: string;
   name?: string;
+  cover?: string;
   total?: number;
   trackIds?: Array<string | number>;
   tracks?: CloudTrack[];
@@ -221,6 +222,14 @@ export function fetchQqRecommendFeed(limit = 24) {
 
 export function fetchQqPersonalFm() {
   return postAction<{ tracks: CloudTrack[] }>('qq_personal_fm');
+}
+
+export function fetchQqDailySongs() {
+  return postAction<CloudPlaylistDetail>('qq_daily_songs');
+}
+
+export function fetchQqRadarSongs() {
+  return postAction<CloudPlaylistDetail>('qq_radar_songs');
 }
 
 export function fetchNeteasePlaylistDetail(id: string, offset = 0, limit = 200) {

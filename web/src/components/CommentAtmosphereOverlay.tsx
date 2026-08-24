@@ -491,8 +491,13 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
   const prefetchPromiseRef = useRef<Promise<void> | null>(null);
   const fetchFailsRef = useRef(0);
   const mixTickRef = useRef(0);
+  const shownIdsRef = useRef<Set<string>>(new Set());
   const sourceLockRef = useRef<'netease' | 'qq' | 'kugou' | undefined>(undefined);
   const activeRef = useRef<ActiveBubble[]>([]);
+  const chromeHiddenRef = useRef(chromeHidden);
+  chromeHiddenRef.current = chromeHidden;
+  const isPanelOpenRef = useRef(isPanelOpen);
+  isPanelOpenRef.current = isPanelOpen;
   const timersRef = useRef<number[]>([]);
   const removeTimersRef = useRef<Map<string, number>>(new Map());
   const hoveringRef = useRef<Set<string>>(new Set());
@@ -557,6 +562,7 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
     prefetchPromiseRef.current = null;
     fetchFailsRef.current = 0;
     mixTickRef.current = 0;
+    shownIdsRef.current = new Set();
     sourceLockRef.current = undefined;
     setFeedReady(false);
     setActive([]);
@@ -685,28 +691,31 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
   useEffect(() => {
     clearTimers();
     setActive([]);
-    hotCursorRef.current = 0;
-    latestCursorRef.current = 0;
-    mixTickRef.current = 0;
     if (!enabled || !feedReady) return;
 
     let alive = true;
     let waveLeft = maxVisible;
 
+    const takeUnused = (list: SongComment[], cursorRef: { current: number }): SongComment | null => {
+      while (cursorRef.current < list.length) {
+        const item = list[cursorRef.current];
+        cursorRef.current += 1;
+        if (!shownIdsRef.current.has(item.id)) {
+          shownIdsRef.current.add(item.id);
+          return item;
+        }
+      }
+      return null;
+    };
+
     const takeHot = (): { comment: SongComment; hot: true } | null => {
-      const list = hotRef.current;
-      if (!list.length) return null;
-      const item = list[hotCursorRef.current % list.length];
-      hotCursorRef.current += 1;
-      return { comment: item, hot: true };
+      const item = takeUnused(hotRef.current, hotCursorRef);
+      return item ? { comment: item, hot: true } : null;
     };
 
     const takeLatest = (): { comment: SongComment; hot: false } | null => {
-      const list = latestRef.current;
-      if (latestCursorRef.current >= list.length) return null;
-      const item = list[latestCursorRef.current];
-      latestCursorRef.current += 1;
-      return { comment: item, hot: false };
+      const item = takeUnused(latestRef.current, latestCursorRef);
+      return item ? { comment: item, hot: false } : null;
     };
 
     const pickNext = (avoidIds: Set<string>): { comment: SongComment; hot: boolean } | null => {
@@ -714,10 +723,13 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
       mixTickRef.current += 1;
       const preferHot = mixBiasRef.current === 'hot';
       const wantHot = preferHot ? wantPreferred : !wantPreferred;
-      const primary = wantHot ? takeHot() : takeLatest();
-      const fallback = wantHot ? takeLatest() : takeHot();
-      const candidates = [primary, fallback].filter(Boolean) as Array<{ comment: SongComment; hot: boolean }>;
-      return candidates.find((item) => !avoidIds.has(item.comment.id)) || candidates[0] || null;
+      const tryPool = (hot: boolean): { comment: SongComment; hot: boolean } | null => {
+        const taken = hot ? takeHot() : takeLatest();
+        if (!taken) return null;
+        if (avoidIds.has(taken.comment.id)) return tryPool(hot);
+        return taken;
+      };
+      return tryPool(wantHot) || tryPool(!wantHot);
     };
 
     const scheduleNext = (delayMs: number) => {
@@ -736,6 +748,17 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
         return;
       }
 
+      const placement = pickPlacement(
+        current.map((item) => item.placement),
+        chromeHiddenRef.current,
+        isPanelOpenRef.current,
+      );
+      if (!placement) {
+        // 没有空位就不硬叠，等已有气泡散开后再出下一条
+        scheduleNext(rand(GAP_MS_MIN, GAP_MS_MAX));
+        return;
+      }
+
       const unused = latestRef.current.length - latestCursorRef.current;
       if (unused < PREFETCH_AHEAD && moreRef.current) {
         const pending = prefetchLatest();
@@ -746,34 +769,12 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
       }
 
       const onScreen = new Set(current.map((item) => item.comment.id));
-      let entry = pickNext(onScreen);
-
-      if (!entry && latestRef.current.length && latestCursorRef.current >= latestRef.current.length && !moreRef.current) {
-        latestCursorRef.current = 0;
-        entry = pickNext(onScreen);
-      }
+      const entry = pickNext(onScreen);
 
       if (!entry) {
         if (moreRef.current || fetchingRef.current) {
           scheduleNext(900);
-          return;
         }
-        if (hotRef.current.length || latestRef.current.length) {
-          hotCursorRef.current = 0;
-          latestCursorRef.current = 0;
-          scheduleNext(rand(GAP_MS_MIN, GAP_MS_MAX));
-        }
-        return;
-      }
-
-      const placement = pickPlacement(
-        current.map((item) => item.placement),
-        chromeHidden,
-        isPanelOpen,
-      );
-      if (!placement) {
-        // 没有空位就不硬叠，等已有气泡散开后再出下一条
-        scheduleNext(rand(GAP_MS_MIN, GAP_MS_MAX));
         return;
       }
       const key = `${entry.comment.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -820,11 +821,9 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
       clearTimers();
     };
   }, [
-    chromeHidden,
     clearTimers,
     enabled,
     feedReady,
-    isPanelOpen,
     maxVisible,
     mixBias,
     prefetchLatest,

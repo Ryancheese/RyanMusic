@@ -34,9 +34,11 @@ import WhatsNewModal from './components/WhatsNewModal';
 import ToastHost from './components/ToastHost';
 import ThemeAccentPicker from './components/ThemeAccentPicker';
 import AppSettingsPanel from './components/AppSettingsPanel';
+import OnboardingTour from './components/OnboardingTour';
 import { parseLegalTab, type LegalTab } from './legal';
 import { checkAppUpdate, installAppUpdate, type AppUpdateInfo } from './lib/update';
 import type { AccountProviderId } from './lib/accountProviders';
+import { hasCompletedOnboarding, useOnboardingStore } from './store/onboardingStore';
 import {
   APP_VERSION,
   WHATS_NEW_NOTES,
@@ -192,6 +194,8 @@ const App: React.FC = () => {
   const openNeteaseRecommend = useCloudStore((state) => state.openNeteaseRecommend);
   const playNeteasePersonalFm = useCloudStore((state) => state.playNeteasePersonalFm);
   const openQqPlaylist = useCloudStore((state) => state.openQqPlaylist);
+  const openQqRecommend = useCloudStore((state) => state.openQqRecommend);
+  const openQqRadar = useCloudStore((state) => state.openQqRadar);
   const playQqPersonalFm = useCloudStore((state) => state.playQqPersonalFm);
   const closeNeteasePlaylist = useCloudStore((state) => state.closeNeteasePlaylist);
   const closeQqPlaylist = useCloudStore((state) => state.closeQqPlaylist);
@@ -478,19 +482,53 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      if (shouldShowWhatsNew(APP_VERSION)) {
+      if (!hasCompletedOnboarding()) {
+        useOnboardingStore.getState().start();
+        markWhatsNewSeen(APP_VERSION);
+      } else if (shouldShowWhatsNew(APP_VERSION)) {
         setWhatsNewOpen(true);
       }
       void checkAppUpdate().then((info) => {
         if (info.ok && info.hasUpdate) setUpdateInfo(info);
       }).catch(() => undefined);
-    }, 1200);
+    }, 900);
     return () => window.clearTimeout(timer);
   }, []);
 
   const closeWhatsNew = useCallback(() => {
     markWhatsNewSeen(APP_VERSION);
     setWhatsNewOpen(false);
+  }, []);
+
+  const startGuide = useCallback(() => {
+    setSettingsOpen(false);
+    setLegalOpen(false);
+    writeLegalQuery(null);
+    setSearchOpen(false);
+    setAccountOpen(false);
+    setAccentPickerOpen(false);
+    setUpdateOpen(false);
+    setWhatsNewOpen(false);
+    setLyricMatchOpen(false);
+    setStyleOpen(false);
+    setChromeHidden(false);
+    setView('home');
+    useOnboardingStore.getState().start();
+  }, [writeLegalQuery]);
+
+  const onGuideScene = useCallback((scene: 'home' | 'player') => {
+    if (scene === 'player' && queue[index]) {
+      setView('player');
+      setChromeHidden(false);
+      return;
+    }
+    setView('home');
+  }, [index, queue]);
+
+  const onGuideOpenPanel = useCallback(() => {
+    setView('player');
+    setChromeHidden(false);
+    setPanelOpen(true);
   }, []);
 
   const runSearch = useCallback(
@@ -1222,14 +1260,31 @@ const App: React.FC = () => {
             setChromeHidden(false);
           }}
           onOpenPlaylist={(item) => {
-            if (homeTab === 'qq') void openQqPlaylist(item);
-            else void openNeteasePlaylist(item);
+            if (homeTab === 'qq') {
+              if (item.recommendKind === 'daily' || item.id === '__qq_daily__') {
+                void openQqRecommend({ ...item, recommendKind: 'daily' });
+                return;
+              }
+              if (item.recommendKind === 'radar' || item.id === '__qq_radar__') {
+                void openQqRadar({ ...item, recommendKind: 'radar' });
+                return;
+              }
+              void openQqPlaylist(item);
+            } else {
+              void openNeteasePlaylist(item);
+            }
           }}
           onOpenRecommend={(item) => {
             if (homeTab === 'netease') {
               void openNeteaseRecommend(item);
-            } else if (homeTab === 'qq' && item.recommendKind === 'playlist') {
-              void openQqPlaylist(item);
+            } else if (homeTab === 'qq') {
+              if (item.recommendKind === 'daily') {
+                void openQqRecommend(item);
+              } else if (item.recommendKind === 'radar') {
+                void openQqRadar(item);
+              } else if (item.recommendKind === 'playlist') {
+                void openQqPlaylist(item);
+              }
             }
           }}
           onPlayPersonalFm={() => {
@@ -1411,6 +1466,7 @@ const App: React.FC = () => {
         theme={theme}
         onClose={closeLegal}
         onTabChange={openLegal}
+        onReplayGuide={startGuide}
       />
 
       <WhatsNewModal
@@ -1443,6 +1499,7 @@ const App: React.FC = () => {
         open={settingsOpen}
         isDaylight={isDaylight}
         onClose={() => setSettingsOpen(false)}
+        onReplayGuide={startGuide}
       />
 
       <FloatingPlayerControls
@@ -1516,6 +1573,13 @@ const App: React.FC = () => {
           />
         ) : null}
       </FloatingPlayerControls>
+      <OnboardingTour
+        isDaylight={isDaylight}
+        loggedIn={Boolean(netease?.loggedIn || qq?.loggedIn)}
+        hasTrack={Boolean(track)}
+        onScene={onGuideScene}
+        onOpenPanel={onGuideOpenPanel}
+      />
       <ToastHost />
     </div>
   );
