@@ -1,8 +1,10 @@
-import { Hono } from 'hono';
-import { handle } from 'hono/vercel';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { join } from 'node:path';
 
-export const config = { runtime: 'nodejs', maxDuration: 60 };
+export const config = {
+  runtime: 'nodejs',
+  maxDuration: 60,
+};
 
 type RyanApp = Awaited<ReturnType<typeof loadAppInternal>>;
 let appPromise: ReturnType<typeof loadAppInternal> | null = null;
@@ -20,23 +22,67 @@ function loadApp(): Promise<RyanApp> {
   return appPromise;
 }
 
-function normalizeRequest(req: Request): Request {
-  const url = new URL(req.url);
+function buildRequest(req: VercelRequest): Request {
+  const host = String(req.headers.host || 'localhost');
+  const path = req.url || '/';
+  const url = new URL(path, `https://${host}`);
+
   if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
     url.pathname = url.pathname.slice(4) || '/';
-    return new Request(url, req);
   }
-  return req;
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value == null) continue;
+    headers.set(key, Array.isArray(value) ? value.join(', ') : String(value));
+  }
+
+  const method = req.method || 'GET';
+  let body: BodyInit | undefined;
+  if (method !== 'GET' && method !== 'HEAD') {
+    if (typeof req.body === 'string') {
+      body = req.body;
+    } else if (Buffer.isBuffer(req.body)) {
+      body = req.body;
+    } else if (req.body && typeof req.body === 'object') {
+      const contentType = String(req.headers['content-type'] || '');
+      if (contentType.includes('application/x-www-form-urlencoded')) {
+        const params = new URLSearchParams();
+        for (const [key, value] of Object.entries(req.body as Record<string, unknown>)) {
+          if (value == null) continue;
+          params.set(key, String(value));
+        }
+        body = params.toString();
+      } else {
+        body = JSON.stringify(req.body);
+      }
+    }
+  }
+
+  return new Request(url, { method, headers, body });
 }
 
-const gateway = new Hono();
+async function pipeResponse(res: VercelResponse, response: Response) {
+  res.status(response.status);
+  response.headers.forEach((value, key) => {
+    if (key.toLowerCase() === 'transfer-encoding') return;
+    res.setHeader(key, value);
+  });
+  res.end(Buffer.from(await response.arrayBuffer()));
+}
 
-gateway.all('*', async (c) => {
-  if (c.req.query('ping') === '1') {
-    return c.json({ ok: true });
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.query?.ping === '1') {
+    res.status(200).json({ ok: true });
+    return;
   }
-  const app = await loadApp();
-  return app.fetch(normalizeRequest(c.req.raw));
-});
 
-export default handle(gateway);
+  try {
+    const app = await loadApp();
+    await pipeResponse(res, await app.fetch(buildRequest(req)));
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Server error',
+    });
+  }
+}
