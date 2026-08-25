@@ -335,7 +335,8 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
             isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
           }`}
           style={{
-            top: 'max(0.75rem, calc(var(--safe-top) + 0.35rem))',
+            // 移动浏览器顶栏/刘海常盖住 0.75rem；再下移到与播放页顶栏控件同高
+            top: 'max(3.5rem, calc(var(--safe-top) + 2.75rem))',
             ...chromeButtonStyle(opacity, blur, webFullscreen),
           }}
           initial={false}
