@@ -1,9 +1,10 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, type MotionValue } from 'framer-motion';
-import { ArrowLeft, ListMusic, Pause, Play, Repeat, Repeat1, SkipBack, SkipForward } from 'lucide-react';
+import { ArrowLeft, ListMusic, Maximize2, Minimize2, Pause, Play, Repeat, Repeat1, SkipBack, SkipForward } from 'lucide-react';
 import ProgressBar from './ProgressBar';
 import RyanLoader from './RyanLoader';
-import { useCoarsePointer } from '../lib/media';
+import { isWebBrowser, useWebFullscreen } from '../lib/webFullscreen';
+import { useCoarsePointer, useIsMobile } from '../lib/media';
 import { chromeButtonStyle, chromeCapsuleStyle } from '../lib/controlGlass';
 import { findLatestActiveLineIndex, resolveVisualizerLyrics } from '../lib/lyrics';
 import { useControlAppearanceStore } from '../store/controlAppearanceStore';
@@ -218,6 +219,9 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const collapseTimeoutRef = useRef<number | null>(null);
   const capsuleRef = useRef<HTMLDivElement>(null);
   const coarsePointer = useCoarsePointer();
+  const isMobile = useIsMobile();
+  const isMobileWeb = isMobile && isWebBrowser();
+  const { active: webFullscreen, supported: webFullscreenSupported, toggle: toggleWebFullscreen } = useWebFullscreen();
   const opacity = useControlAppearanceStore((state) => state.opacity);
   const blur = useControlAppearanceStore((state) => state.blur);
   const hoverBoost = useControlAppearanceStore((state) => state.hoverBoost);
@@ -225,14 +229,26 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const hoverScale = 1 + hoverBoost / 100;
   // 左右小圆钮面积更小，同一滑杆下提高倍率，观感与中间同步
   const sideHoverScale = hoverBoost <= 0 ? 1 : 1 + (hoverBoost / 100) * 2.5;
-  const SIDE_BTN_SIZE = 48;
+  const SIDE_BTN_SIZE = isMobile ? 40 : 48;
+  const sideBtnClass = isMobile ? 'h-10 w-10' : 'h-12 w-12';
+  const playBtnClass = isMobile ? 'h-10 w-10' : 'h-12 w-12';
+  const playIconSize = isMobile ? 18 : 20;
+  const skipIconSize = isMobile ? 16 : 18;
   // 悬停侧钮时，把邻居往外挤开（约等于放大后伸出的半径 + 一点间距）
-  const sidePush = (SIDE_BTN_SIZE * (sideHoverScale - 1)) / 2 + 8;
+  const sidePush = (SIDE_BTN_SIZE * (sideHoverScale - 1)) / 2 + (isMobile ? 6 : 8);
   // 默认与暂停保持缩小；悬停/触摸/缓冲加载时才展开
   const showExpanded =
     isHovered
     || coarsePointer
     || (buffering && status === 'loading');
+  const mobilePlayerExpanded = isMobile && currentView === 'player' && showExpanded;
+  const playerCapsuleWidth = showSideChrome
+    ? (
+      isMobile
+        ? (mobilePlayerExpanded ? 'min(100%, calc(100vw - 6.25rem))' : 'min(100%, calc(100vw - 6.25rem))')
+        : (showExpanded ? 'min(34rem, calc(100vw - 7.5rem))' : 'min(24rem, calc(100vw - 7.5rem))')
+    )
+    : (showExpanded ? '100%' : (isMobile ? 'min(100%, calc(100vw - 1.5rem))' : 'min(26rem, 94%)'));
   const trackColor = isDaylight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.1)';
   const primaryColor = 'color-mix(in srgb, var(--text-accent) var(--accent-ui-mix, 45%), var(--text-primary))';
   const secondaryColor = 'var(--text-secondary)';
@@ -309,9 +325,36 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   }, [showSideChrome, hideDock]);
 
   return (
-    <motion.div
-      className={`pointer-events-none absolute left-1/2 z-60 flex w-full -translate-x-1/2 justify-center px-3 transition-all duration-300 ${
-        currentView === 'home' ? 'max-w-[calc(100vw-1.5rem)] md:max-w-lg' : 'max-w-[calc(100vw-1.25rem)]'
+    <>
+      {isMobileWeb && currentView === 'player' && webFullscreenSupported && !hideDock ? (
+        <motion.button
+          type="button"
+          aria-label={webFullscreen ? '退出网页全屏' : '网页全屏'}
+          title={webFullscreen ? '退出网页全屏' : '网页全屏'}
+          className={`player-web-fullscreen-btn fixed right-3 z-[70] flex h-10 w-10 items-center justify-center rounded-full outline-none ring-0 ${
+            isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
+          }`}
+          style={{
+            top: 'max(0.75rem, calc(var(--safe-top) + 0.35rem))',
+            ...chromeButtonStyle(opacity, blur, webFullscreen),
+          }}
+          initial={false}
+          animate={{ opacity: isHidden ? 0 : 1, scale: isHidden ? 0.94 : 1 }}
+          transition={{ duration: 0.22, ease: 'easeOut' }}
+          onClick={(event) => {
+            event.stopPropagation();
+            void toggleWebFullscreen();
+          }}
+        >
+          {webFullscreen ? <Minimize2 size={16} strokeWidth={1.8} /> : <Maximize2 size={16} strokeWidth={1.8} />}
+        </motion.button>
+      ) : null}
+
+      <motion.div
+      className={`pointer-events-none absolute left-1/2 z-60 flex w-full -translate-x-1/2 justify-center transition-all duration-300 ${
+        currentView === 'home'
+          ? 'max-w-[calc(100vw-1.5rem)] md:max-w-lg'
+          : (isMobile ? 'max-w-[calc(100vw-0.75rem)] px-1.5' : 'max-w-[calc(100vw-1.25rem)] px-3')
       }`}
       data-tour="dock"
       initial={false}
@@ -319,20 +362,22 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
       transition={{ duration: 0.26, ease: 'easeOut' }}
       style={{
         pointerEvents: hideDock ? 'none' : 'auto',
-        bottom: 'max(1.25rem, calc(var(--safe-bottom) + 0.5rem))',
+        bottom: isMobileWeb
+          ? 'max(0.85rem, calc(var(--safe-bottom) + 0.65rem))'
+          : 'max(1.25rem, calc(var(--safe-bottom) + 0.5rem))',
       }}
       onClick={(event) => event.stopPropagation()}
     >
       <div
-        className={`pointer-events-auto flex items-end justify-center overflow-visible ${
-          showSideChrome ? 'w-fit max-w-full gap-2' : 'w-full max-w-lg gap-3'
+        className={`pointer-events-auto flex items-center justify-center overflow-visible ${
+          showSideChrome ? `w-fit max-w-full ${isMobile ? 'gap-1.5' : 'gap-2'}` : `w-full max-w-lg ${isMobile ? 'gap-2' : 'gap-3'}`
         }`}
       >
         {showSideChrome && onBack ? (
           <motion.button
             type="button"
             aria-label="返回"
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full outline-none ring-0"
+            className={`flex ${sideBtnClass} shrink-0 items-center justify-center rounded-full outline-none ring-0`}
             data-tour="player-back"
             style={chromeButtonStyle(opacity, blur)}
             initial={false}
@@ -356,9 +401,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
           initial={false}
           animate={{
             x: centerX,
-            width: showSideChrome
-              ? (showExpanded ? 'min(34rem, calc(100vw - 7.5rem))' : 'min(24rem, calc(100vw - 7.5rem))')
-              : (showExpanded ? '100%' : 'min(26rem, 94%)'),
+            width: playerCapsuleWidth,
           }}
           transition={CONTROL_LAYOUT_SPRING}
           onMouseEnter={onCapsuleEnter}
@@ -386,7 +429,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
             title={currentView === 'home' ? '点击可以返回歌词舞台' : undefined}
             aria-label={currentView === 'home' ? '点击可以返回歌词舞台' : undefined}
             className={`relative cursor-pointer overflow-hidden rounded-full border-0 outline-none ring-0 transition-[background-color] duration-300 ${
-              showExpanded ? 'w-full p-3' : 'w-full px-4 py-2'
+              showExpanded ? `w-full ${isMobile ? 'p-2' : 'p-3'}` : `w-full ${isMobile ? 'px-3 py-1.5' : 'px-4 py-2'}`
             }`}
             style={{ ...glassStyle, ...dockHoverScaleStyle }}
             initial={false}
@@ -396,7 +439,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
           >
             <div className="w-full">
             {showExpanded ? (
-              <div className="flex w-full items-center gap-1.5 sm:gap-2" style={dockHoverScaleStyle}>
+              <div className={`flex w-full items-center ${isMobile ? 'gap-1' : 'gap-1.5 sm:gap-2'}`} style={dockHoverScaleStyle}>
                 <button
                   type="button"
                   onClick={(event) => {
@@ -404,7 +447,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                     onTogglePlay();
                   }}
                   disabled={!canTogglePlay}
-                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-none shadow-lg outline-none ring-0 transition-transform duration-200 ${
+                  className={`flex ${playBtnClass} shrink-0 items-center justify-center rounded-full border-none shadow-lg outline-none ring-0 transition-transform duration-200 ${
                     canTogglePlay
                       ? 'hover:[transform:scale(var(--dock-hover-scale))]'
                       : 'cursor-not-allowed opacity-45'
@@ -415,11 +458,11 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                   }}
                 >
                   {buffering || status === 'loading' ? (
-                    <RyanLoader size={22} />
+                    <RyanLoader size={isMobile ? 18 : 22} />
                   ) : status === 'playing' ? (
-                    <Pause size={20} fill="currentColor" />
+                    <Pause size={playIconSize} fill="currentColor" />
                   ) : (
-                    <Play size={20} fill="currentColor" className="ml-1" />
+                    <Play size={playIconSize} fill="currentColor" className="ml-0.5" />
                   )}
                 </button>
                 <button
@@ -430,13 +473,13 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                     event.stopPropagation();
                     onPrev();
                   }}
-                  className={`${skipClass} ${canPrev ? 'opacity-80' : 'cursor-not-allowed opacity-30'}`}
+                  className={`${skipClass} ${canPrev ? 'opacity-80' : 'cursor-not-allowed opacity-30'} ${isMobile ? 'h-8 w-8' : 'h-9 w-9'}`}
                   style={{ color: primaryColor }}
                 >
-                  <SkipBack size={18} fill="currentColor" />
+                  <SkipBack size={skipIconSize} fill="currentColor" />
                 </button>
-                <div className="flex min-w-0 flex-[1.65] items-center gap-1.5 px-0.5">
-                  <div className="min-w-[10rem] flex-1">
+                <div className={`flex min-w-0 flex-[1.65] items-center ${isMobile ? 'gap-1 px-0' : 'gap-1.5 px-0.5'}`}>
+                  <div className={isMobile ? 'min-w-0 flex-1' : 'min-w-[10rem] flex-1'}>
                     {showSongTitle ? (
                       <HomeDockNowPlaying
                         title={trackTitle}
@@ -455,6 +498,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                         secondaryColor={secondaryColor}
                         trackColor={trackColor}
                         disabled={!canTogglePlay}
+                        compact={isMobile}
                       />
                     )}
                   </div>
@@ -467,10 +511,10 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                     event.stopPropagation();
                     onNext();
                   }}
-                  className={`${skipClass} ${canNext ? 'opacity-80' : 'cursor-not-allowed opacity-30'}`}
+                  className={`${skipClass} ${canNext ? 'opacity-80' : 'cursor-not-allowed opacity-30'} ${isMobile ? 'h-8 w-8' : 'h-9 w-9'}`}
                   style={{ color: primaryColor }}
                 >
-                  <SkipForward size={18} fill="currentColor" />
+                  <SkipForward size={skipIconSize} fill="currentColor" />
                 </button>
                 <button
                   type="button"
@@ -478,7 +522,9 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                     event.stopPropagation();
                     onToggleLoop();
                   }}
-                  className={`rounded-full p-2 outline-none ring-0 transition-transform duration-200 hover:[transform:scale(var(--dock-hover-scale))] ${
+                  className={`rounded-full outline-none ring-0 transition-transform duration-200 hover:[transform:scale(var(--dock-hover-scale))] ${
+                    isMobile ? 'p-1.5' : 'p-2'
+                  } ${
                     loopMode !== 'off'
                       ? isDaylight
                         ? 'bg-black/10 text-black'
@@ -488,9 +534,9 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                   style={{ color: primaryColor }}
                 >
                   {loopMode === 'one' ? (
-                    <Repeat1 size={18} />
+                    <Repeat1 size={skipIconSize} />
                   ) : (
-                    <Repeat size={18} />
+                    <Repeat size={skipIconSize} />
                   )}
                 </button>
               </div>
@@ -513,6 +559,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                       secondaryColor={secondaryColor}
                       trackColor={trackColor}
                       disabled={!canTogglePlay}
+                      compact={isMobile}
                     />
                   )}
                 </div>
@@ -535,7 +582,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
             <motion.button
               type="button"
               aria-label={panelOpen ? '收起正在播放' : '展开正在播放'}
-              className="relative z-20 flex h-12 w-12 items-center justify-center rounded-full outline-none ring-0"
+              className={`relative z-20 flex ${sideBtnClass} items-center justify-center rounded-full outline-none ring-0`}
               data-tour="player-panel"
               style={chromeButtonStyle(opacity, blur, panelOpen)}
               initial={false}
@@ -552,6 +599,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
         ) : null}
       </div>
     </motion.div>
+    </>
   );
 };
 

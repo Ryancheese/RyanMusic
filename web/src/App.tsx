@@ -3,7 +3,8 @@ import { useMotionValue } from 'framer-motion';
 import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type SearchAlbumHit, type SearchArtistHit, type SearchBundle, type SearchCategory, type SearchPlaylistHit, type Track, type VisualizerMode } from './types';
 import { buildDownloadUrl, canNativeSave, coverImageUrl, coverRefreshUrl, fetchKugouStatus, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type CloudPlaylist, type LyricSearchCandidate, type PlayQuality } from './api';
 import { accentWashVars, contrastText, extractAccentFromImage } from './lib/color';
-import { isMobileViewport, isWindowsApp, prefersLightweightVisualizer } from './lib/media';
+import { isMobileViewport, isNativeApp, isWindowsApp, prefersLightweightVisualizer, useIsMobile } from './lib/media';
+import { useWebFullscreen } from './lib/webFullscreen';
 import WindowControls from './components/WindowControls';
 import TitlebarDragZone from './components/TitlebarDragZone';
 import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig, writeVisualizerMode } from './lib/visualizer';
@@ -291,6 +292,19 @@ const App: React.FC = () => {
       // non-mac / no bridge
     }
   }, [bgWash, effectiveAccent, isDaylight, onAccent, theme.backgroundColor, theme.primaryColor, theme.secondaryColor, uiTint, washVars]);
+
+  const isMobile = useIsMobile();
+  const { active: webFullscreen } = useWebFullscreen();
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const dockVisible = Boolean(track);
+    const dockExpanded = dockVisible && (view === 'player' ? !chromeHidden : true);
+    root.classList.toggle('mobile-web-browser', isMobile && !isNativeApp());
+    root.classList.toggle('web-fullscreen', webFullscreen);
+    root.classList.toggle('player-dock-visible', dockVisible);
+    root.classList.toggle('player-dock-expanded', dockExpanded);
+  }, [chromeHidden, isMobile, track, view, webFullscreen]);
 
   // WKWebView：祖先 CSS user-select:none 会让搜索框也无法选中；改用 selectstart 只拦非输入区
   useEffect(() => {

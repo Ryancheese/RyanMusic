@@ -9,6 +9,7 @@ interface ProgressBarProps {
   secondaryColor?: string;
   trackColor?: string;
   disabled?: boolean;
+  compact?: boolean;
 }
 
 const formatTime = (time: number) => {
@@ -26,6 +27,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
   secondaryColor = 'rgba(255,255,255,0.5)',
   trackColor = 'rgba(255,255,255,0.1)',
   disabled = false,
+  compact = false,
 }) => {
   const progressRef = useRef<HTMLDivElement>(null);
   const timeRef = useRef<HTMLSpanElement>(null);
@@ -86,16 +88,16 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
   });
 
   return (
-    <div className="flex w-full select-none items-center gap-2">
+    <div className={`flex w-full select-none items-center ${compact ? 'gap-1.5' : 'gap-2'}`}>
       <span
         ref={timeRef}
-        className="w-9 shrink-0 text-right font-mono text-[10px] font-medium tabular-nums opacity-60"
+        className={`${compact ? 'w-8 text-[9px]' : 'w-9 text-[10px]'} shrink-0 text-right font-mono font-medium tabular-nums opacity-60`}
         style={{ color: secondaryColor }}
       >
         00:00
       </span>
       <div
-        className={`group relative flex h-8 flex-1 items-center ${
+        className={`group relative flex ${compact ? 'h-7' : 'h-8'} flex-1 items-center ${
           disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
         }`}
       >
@@ -138,7 +140,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
           className={`absolute inset-0 h-full w-full opacity-0 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         />
       </div>
-      <span className="w-9 shrink-0 font-mono text-[10px] font-medium tabular-nums opacity-60" style={{ color: secondaryColor }}>
+      <span className={`${compact ? 'w-8 text-[9px]' : 'w-9 text-[10px]'} shrink-0 font-mono font-medium tabular-nums opacity-60`} style={{ color: secondaryColor }}>
         {formatTime(duration)}
       </span>
     </div>

@@ -40,6 +40,10 @@ export function isMacosApp() {
   return typeof document !== 'undefined' && document.documentElement.classList.contains('platform-macos-app');
 }
 
+export function isNativeApp() {
+  return isWindowsApp() || isMacosApp();
+}
+
 export function prefersLightweightVisualizer() {
   if (typeof window === 'undefined') return false;
   if (isWindowsApp()) return true;

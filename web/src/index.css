@@ -124,6 +124,23 @@ html.player-dock-visible.player-dock-expanded {
   --player-dock-safe: calc(8.5rem + var(--safe-bottom));
 }
 
+html.mobile-web-browser.player-dock-visible {
+  --player-dock-safe: calc(6.5rem + var(--safe-bottom));
+}
+
+html.mobile-web-browser.player-dock-visible.player-dock-expanded {
+  --player-dock-safe: calc(9.25rem + var(--safe-bottom));
+}
+
+html.web-fullscreen {
+  --safe-top: 0px;
+  --safe-bottom: 0px;
+}
+
+html.web-fullscreen .player-web-fullscreen-btn {
+  opacity: 0.72;
+}
+
 html.theme-daylight {
   color-scheme: light;
 }
