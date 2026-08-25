@@ -15,12 +15,12 @@
     { "source": "/", "has": [{ "type": "query", "key": "download" }], "destination": "/api" },
     {
       "source": "/",
-      "has": [{ "type": "header", "key": "content-type", "value": { "pre": "application/x-www-form-urlencoded" } }],
+      "has": [{ "type": "header", "key": "x-requested-with", "value": "XMLHttpRequest" }],
       "destination": "/api"
     },
     {
       "source": "/index.php",
-      "has": [{ "type": "header", "key": "content-type", "value": { "pre": "application/x-www-form-urlencoded" } }],
+      "has": [{ "type": "header", "key": "x-requested-with", "value": "XMLHttpRequest" }],
       "destination": "/api"
     },
     { "source": "/", "destination": "/web-root/static/app/index.html" },
