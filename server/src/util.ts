@@ -270,6 +270,9 @@ export function mediaReferer(url: string): string {
     if (host.endsWith('126.net') || host.endsWith('163.com') || host.includes('netease')) {
       return 'https://music.163.com/';
     }
+    if (host.endsWith('kuwo.cn') || host.includes('kuwo')) {
+      return 'https://www.kuwo.cn/';
+    }
     if (host.endsWith('myhkw.cn')) return 'https://s.myhkw.cn/';
   } catch {
     // ignore invalid url

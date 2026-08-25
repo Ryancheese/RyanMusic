@@ -13,6 +13,7 @@ import {
 import { FileCache } from './cache.ts';
 import { encodeLinuxData, eapiRequest, linuxForward, neteaseApi, neteaseHttp, weapiEncode, weapiRequest } from './crypto/netease.ts';
 import { followLocation, request } from './http.ts';
+import { kuwoMatchPlayUrl } from './kuwo.ts';
 import { proxyUrl } from './sign.ts';
 import {
   firstTruthy,
@@ -361,7 +362,13 @@ export class NeteaseService {
     }
 
     // 非会员一刀切：只走 RyanMusic 私链，官方/Meting 会给 30 秒试听。
+    // Serverless 上 bootstrap（90svip）常不可达，优先酷我匹配，避免空等超时。
     if (isServerlessEnv()) {
+      const kuwoFirst = await this.kuwoFallbackPlayUrl(songid);
+      if (kuwoFirst) {
+        this.cache.setTtl('netease_play_v6', songid, kuwoFirst, 600);
+        return kuwoFirst;
+      }
       const direct = await this.anonymousPlayUrl(songid);
       if (direct) {
         this.cache.setTtl('netease_play_v6', songid, direct, 600);
@@ -382,8 +389,24 @@ export class NeteaseService {
         this.cache.setTtl('netease_play_v6', songid, direct, 600);
         return direct;
       }
+      const kuwo = await this.kuwoFallbackPlayUrl(songid);
+      if (kuwo) {
+        this.cache.setTtl('netease_play_v6', songid, kuwo, 600);
+        return kuwo;
+      }
     }
     return null;
+  }
+
+  /** bootstrap 不可达（如 Vercel 美东）时，按歌名匹配酷我取流 */
+  private async kuwoFallbackPlayUrl(songid: string): Promise<string | null> {
+    try {
+      const [track] = await this.songsByIds([songid]);
+      if (!track?.title) return null;
+      return await kuwoMatchPlayUrl(track.title, track.author || '');
+    } catch {
+      return null;
+    }
   }
 
   async probePlayQualities(songid: string, cookie: string): Promise<Array<{

@@ -647,6 +647,9 @@ function mediaReferer(url) {
     if (host.endsWith("126.net") || host.endsWith("163.com") || host.includes("netease")) {
       return "https://music.163.com/";
     }
+    if (host.endsWith("kuwo.cn") || host.includes("kuwo")) {
+      return "https://www.kuwo.cn/";
+    }
     if (host.endsWith("myhkw.cn")) return "https://s.myhkw.cn/";
   } catch {
   }
@@ -1084,44 +1087,6 @@ var init_netease = __esm({
   }
 });
 
-// server/src/sign.ts
-var sign_exports = {};
-__export(sign_exports, {
-  proxyUrl: () => proxyUrl,
-  sign: () => sign,
-  verifySign: () => verifySign
-});
-import { createHmac, timingSafeEqual } from "node:crypto";
-function sign(secret, get, type, id, t) {
-  const payload = `${get}|${type}|${id}|${t}`;
-  const raw2 = createHmac("sha256", secret).update(payload).digest();
-  return raw2.toString("base64").replace(/\+/g, ".").replace(/\//g, "_").replace(/=/g, "-").slice(0, 13);
-}
-function verifySign(secret, get, type, id, t, given) {
-  if (!given || !t) return false;
-  if (Math.abs(Date.now() / 1e3 - Number(t)) > 86400) return false;
-  const expected = sign(secret, get, type, id, t);
-  const a = Buffer.from(expected);
-  const b = Buffer.from(given);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-function proxyUrl(secret, get, type, id) {
-  const t = String(Math.floor(Date.now() / 1e3));
-  const params = new URLSearchParams({
-    get,
-    type,
-    id,
-    sign: sign(secret, get, type, id, t),
-    t
-  });
-  return `api.php?${params.toString()}`;
-}
-var init_sign = __esm({
-  "server/src/sign.ts"() {
-    "use strict";
-  }
-});
-
 // server/src/crossPlay.ts
 function normalizeMatchText2(value) {
   return String(value || "").toLowerCase().replace(/[\(\[（【].*?[\)\]）】]/g, "").replace(/[\s\p{P}\p{S}]/gu, "").trim();
@@ -1189,6 +1154,44 @@ var init_crossPlay = __esm({
     "use strict";
     AUTO_MATCH_MIN_SCORE2 = 72;
     AUTO_MATCH_SEARCH_LIMIT2 = 8;
+  }
+});
+
+// server/src/sign.ts
+var sign_exports = {};
+__export(sign_exports, {
+  proxyUrl: () => proxyUrl,
+  sign: () => sign,
+  verifySign: () => verifySign
+});
+import { createHmac, timingSafeEqual } from "node:crypto";
+function sign(secret, get, type, id, t) {
+  const payload = `${get}|${type}|${id}|${t}`;
+  const raw2 = createHmac("sha256", secret).update(payload).digest();
+  return raw2.toString("base64").replace(/\+/g, ".").replace(/\//g, "_").replace(/=/g, "-").slice(0, 13);
+}
+function verifySign(secret, get, type, id, t, given) {
+  if (!given || !t) return false;
+  if (Math.abs(Date.now() / 1e3 - Number(t)) > 86400) return false;
+  const expected = sign(secret, get, type, id, t);
+  const a = Buffer.from(expected);
+  const b = Buffer.from(given);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+function proxyUrl(secret, get, type, id) {
+  const t = String(Math.floor(Date.now() / 1e3));
+  const params = new URLSearchParams({
+    get,
+    type,
+    id,
+    sign: sign(secret, get, type, id, t),
+    t
+  });
+  return `api.php?${params.toString()}`;
+}
+var init_sign = __esm({
+  "server/src/sign.ts"() {
+    "use strict";
   }
 });
 
@@ -6740,6 +6743,103 @@ var LyricsService = class {
 init_config();
 init_netease();
 init_http();
+
+// server/src/kuwo.ts
+init_crossPlay();
+init_http();
+init_util();
+function parseKuwoJsonp(body) {
+  const text = body.trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    try {
+      return new Function(`"use strict"; return (${text});`)();
+    } catch {
+      return null;
+    }
+  }
+}
+function kuwoRid(raw2) {
+  const value = String(raw2 || "").trim();
+  if (!value) return null;
+  const digits = value.replace(/^MUSIC_/i, "");
+  return /^\d+$/.test(digits) ? digits : null;
+}
+async function kuwoSearchTracks(query, limit = 8) {
+  const q = query.trim();
+  if (!q) return [];
+  const res = await request(
+    "GET",
+    `https://search.kuwo.cn/r.s?${new URLSearchParams({
+      all: q,
+      ft: "music",
+      client: "kt",
+      pn: "0",
+      rn: String(Math.min(Math.max(limit, 1), 20)),
+      rformat: "json",
+      encoding: "utf8",
+      vipver: "1"
+    })}`,
+    { timeoutMs: 8e3 }
+  );
+  const json = res.json && Array.isArray(res.json.abslist) ? res.json : parseKuwoJsonp(res.body);
+  const list = Array.isArray(json?.abslist) ? json.abslist : [];
+  const out = [];
+  for (const item of list) {
+    const rid = kuwoRid(item.DC_TARGETID || item.MUSICRID || item.rid);
+    if (!rid) continue;
+    out.push({
+      type: "netease",
+      songid: rid,
+      title: String(item.NAME || item.SONGNAME || "").replace(/&nbsp;/g, " ").trim() || "\u672A\u77E5\u66F2\u76EE",
+      author: String(item.ARTIST || "").replace(/&nbsp;/g, " ").trim() || "\u672A\u77E5\u827A\u4EBA",
+      link: `https://www.kuwo.cn/play_detail/${rid}`,
+      pic: "",
+      album: String(item.ALBUM || "").replace(/&nbsp;/g, " ").trim(),
+      durationMs: (Number(item.DURATION || item.duration || 0) || 0) * 1e3,
+      lrc: "",
+      url: ""
+    });
+  }
+  return out;
+}
+async function kuwoPlayUrl(rid) {
+  const id = kuwoRid(rid);
+  if (!id) return null;
+  const res = await request(
+    "GET",
+    `https://antiserver.kuwo.cn/anti.s?${new URLSearchParams({
+      type: "convert_url3",
+      rid: `MUSIC_${id}`,
+      format: "mp3",
+      response: "url",
+      httpsStatus: "1"
+    })}`,
+    { timeoutMs: 8e3 }
+  );
+  let url = "";
+  if (res.json?.url) url = String(res.json.url);
+  else if (/^https?:\/\//i.test(res.body.trim())) url = res.body.trim();
+  else {
+    const parsed = parseKuwoJsonp(res.body);
+    url = String(parsed?.url || "");
+  }
+  if (!url || isBadMediaUrl(url)) return null;
+  return url;
+}
+async function kuwoMatchPlayUrl(title, artist = "") {
+  const query = [title, artist].filter(Boolean).join(" ").trim();
+  if (!query) return null;
+  const tracks = await kuwoSearchTracks(query, 8);
+  if (!tracks.length) return null;
+  const best = pickBestCrossPlayTrack({ title, artist }, tracks, "strict") || (artist.trim() ? pickBestCrossPlayTrack({ title, artist }, tracks, "titleOnly") : null);
+  if (!best?.songid) return null;
+  return kuwoPlayUrl(best.songid);
+}
+
+// server/src/netease.ts
 init_sign();
 init_util();
 var QUALITY_LADDER = ["standard", "higher", "exhigh", "lossless", "hires", "jyeffect", "sky", "jymaster"];
@@ -7022,6 +7122,11 @@ var NeteaseService = class _NeteaseService {
       }
     }
     if (isServerlessEnv()) {
+      const kuwoFirst = await this.kuwoFallbackPlayUrl(songid);
+      if (kuwoFirst) {
+        this.cache.setTtl("netease_play_v6", songid, kuwoFirst, 600);
+        return kuwoFirst;
+      }
       const direct = await this.anonymousPlayUrl(songid);
       if (direct) {
         this.cache.setTtl("netease_play_v6", songid, direct, 600);
@@ -7040,8 +7145,23 @@ var NeteaseService = class _NeteaseService {
         this.cache.setTtl("netease_play_v6", songid, direct, 600);
         return direct;
       }
+      const kuwo = await this.kuwoFallbackPlayUrl(songid);
+      if (kuwo) {
+        this.cache.setTtl("netease_play_v6", songid, kuwo, 600);
+        return kuwo;
+      }
     }
     return null;
+  }
+  /** bootstrap 不可达（如 Vercel 美东）时，按歌名匹配酷我取流 */
+  async kuwoFallbackPlayUrl(songid) {
+    try {
+      const [track] = await this.songsByIds([songid]);
+      if (!track?.title) return null;
+      return await kuwoMatchPlayUrl(track.title, track.author || "");
+    } catch {
+      return null;
+    }
   }
   async probePlayQualities(songid, cookie) {
     const id = Number(songid);
@@ -7633,7 +7753,21 @@ var QqService = class {
       this.cache.setTtl("qq_play_v7", songmid, url, 600);
       return url;
     }
+    const kuwo = await this.kuwoFallbackPlayUrl(songmid);
+    if (kuwo) {
+      this.cache.setTtl("qq_play_v7", songmid, kuwo, 600);
+      return kuwo;
+    }
     return null;
+  }
+  async kuwoFallbackPlayUrl(songmid) {
+    try {
+      const [track] = await this.songsByIds([songmid]);
+      if (!track?.title) return null;
+      return await kuwoMatchPlayUrl(track.title, track.author || "");
+    } catch {
+      return null;
+    }
   }
   async pyqPlayUrl(songmid) {
     const code = await this.getPyqCode(songmid);

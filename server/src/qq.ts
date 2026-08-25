@@ -13,6 +13,7 @@ import {
 } from './config.ts';
 import { FileCache } from './cache.ts';
 import { followLocation, request } from './http.ts';
+import { kuwoMatchPlayUrl } from './kuwo.ts';
 import { proxyUrl } from './sign.ts';
 import { decodeEntities, isBadMediaUrl, isQqDelisted, isQqTrialMediaUrl, jsonpToJson, nameSearchSourcePage, sliceNameSearchSongids } from './util.ts';
 
@@ -365,7 +366,22 @@ export class QqService {
       return url;
     }
 
+    const kuwo = await this.kuwoFallbackPlayUrl(songmid);
+    if (kuwo) {
+      this.cache.setTtl('qq_play_v7', songmid, kuwo, 600);
+      return kuwo;
+    }
     return null;
+  }
+
+  private async kuwoFallbackPlayUrl(songmid: string): Promise<string | null> {
+    try {
+      const [track] = await this.songsByIds([songmid]);
+      if (!track?.title) return null;
+      return await kuwoMatchPlayUrl(track.title, track.author || '');
+    } catch {
+      return null;
+    }
   }
 
   private async pyqPlayUrl(songmid: string): Promise<string | null> {
