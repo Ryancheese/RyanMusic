@@ -15,7 +15,7 @@ import { FileCache } from './cache.ts';
 import { followLocation, request } from './http.ts';
 import { kuwoMatchPlayUrl } from './kuwo.ts';
 import { proxyUrl } from './sign.ts';
-import { decodeEntities, isBadMediaUrl, isQqDelisted, isQqTrialMediaUrl, jsonpToJson, nameSearchSourcePage, sliceNameSearchSongids } from './util.ts';
+import { decodeEntities, isBadMediaUrl, isKuwoTrialMediaUrl, isQqDelisted, isQqTrialMediaUrl, jsonpToJson, nameSearchSourcePage, sliceNameSearchSongids } from './util.ts';
 
 export class QqService {
   private readonly playInflight = new Map<string, Promise<string | null>>();
@@ -361,13 +361,13 @@ export class QqService {
     // 非会员一刀切 RyanMusic 私链；试听链不再参与竞速。
     const url = await this.bootstrapPlayUrl(songmid)
       || await this.pyqPlayUrl(songmid);
-    if (url && !isBadMediaUrl(url)) {
+    if (url && !isBadMediaUrl(url) && !isKuwoTrialMediaUrl(url)) {
       this.cache.setTtl('qq_play_v7', songmid, url, 600);
       return url;
     }
 
     const kuwo = await this.kuwoFallbackPlayUrl(songmid);
-    if (kuwo) {
+    if (kuwo && !isKuwoTrialMediaUrl(kuwo)) {
       this.cache.setTtl('qq_play_v7', songmid, kuwo, 600);
       return kuwo;
     }

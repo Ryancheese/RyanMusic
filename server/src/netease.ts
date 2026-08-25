@@ -19,6 +19,7 @@ import {
   firstTruthy,
   httpsNeteaseUrl,
   isBadMediaUrl,
+  isKuwoTrialMediaUrl,
   isNeteaseDelisted,
   isNeteaseTrialMediaUrl,
   isNeteaseTrialPlayItem,
@@ -341,16 +342,16 @@ export class NeteaseService {
   }
 
   forgetCachedPlay(songid: string) {
-    this.cache.setTtl('netease_play_v6', songid, '', -1);
+    this.cache.setTtl('netease_play_v7', songid, '', -1);
   }
 
   private async resolvePlayUrlInner(songid: string, cookie = '', level = '', skipCache = false): Promise<string | null> {
     const cacheKey = cookie
-      ? `netease_play_auth_v6_${level || 'auto'}`
-      : 'netease_play_v6';
+      ? `netease_play_auth_v7_${level || 'auto'}`
+      : 'netease_play_v7';
     if (!skipCache) {
       const cached = this.cache.getTtl(cacheKey, songid);
-      if (cached && !isNeteaseTrialMediaUrl(cached)) return cached;
+      if (cached && !isNeteaseTrialMediaUrl(cached) && !isKuwoTrialMediaUrl(cached)) return cached;
     }
 
     if (cookie) {
@@ -361,39 +362,33 @@ export class NeteaseService {
       }
     }
 
-    // 非会员一刀切：只走 RyanMusic 私链，官方/Meting 会给 30 秒试听。
-    // Serverless 上 bootstrap（90svip）常不可达，优先酷我匹配，避免空等超时。
-    if (isServerlessEnv()) {
-      const kuwoFirst = await this.kuwoFallbackPlayUrl(songid);
-      if (kuwoFirst) {
-        this.cache.setTtl('netease_play_v6', songid, kuwoFirst, 600);
-        return kuwoFirst;
-      }
-      const direct = await this.anonymousPlayUrl(songid);
-      if (direct) {
-        this.cache.setTtl('netease_play_v6', songid, direct, 600);
-        return direct;
-      }
-    }
-
+    // 非会员一刀切：只走 RyanMusic 私链（bootstrap 全曲），官方/酷我 antiserver 常为 11s 试听。
     const url = await this.bootstrapPlayUrl(songid);
-    if (url && !isBadMediaUrl(url) && !isNeteaseTrialMediaUrl(url) && !/\/404/i.test(url)) {
+    if (url && !isBadMediaUrl(url) && !isNeteaseTrialMediaUrl(url) && !isKuwoTrialMediaUrl(url) && !/\/404/i.test(url)) {
       const safeUrl = httpsNeteaseUrl(url);
-      this.cache.setTtl('netease_play_v6', songid, safeUrl, 1800);
+      this.cache.setTtl('netease_play_v7', songid, safeUrl, 1800);
       return safeUrl;
     }
 
-    if (!isServerlessEnv()) {
+    if (isServerlessEnv()) {
       const direct = await this.anonymousPlayUrl(songid);
       if (direct) {
-        this.cache.setTtl('netease_play_v6', songid, direct, 600);
+        this.cache.setTtl('netease_play_v7', songid, direct, 600);
         return direct;
       }
-      const kuwo = await this.kuwoFallbackPlayUrl(songid);
-      if (kuwo) {
-        this.cache.setTtl('netease_play_v6', songid, kuwo, 600);
-        return kuwo;
+    } else {
+      const direct = await this.anonymousPlayUrl(songid);
+      if (direct) {
+        this.cache.setTtl('netease_play_v7', songid, direct, 600);
+        return direct;
       }
+    }
+
+    // 仅接受酷我全曲；试听短链不进入缓存。
+    const kuwo = await this.kuwoFallbackPlayUrl(songid);
+    if (kuwo) {
+      this.cache.setTtl('netease_play_v7', songid, kuwo, 600);
+      return kuwo;
     }
     return null;
   }

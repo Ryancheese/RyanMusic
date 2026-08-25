@@ -4,6 +4,7 @@ import { join } from 'node:path';
 export const config = {
   runtime: 'nodejs',
   maxDuration: 60,
+  regions: ['hkg1'],
 };
 
 type RyanApp = Awaited<ReturnType<typeof loadAppInternal>>;
@@ -73,7 +74,22 @@ async function pipeResponse(res: VercelResponse, response: Response) {
     if (key.toLowerCase() === 'transfer-encoding') return;
     res.setHeader(key, value);
   });
-  res.end(Buffer.from(await response.arrayBuffer()));
+  if (response.status >= 300 && response.status < 400) {
+    res.end();
+    return;
+  }
+  if (!response.body) {
+    res.end();
+    return;
+  }
+  const { Readable } = await import('node:stream');
+  const nodeStream = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream);
+  await new Promise<void>((resolve, reject) => {
+    nodeStream.on('error', reject);
+    res.on('error', reject);
+    res.on('finish', () => resolve());
+    nodeStream.pipe(res);
+  });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

@@ -257,6 +257,15 @@ export function isNeteaseTrialMediaUrl(url: string): boolean {
   return /\/trial\/|\/preview\/|freeTrial|tryid=|song\/media\/outer\/url/i.test(url);
 }
 
+/** 酷我 antiserver / 官方试听短链（约 11s），非 bootstrap 全曲 */
+export function isKuwoTrialMediaUrl(url: string): boolean {
+  if (!url) return false;
+  // 全曲常见 trackmedia/M800…；试听多在 /nf/resource/ 且体积很小
+  if (/\/nf\/resource\//i.test(url)) return true;
+  if (/bitrate\$1(?:&|$)/i.test(url)) return true;
+  return false;
+}
+
 export function httpsNeteaseUrl(url: string): string {
   if (url.startsWith('http://') && /(126\.net|163\.com)/i.test(url)) {
     return `https://${url.slice(7)}`;

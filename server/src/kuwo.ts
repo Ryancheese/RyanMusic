@@ -1,9 +1,9 @@
 import { pickBestCrossPlayTrack } from './crossPlay.ts';
 import type { Track } from './config.ts';
 import { request } from './http.ts';
-import { isBadMediaUrl } from './util.ts';
+import { isBadMediaUrl, isKuwoTrialMediaUrl } from './util.ts';
 
-/** Vercel 等海外节点无法访问 90svip 时，用酷我按歌名匹配取流（与 bootstrap 解锁同源） */
+/** bootstrap 不可达时的酷我回退；仅接受全曲，拒绝 ~11s 试听 */
 
 function parseKuwoJsonp(body: string): any {
   const text = body.trim();
@@ -12,7 +12,6 @@ function parseKuwoJsonp(body: string): any {
     return JSON.parse(text);
   } catch {
     try {
-      // search.kuwo.cn 返回单引号伪 JSON
       return new Function(`"use strict"; return (${text});`)();
     } catch {
       return null;
@@ -68,29 +67,73 @@ export async function kuwoSearchTracks(query: string, limit = 8): Promise<Track[
   return out;
 }
 
+function pickFullPlayUrl(payload: any): string | null {
+  const data = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
+  const duration = Number(data?.duration || 0);
+  const bitrate = Number(data?.bitrate || 0);
+  // 试听常见 duration=11、bitrate=1
+  if (duration > 0 && duration <= 60) return null;
+  if (bitrate > 0 && bitrate <= 1) return null;
+  const url = String(data?.url || payload?.url || '');
+  if (!url || isBadMediaUrl(url) || isKuwoTrialMediaUrl(url)) return null;
+  return url.replace(/^http:\/\//i, 'https://');
+}
+
 export async function kuwoPlayUrl(rid: string): Promise<string | null> {
   const id = kuwoRid(rid);
   if (!id) return null;
-  const res = await request(
-    'GET',
-    `https://antiserver.kuwo.cn/anti.s?${new URLSearchParams({
-      type: 'convert_url3',
-      rid: `MUSIC_${id}`,
-      format: 'mp3',
-      response: 'url',
-      httpsStatus: '1',
-    })}`,
-    { timeoutMs: 8_000 },
-  );
-  let url = '';
-  if (res.json?.url) url = String(res.json.url);
-  else if (/^https?:\/\//i.test(res.body.trim())) url = res.body.trim();
-  else {
-    const parsed = parseKuwoJsonp(res.body);
-    url = String(parsed?.url || '');
+
+  const sources = [
+    'kwplayer_ar_5.1.0.0_B_jiakong_vh.apk',
+    'kwplayer_ar_1.1.9_oppo_118980_320.apk',
+    'jiakong',
+  ];
+  for (const source of sources) {
+    for (const br of ['320kmp3', '128kmp3']) {
+      try {
+        const res = await request(
+          'GET',
+          `https://mobi.kuwo.cn/mobi.s?${new URLSearchParams({
+            f: 'web',
+            source,
+            type: 'convert_url_with_sign',
+            rid: id,
+            br,
+          })}`,
+          { timeoutMs: 8_000, headers: { 'User-Agent': 'okhttp/3.10.0' } },
+        );
+        const hit = pickFullPlayUrl(res.json) || pickFullPlayUrl(parseKuwoJsonp(res.body));
+        if (hit) return hit;
+      } catch {
+        // try next
+      }
+    }
   }
-  if (!url || isBadMediaUrl(url)) return null;
-  return url;
+
+  // antiserver 对 VIP 几乎总是试听，仅在确认非试听路径时采用
+  try {
+    const res = await request(
+      'GET',
+      `https://antiserver.kuwo.cn/anti.s?${new URLSearchParams({
+        type: 'convert_url3',
+        rid: `MUSIC_${id}`,
+        format: 'mp3',
+        response: 'url',
+        httpsStatus: '1',
+      })}`,
+      { timeoutMs: 8_000 },
+    );
+    let url = '';
+    if (res.json?.url) url = String(res.json.url);
+    else if (/^https?:\/\//i.test(res.body.trim())) url = res.body.trim();
+    else url = String(parseKuwoJsonp(res.body)?.url || '');
+    if (url && !isBadMediaUrl(url) && !isKuwoTrialMediaUrl(url)) {
+      return url.replace(/^http:\/\//i, 'https://');
+    }
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 export async function kuwoMatchPlayUrl(title: string, artist = ''): Promise<string | null> {

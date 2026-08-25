@@ -635,6 +635,12 @@ function isNeteaseTrialMediaUrl(url) {
   if (!url) return false;
   return /\/trial\/|\/preview\/|freeTrial|tryid=|song\/media\/outer\/url/i.test(url);
 }
+function isKuwoTrialMediaUrl(url) {
+  if (!url) return false;
+  if (/\/nf\/resource\//i.test(url)) return true;
+  if (/bitrate\$1(?:&|$)/i.test(url)) return true;
+  return false;
+}
 function httpsNeteaseUrl(url) {
   if (url.startsWith("http://") && /(126\.net|163\.com)/i.test(url)) {
     return `https://${url.slice(7)}`;
@@ -6805,29 +6811,66 @@ async function kuwoSearchTracks(query, limit = 8) {
   }
   return out;
 }
+function pickFullPlayUrl(payload) {
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
+  const duration = Number(data?.duration || 0);
+  const bitrate = Number(data?.bitrate || 0);
+  if (duration > 0 && duration <= 60) return null;
+  if (bitrate > 0 && bitrate <= 1) return null;
+  const url = String(data?.url || payload?.url || "");
+  if (!url || isBadMediaUrl(url) || isKuwoTrialMediaUrl(url)) return null;
+  return url.replace(/^http:\/\//i, "https://");
+}
 async function kuwoPlayUrl(rid) {
   const id = kuwoRid(rid);
   if (!id) return null;
-  const res = await request(
-    "GET",
-    `https://antiserver.kuwo.cn/anti.s?${new URLSearchParams({
-      type: "convert_url3",
-      rid: `MUSIC_${id}`,
-      format: "mp3",
-      response: "url",
-      httpsStatus: "1"
-    })}`,
-    { timeoutMs: 8e3 }
-  );
-  let url = "";
-  if (res.json?.url) url = String(res.json.url);
-  else if (/^https?:\/\//i.test(res.body.trim())) url = res.body.trim();
-  else {
-    const parsed = parseKuwoJsonp(res.body);
-    url = String(parsed?.url || "");
+  const sources = [
+    "kwplayer_ar_5.1.0.0_B_jiakong_vh.apk",
+    "kwplayer_ar_1.1.9_oppo_118980_320.apk",
+    "jiakong"
+  ];
+  for (const source of sources) {
+    for (const br of ["320kmp3", "128kmp3"]) {
+      try {
+        const res = await request(
+          "GET",
+          `https://mobi.kuwo.cn/mobi.s?${new URLSearchParams({
+            f: "web",
+            source,
+            type: "convert_url_with_sign",
+            rid: id,
+            br
+          })}`,
+          { timeoutMs: 8e3, headers: { "User-Agent": "okhttp/3.10.0" } }
+        );
+        const hit = pickFullPlayUrl(res.json) || pickFullPlayUrl(parseKuwoJsonp(res.body));
+        if (hit) return hit;
+      } catch {
+      }
+    }
   }
-  if (!url || isBadMediaUrl(url)) return null;
-  return url;
+  try {
+    const res = await request(
+      "GET",
+      `https://antiserver.kuwo.cn/anti.s?${new URLSearchParams({
+        type: "convert_url3",
+        rid: `MUSIC_${id}`,
+        format: "mp3",
+        response: "url",
+        httpsStatus: "1"
+      })}`,
+      { timeoutMs: 8e3 }
+    );
+    let url = "";
+    if (res.json?.url) url = String(res.json.url);
+    else if (/^https?:\/\//i.test(res.body.trim())) url = res.body.trim();
+    else url = String(parseKuwoJsonp(res.body)?.url || "");
+    if (url && !isBadMediaUrl(url) && !isKuwoTrialMediaUrl(url)) {
+      return url.replace(/^http:\/\//i, "https://");
+    }
+  } catch {
+  }
+  return null;
 }
 async function kuwoMatchPlayUrl(title, artist = "") {
   const query = [title, artist].filter(Boolean).join(" ").trim();
@@ -7106,13 +7149,13 @@ var NeteaseService = class _NeteaseService {
     return pending;
   }
   forgetCachedPlay(songid) {
-    this.cache.setTtl("netease_play_v6", songid, "", -1);
+    this.cache.setTtl("netease_play_v7", songid, "", -1);
   }
   async resolvePlayUrlInner(songid, cookie = "", level = "", skipCache = false) {
-    const cacheKey = cookie ? `netease_play_auth_v6_${level || "auto"}` : "netease_play_v6";
+    const cacheKey = cookie ? `netease_play_auth_v7_${level || "auto"}` : "netease_play_v7";
     if (!skipCache) {
       const cached = this.cache.getTtl(cacheKey, songid);
-      if (cached && !isNeteaseTrialMediaUrl(cached)) return cached;
+      if (cached && !isNeteaseTrialMediaUrl(cached) && !isKuwoTrialMediaUrl(cached)) return cached;
     }
     if (cookie) {
       const authUrl = await this.cookiePlayUrl(songid, cookie, level);
@@ -7121,35 +7164,29 @@ var NeteaseService = class _NeteaseService {
         return authUrl;
       }
     }
-    if (isServerlessEnv()) {
-      const kuwoFirst = await this.kuwoFallbackPlayUrl(songid);
-      if (kuwoFirst) {
-        this.cache.setTtl("netease_play_v6", songid, kuwoFirst, 600);
-        return kuwoFirst;
-      }
-      const direct = await this.anonymousPlayUrl(songid);
-      if (direct) {
-        this.cache.setTtl("netease_play_v6", songid, direct, 600);
-        return direct;
-      }
-    }
     const url = await this.bootstrapPlayUrl(songid);
-    if (url && !isBadMediaUrl(url) && !isNeteaseTrialMediaUrl(url) && !/\/404/i.test(url)) {
+    if (url && !isBadMediaUrl(url) && !isNeteaseTrialMediaUrl(url) && !isKuwoTrialMediaUrl(url) && !/\/404/i.test(url)) {
       const safeUrl = httpsNeteaseUrl(url);
-      this.cache.setTtl("netease_play_v6", songid, safeUrl, 1800);
+      this.cache.setTtl("netease_play_v7", songid, safeUrl, 1800);
       return safeUrl;
     }
-    if (!isServerlessEnv()) {
+    if (isServerlessEnv()) {
       const direct = await this.anonymousPlayUrl(songid);
       if (direct) {
-        this.cache.setTtl("netease_play_v6", songid, direct, 600);
+        this.cache.setTtl("netease_play_v7", songid, direct, 600);
         return direct;
       }
-      const kuwo = await this.kuwoFallbackPlayUrl(songid);
-      if (kuwo) {
-        this.cache.setTtl("netease_play_v6", songid, kuwo, 600);
-        return kuwo;
+    } else {
+      const direct = await this.anonymousPlayUrl(songid);
+      if (direct) {
+        this.cache.setTtl("netease_play_v7", songid, direct, 600);
+        return direct;
       }
+    }
+    const kuwo = await this.kuwoFallbackPlayUrl(songid);
+    if (kuwo) {
+      this.cache.setTtl("netease_play_v7", songid, kuwo, 600);
+      return kuwo;
     }
     return null;
   }
@@ -7749,12 +7786,12 @@ var QqService = class {
       }
     }
     const url = await this.bootstrapPlayUrl(songmid) || await this.pyqPlayUrl(songmid);
-    if (url && !isBadMediaUrl(url)) {
+    if (url && !isBadMediaUrl(url) && !isKuwoTrialMediaUrl(url)) {
       this.cache.setTtl("qq_play_v7", songmid, url, 600);
       return url;
     }
     const kuwo = await this.kuwoFallbackPlayUrl(songmid);
-    if (kuwo) {
+    if (kuwo && !isKuwoTrialMediaUrl(kuwo)) {
       this.cache.setTtl("qq_play_v7", songmid, kuwo, 600);
       return kuwo;
     }
@@ -8101,8 +8138,18 @@ function createApp(options) {
       let name = c.req.query("name") || "RyanMusic";
       name = name.replace(/[\\/:*?"<>|\x00-\x1F]/g, "_");
       if (!/\.mp3$/i.test(name)) name += ".mp3";
+      const wantDownload = Boolean(c.req.query("dl"));
+      if (isServerlessEnv() && !wantDownload && /^https?:\/\//i.test(play)) {
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: play,
+            "Cache-Control": "no-store"
+          }
+        });
+      }
       const proxyOpts = {
-        download: Boolean(c.req.query("dl")),
+        download: wantDownload,
         filename: name,
         contentType: "audio/mpeg",
         cookie: type === "netease" ? neteaseCookie : type === "qq" ? qqCookie : void 0
@@ -8116,6 +8163,12 @@ function createApp(options) {
           retry = await resolveCross();
         }
         if (retry && retry !== play) {
+          if (isServerlessEnv() && !wantDownload && /^https?:\/\//i.test(retry)) {
+            return new Response(null, {
+              status: 302,
+              headers: { Location: retry, "Cache-Control": "no-store" }
+            });
+          }
           streamed = await proxyMedia(retry, c.req.raw, { ...proxyOpts, cookie: void 0 });
         }
       }
