@@ -11,7 +11,7 @@ import {
   type Track,
 } from './config.ts';
 import { FileCache } from './cache.ts';
-import { encodeLinuxData, linuxForward, neteaseApi, neteaseHttp, eapiRequest, weapiRequest } from './crypto/netease.ts';
+import { encodeLinuxData, eapiRequest, linuxForward, neteaseApi, neteaseHttp, weapiEncode, weapiRequest } from './crypto/netease.ts';
 import { followLocation, request } from './http.ts';
 import { proxyUrl } from './sign.ts';
 import {
@@ -361,6 +361,14 @@ export class NeteaseService {
     }
 
     // 非会员一刀切：只走 RyanMusic 私链，官方/Meting 会给 30 秒试听。
+    if (isServerlessEnv()) {
+      const direct = await this.anonymousPlayUrl(songid);
+      if (direct) {
+        this.cache.setTtl('netease_play_v6', songid, direct, 600);
+        return direct;
+      }
+    }
+
     const url = await this.bootstrapPlayUrl(songid);
     if (url && !isBadMediaUrl(url) && !isNeteaseTrialMediaUrl(url) && !/\/404/i.test(url)) {
       const safeUrl = httpsNeteaseUrl(url);
@@ -368,7 +376,7 @@ export class NeteaseService {
       return safeUrl;
     }
 
-    if (isServerlessEnv()) {
+    if (!isServerlessEnv()) {
       const direct = await this.anonymousPlayUrl(songid);
       if (direct) {
         this.cache.setTtl('netease_play_v6', songid, direct, 600);
@@ -511,27 +519,83 @@ export class NeteaseService {
   }
 
   /** Vercel 等 serverless 环境 bootstrap 不稳定时的直连回退 */
+  private playApiTimeout(): number {
+    return isServerlessEnv() ? 12_000 : 4_000;
+  }
+
+  private pickAnonymousPlayItem(item: any): string | null {
+    const url = item?.url as string | undefined;
+    if (!url || isNeteaseTrialPlayItem(item) || isBadMediaUrl(url) || isNeteaseTrialMediaUrl(url) || /\/404/i.test(url)) {
+      return null;
+    }
+    return httpsNeteaseUrl(url);
+  }
+
   private async anonymousPlayUrl(songid: string): Promise<string | null> {
     const id = Number(songid);
     if (!id) return null;
-    try {
-      const encoded = encodeLinuxData({
-        method: 'POST',
-        url: 'http://music.163.com/api/song/enhance/player/url/v1',
-        params: { ids: `[${id}]`, level: 'exhigh', encodeType: 'aac', csrf_token: '' },
-      });
-      const res = await neteaseHttp('POST', 'http://music.163.com/api/linux/forward', encoded, '', {
-        Referer: 'http://music.163.com/',
-      });
-      const item = res.json?.data?.[0];
-      const url = item?.url as string | undefined;
-      if (!url || isNeteaseTrialPlayItem(item) || isBadMediaUrl(url) || isNeteaseTrialMediaUrl(url) || /\/404/i.test(url)) {
-        return null;
+    const timeoutMs = this.playApiTimeout();
+    const levels = ['exhigh', 'higher', 'standard'] as const;
+    const paramsFor = (level: string) => ({
+      ids: `[${id}]`,
+      level,
+      encodeType: 'aac',
+      csrf_token: '',
+    });
+
+    for (const level of levels) {
+      try {
+        const res = await linuxForward('/api/song/enhance/player/url/v1', paramsFor(level), '', 'POST');
+        const hit = this.pickAnonymousPlayItem(res.json?.data?.[0]);
+        if (hit) return hit;
+      } catch {
+        // try next level
       }
-      return httpsNeteaseUrl(url);
-    } catch {
-      return null;
     }
+
+    for (const level of levels) {
+      try {
+        const encoded = weapiEncode(paramsFor(level));
+        const res = await neteaseHttp(
+          'POST',
+          'https://music.163.com/weapi/song/enhance/player/url/v1?csrf_token=',
+          encoded,
+          '',
+          {},
+          timeoutMs,
+        );
+        const hit = this.pickAnonymousPlayItem(res.json?.data?.[0]);
+        if (hit) return hit;
+      } catch {
+        // try next level
+      }
+    }
+
+    for (const level of levels) {
+      try {
+        const res = await eapiRequest('/api/song/enhance/player/url/v1', {
+          ids: [id],
+          level,
+          encodeType: 'aac',
+        }, '');
+        const hit = this.pickAnonymousPlayItem(res.json?.data?.[0]);
+        if (hit) return hit;
+      } catch {
+        // try next level
+      }
+    }
+
+    for (const level of levels) {
+      try {
+        const res = await neteaseApi('/api/song/enhance/player/url/v1', paramsFor(level), '', 'POST');
+        const hit = this.pickAnonymousPlayItem(res.json?.data?.[0]);
+        if (hit) return hit;
+      } catch {
+        // try next level
+      }
+    }
+
+    return null;
   }
 
   async resolvePicUrl(songid: string): Promise<string | null> {

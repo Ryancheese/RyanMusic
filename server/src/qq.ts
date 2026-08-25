@@ -349,6 +349,14 @@ export class QqService {
       }
     }
 
+    if (isServerlessEnv()) {
+      const official = await this.officialPlayUrl(songmid, '');
+      if (official && !isQqTrialMediaUrl(official)) {
+        this.cache.setTtl('qq_play_v7', songmid, official, 600);
+        return official;
+      }
+    }
+
     // 非会员一刀切 RyanMusic 私链；试听链不再参与竞速。
     const url = await this.bootstrapPlayUrl(songmid)
       || await this.pyqPlayUrl(songmid);
@@ -357,13 +365,6 @@ export class QqService {
       return url;
     }
 
-    if (isServerlessEnv()) {
-      const official = await this.officialPlayUrl(songmid, '');
-      if (official && !isQqTrialMediaUrl(official)) {
-        this.cache.setTtl('qq_play_v7', songmid, official, 600);
-        return official;
-      }
-    }
     return null;
   }
 

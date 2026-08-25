@@ -82,39 +82,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  if (req.query?.probe === 'play') {
-    const id = String(req.query.id || '186016');
-    const results: Record<string, unknown> = {
-      vercel: process.env.VERCEL || null,
-      region: process.env.VERCEL_REGION || null,
-    };
-    try {
-      const bootstrap = await fetch('https://music.90svip.cn/', {
-        method: 'POST',
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Referer: 'https://music.90svip.cn/',
-        },
-        body: `input=${encodeURIComponent(id)}&filter=id&type=netease&page=1`,
-        signal: AbortSignal.timeout(12_000),
-      });
-      results.bootstrapStatus = bootstrap.status;
-      const body = await bootstrap.json().catch(() => null);
-      results.bootstrapHasUrl = Boolean((body as any)?.data?.[0]?.url);
-    } catch (error) {
-      results.bootstrapError = error instanceof Error ? error.message : String(error);
-    }
-    try {
-      const home = await fetch('https://music.163.com/', { signal: AbortSignal.timeout(8_000) });
-      results.neteaseStatus = home.status;
-    } catch (error) {
-      results.neteaseError = error instanceof Error ? error.message : String(error);
-    }
-    res.status(200).json(results);
-    return;
-  }
-
   try {
     const app = await loadApp();
     await pipeResponse(res, await app.fetch(buildRequest(req)));

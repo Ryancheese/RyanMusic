@@ -7021,13 +7021,20 @@ var NeteaseService = class _NeteaseService {
         return authUrl;
       }
     }
+    if (isServerlessEnv()) {
+      const direct = await this.anonymousPlayUrl(songid);
+      if (direct) {
+        this.cache.setTtl("netease_play_v6", songid, direct, 600);
+        return direct;
+      }
+    }
     const url = await this.bootstrapPlayUrl(songid);
     if (url && !isBadMediaUrl(url) && !isNeteaseTrialMediaUrl(url) && !/\/404/i.test(url)) {
       const safeUrl = httpsNeteaseUrl(url);
       this.cache.setTtl("netease_play_v6", songid, safeUrl, 1800);
       return safeUrl;
     }
-    if (isServerlessEnv()) {
+    if (!isServerlessEnv()) {
       const direct = await this.anonymousPlayUrl(songid);
       if (direct) {
         this.cache.setTtl("netease_play_v6", songid, direct, 600);
@@ -7145,27 +7152,72 @@ var NeteaseService = class _NeteaseService {
     return hop && !isNeteaseTrialMediaUrl(hop) ? hop : loc;
   }
   /** Vercel 等 serverless 环境 bootstrap 不稳定时的直连回退 */
+  playApiTimeout() {
+    return isServerlessEnv() ? 12e3 : 4e3;
+  }
+  pickAnonymousPlayItem(item) {
+    const url = item?.url;
+    if (!url || isNeteaseTrialPlayItem(item) || isBadMediaUrl(url) || isNeteaseTrialMediaUrl(url) || /\/404/i.test(url)) {
+      return null;
+    }
+    return httpsNeteaseUrl(url);
+  }
   async anonymousPlayUrl(songid) {
     const id = Number(songid);
     if (!id) return null;
-    try {
-      const encoded = encodeLinuxData({
-        method: "POST",
-        url: "http://music.163.com/api/song/enhance/player/url/v1",
-        params: { ids: `[${id}]`, level: "exhigh", encodeType: "aac", csrf_token: "" }
-      });
-      const res = await neteaseHttp("POST", "http://music.163.com/api/linux/forward", encoded, "", {
-        Referer: "http://music.163.com/"
-      });
-      const item = res.json?.data?.[0];
-      const url = item?.url;
-      if (!url || isNeteaseTrialPlayItem(item) || isBadMediaUrl(url) || isNeteaseTrialMediaUrl(url) || /\/404/i.test(url)) {
-        return null;
+    const timeoutMs = this.playApiTimeout();
+    const levels = ["exhigh", "higher", "standard"];
+    const paramsFor = (level) => ({
+      ids: `[${id}]`,
+      level,
+      encodeType: "aac",
+      csrf_token: ""
+    });
+    for (const level of levels) {
+      try {
+        const res = await linuxForward("/api/song/enhance/player/url/v1", paramsFor(level), "", "POST");
+        const hit = this.pickAnonymousPlayItem(res.json?.data?.[0]);
+        if (hit) return hit;
+      } catch {
       }
-      return httpsNeteaseUrl(url);
-    } catch {
-      return null;
     }
+    for (const level of levels) {
+      try {
+        const encoded = weapiEncode(paramsFor(level));
+        const res = await neteaseHttp(
+          "POST",
+          "https://music.163.com/weapi/song/enhance/player/url/v1?csrf_token=",
+          encoded,
+          "",
+          {},
+          timeoutMs
+        );
+        const hit = this.pickAnonymousPlayItem(res.json?.data?.[0]);
+        if (hit) return hit;
+      } catch {
+      }
+    }
+    for (const level of levels) {
+      try {
+        const res = await eapiRequest("/api/song/enhance/player/url/v1", {
+          ids: [id],
+          level,
+          encodeType: "aac"
+        }, "");
+        const hit = this.pickAnonymousPlayItem(res.json?.data?.[0]);
+        if (hit) return hit;
+      } catch {
+      }
+    }
+    for (const level of levels) {
+      try {
+        const res = await neteaseApi("/api/song/enhance/player/url/v1", paramsFor(level), "", "POST");
+        const hit = this.pickAnonymousPlayItem(res.json?.data?.[0]);
+        if (hit) return hit;
+      } catch {
+      }
+    }
+    return null;
   }
   async resolvePicUrl(songid) {
     const encoded = encodeLinuxData({
@@ -7569,17 +7621,17 @@ var QqService = class {
         return official;
       }
     }
-    const url = await this.bootstrapPlayUrl(songmid) || await this.pyqPlayUrl(songmid);
-    if (url && !isBadMediaUrl(url)) {
-      this.cache.setTtl("qq_play_v7", songmid, url, 600);
-      return url;
-    }
     if (isServerlessEnv()) {
       const official = await this.officialPlayUrl(songmid, "");
       if (official && !isQqTrialMediaUrl(official)) {
         this.cache.setTtl("qq_play_v7", songmid, official, 600);
         return official;
       }
+    }
+    const url = await this.bootstrapPlayUrl(songmid) || await this.pyqPlayUrl(songmid);
+    if (url && !isBadMediaUrl(url)) {
+      this.cache.setTtl("qq_play_v7", songmid, url, 600);
+      return url;
     }
     return null;
   }
