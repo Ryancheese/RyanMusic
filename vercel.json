@@ -3,7 +3,7 @@
     "api/index.ts": {
       "memory": 1024,
       "maxDuration": 60,
-      "includeFiles": "web-root/static/app/manifest.json"
+      "includeFiles": "web-root/**"
     }
   },
   "rewrites": [
