@@ -242,6 +242,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     || coarsePointer
     || (buffering && status === 'loading');
   const mobilePlayerExpanded = isMobile && currentView === 'player' && showExpanded;
+  const showSideChrome = currentView === 'player' && Boolean(onBack || onTogglePanel);
   const playerCapsuleWidth = showSideChrome
     ? (
       isMobile
@@ -259,7 +260,6 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const skipClass = `flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-transform duration-200 hover:[transform:scale(var(--dock-hover-scale))] ${
     isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/12'
   }`;
-  const showSideChrome = currentView === 'player' && Boolean(onBack || onTogglePanel);
   const hideDock = isHidden || !canTogglePlay;
   const showSongTitle = currentView === 'home';
   // 悬停中间：左右外移，给中间放大让位
