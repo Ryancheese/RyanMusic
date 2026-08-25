@@ -82,52 +82,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  if (req.query?.probe === 'play') {
-    const id = String(req.query.id || '186016');
-    const results: Record<string, unknown> = {
-      vercel: process.env.VERCEL || null,
-      region: process.env.VERCEL_REGION || null,
-    };
-    try {
-      const bootstrap = await fetch('https://music.90svip.cn/', {
-        method: 'POST',
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Referer: 'https://music.90svip.cn/',
-        },
-        body: `input=${encodeURIComponent(id)}&filter=id&type=netease&page=1`,
-        signal: AbortSignal.timeout(10_000),
-      });
-      results.bootstrapStatus = bootstrap.status;
-    } catch (error) {
-      results.bootstrapError = error instanceof Error ? error.message : String(error);
-    }
-    try {
-      const search = await fetch(
-        `https://search.kuwo.cn/r.s?all=${encodeURIComponent('晴天')}&ft=music&client=kt&pn=0&rn=1&rformat=json&encoding=utf8`,
-        { signal: AbortSignal.timeout(10_000) },
-      );
-      results.kuwoSearchStatus = search.status;
-      results.kuwoSearchBytes = (await search.text()).length;
-    } catch (error) {
-      results.kuwoSearchError = error instanceof Error ? error.message : String(error);
-    }
-    try {
-      const anti = await fetch(
-        'https://antiserver.kuwo.cn/anti.s?type=convert_url3&rid=MUSIC_228908&format=mp3&response=url&httpsStatus=1',
-        { signal: AbortSignal.timeout(10_000) },
-      );
-      results.kuwoAntiStatus = anti.status;
-      const body = await anti.text();
-      results.kuwoAntiBody = body.slice(0, 180);
-    } catch (error) {
-      results.kuwoAntiError = error instanceof Error ? error.message : String(error);
-    }
-    res.status(200).json(results);
-    return;
-  }
-
   try {
     const app = await loadApp();
     await pipeResponse(res, await app.fetch(buildRequest(req)));
