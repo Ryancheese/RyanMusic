@@ -441,7 +441,9 @@ var init_http = __esm({
       "ftp_proxy",
       "FTP_PROXY"
     ];
-    installDirectNetwork();
+    if (!process.env.VERCEL) {
+      installDirectNetwork();
+    }
   }
 });
 

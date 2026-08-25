@@ -3,12 +3,27 @@
     "api/index.ts": {
       "memory": 1024,
       "maxDuration": 60,
-      "includeFiles": "web-root/**"
+      "includeFiles": "web-root/static/app/manifest.json"
     }
   },
   "rewrites": [
     { "source": "/static/(.*)", "destination": "/web-root/static/$1" },
     { "source": "/favicon.ico", "destination": "/web-root/favicon.ico" },
-    { "source": "/(.*)", "destination": "/api" }
+    { "source": "/api.php", "destination": "/api" },
+    { "source": "/", "has": [{ "type": "query", "key": "cover" }], "destination": "/api" },
+    { "source": "/", "has": [{ "type": "query", "key": "img" }], "destination": "/api" },
+    { "source": "/", "has": [{ "type": "query", "key": "download" }], "destination": "/api" },
+    {
+      "source": "/",
+      "has": [{ "type": "header", "key": "content-type", "value": { "pre": "application/x-www-form-urlencoded" } }],
+      "destination": "/api"
+    },
+    {
+      "source": "/index.php",
+      "has": [{ "type": "header", "key": "content-type", "value": { "pre": "application/x-www-form-urlencoded" } }],
+      "destination": "/api"
+    },
+    { "source": "/", "destination": "/web-root/static/app/index.html" },
+    { "source": "/index.php", "destination": "/web-root/static/app/index.html" }
   ]
 }

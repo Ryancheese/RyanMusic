@@ -285,7 +285,9 @@ export function installDirectNetwork(): void {
   }
 }
 
-installDirectNetwork();
+if (!process.env.VERCEL) {
+  installDirectNetwork();
+}
 
 function thirdPartyTimeout(url: string): number {
   if (/90svip\.cn|myhkw\.cn/i.test(url)) return 6_000;
