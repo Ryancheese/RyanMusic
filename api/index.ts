@@ -1,19 +1,14 @@
+import { Hono } from 'hono';
+import { handle } from 'hono/vercel';
 import { join } from 'node:path';
-import type { Hono } from 'hono';
 
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
-let appPromise: Promise<Hono> | null = null;
+type RyanApp = ReturnType<typeof import('./bundle.mjs')['createApp']>;
 
-function isServerless(): boolean {
-  return Boolean(
-    process.env.VERCEL
-    || process.env.AWS_LAMBDA_FUNCTION_NAME
-    || process.env.NOW_REGION,
-  );
-}
+let appPromise: Promise<RyanApp> | null = null;
 
-async function getApp(): Promise<Hono> {
+function loadApp(): Promise<RyanApp> {
   if (!appPromise) {
     appPromise = import('./bundle.mjs').then(({ createApp }) => createApp({
       webRoot: join(process.cwd(), 'web-root'),
@@ -33,11 +28,14 @@ function normalizeRequest(req: Request): Request {
   return req;
 }
 
-export default async function handler(req: Request): Promise<Response> {
-  const url = new URL(req.url);
-  if (url.searchParams.get('ping') === '1') {
-    return Response.json({ ok: true, serverless: isServerless() });
+const gateway = new Hono();
+
+gateway.all('*', async (c) => {
+  if (c.req.query('ping') === '1') {
+    return c.json({ ok: true });
   }
-  const app = await getApp();
-  return app.fetch(normalizeRequest(req));
-}
+  const app = await loadApp();
+  return app.fetch(normalizeRequest(c.req.raw));
+});
+
+export default handle(gateway);
