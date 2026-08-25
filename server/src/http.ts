@@ -285,7 +285,7 @@ export function installDirectNetwork(): void {
   }
 }
 
-if (!process.env.VERCEL) {
+if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.NOW_REGION) {
   installDirectNetwork();
 }
 

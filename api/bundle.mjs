@@ -441,7 +441,7 @@ var init_http = __esm({
       "ftp_proxy",
       "FTP_PROXY"
     ];
-    if (!process.env.VERCEL) {
+    if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.NOW_REGION) {
       installDirectNetwork();
     }
   }
@@ -7782,7 +7782,7 @@ function createApp(options) {
     () => qqAccount.sessionCookie()
   );
   const privateBase = bootstrapBase();
-  if (privateBase) {
+  if (privateBase && !process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
     void request("GET", `${privateBase}/`, { timeoutMs: 2e3 });
   }
   const app = new Hono2();

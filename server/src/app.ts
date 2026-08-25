@@ -119,7 +119,7 @@ export function createApp(options: AppOptions) {
     () => qqAccount.sessionCookie(),
   );
   const privateBase = bootstrapBase();
-  if (privateBase) {
+  if (privateBase && !process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
     void request('GET', `${privateBase}/`, { timeoutMs: 2_000 });
   }
   const app = new Hono();

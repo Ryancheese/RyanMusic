@@ -5,11 +5,20 @@ function origin(): string {
   return `${window.location.origin}${window.location.pathname.replace(/index\.php$/, '')}`;
 }
 
+function apiEndpoint(): string {
+  const base = origin().replace(/\/$/, '') || window.location.origin;
+  const host = window.location.hostname.toLowerCase();
+  if (host.endsWith('.vercel.app') || host === 'ryanmusic.vercel.app') {
+    return `${base}/api`;
+  }
+  return base;
+}
+
 const API_TIMEOUT_MS = 15_000;
 const LYRICS_TIMEOUT_MS = 45_000;
 
 async function postForm(body: URLSearchParams, timeoutMs = API_TIMEOUT_MS): Promise<Response> {
-  return fetch(origin(), {
+  return fetch(apiEndpoint(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
