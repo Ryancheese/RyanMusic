@@ -8139,15 +8139,6 @@ function createApp(options) {
       name = name.replace(/[\\/:*?"<>|\x00-\x1F]/g, "_");
       if (!/\.mp3$/i.test(name)) name += ".mp3";
       const wantDownload = Boolean(c.req.query("dl"));
-      if (isServerlessEnv() && !wantDownload && /^https?:\/\//i.test(play)) {
-        return new Response(null, {
-          status: 302,
-          headers: {
-            Location: play,
-            "Cache-Control": "no-store"
-          }
-        });
-      }
       const proxyOpts = {
         download: wantDownload,
         filename: name,
@@ -8163,12 +8154,6 @@ function createApp(options) {
           retry = await resolveCross();
         }
         if (retry && retry !== play) {
-          if (isServerlessEnv() && !wantDownload && /^https?:\/\//i.test(retry)) {
-            return new Response(null, {
-              status: 302,
-              headers: { Location: retry, "Cache-Control": "no-store" }
-            });
-          }
           streamed = await proxyMedia(retry, c.req.raw, { ...proxyOpts, cookie: void 0 });
         }
       }

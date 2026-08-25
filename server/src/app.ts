@@ -223,18 +223,9 @@ export function createApp(options: AppOptions) {
       name = name.replace(/[\\/:*?"<>|\x00-\x1F]/g, '_');
       if (!/\.mp3$/i.test(name)) name += '.mp3';
 
-      // Serverless：302 直链到 CDN，避免经 Vercel 整文件中转（也避免只能播试听短链）。
+      // 注意：不要 302 到跨域 CDN。前端 createMediaElementSource 需要同源音频，
+      // 否则无 CORS 时浏览器会静音。
       const wantDownload = Boolean(c.req.query('dl'));
-      if (isServerlessEnv() && !wantDownload && /^https?:\/\//i.test(play)) {
-        return new Response(null, {
-          status: 302,
-          headers: {
-            Location: play,
-            'Cache-Control': 'no-store',
-          },
-        });
-      }
-
       const proxyOpts = {
         download: wantDownload,
         filename: name,
@@ -250,12 +241,6 @@ export function createApp(options: AppOptions) {
           retry = await resolveCross();
         }
         if (retry && retry !== play) {
-          if (isServerlessEnv() && !wantDownload && /^https?:\/\//i.test(retry)) {
-            return new Response(null, {
-              status: 302,
-              headers: { Location: retry, 'Cache-Control': 'no-store' },
-            });
-          }
           streamed = await proxyMedia(retry, c.req.raw, { ...proxyOpts, cookie: undefined });
         }
       }
