@@ -1,4 +1,15 @@
-import { bootstrapBase, UA, type MatchSearchTrack, type Track } from './config.ts';
+import {
+  bootstrapBase,
+  UA,
+  type MatchSearchTrack,
+  type SearchAlbumHit,
+  type SearchArtistHit,
+  type SearchBundle,
+  type SearchCategory,
+  type SearchPlaylistHit,
+  type SearchResultData,
+  type Track,
+} from './config.ts';
 import { FileCache } from './cache.ts';
 import { followLocation, request } from './http.ts';
 import { proxyUrl } from './sign.ts';
@@ -88,6 +99,140 @@ export class QqService {
       .map((id) => this.trackFromSong(byId.get(String(id))))
       .filter((item): item is Track => Boolean(item));
     return { tracks, hasMore: sliced.has_more };
+  }
+
+  private readonly qqSearchHeaders = {
+    Referer: 'http://m.y.qq.com',
+    'User-Agent':
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1',
+  };
+
+  private async qqSearchRaw(query: string, t: number, page: number, limit = 20) {
+    const qs = new URLSearchParams({
+      w: query,
+      p: String(page),
+      n: String(limit),
+      t: String(t),
+      format: 'json',
+      new_json: '1',
+      ct: '24',
+      qqmusic_ver: '1298',
+      aggr: '1',
+      cr: '1',
+      lossless: '0',
+      flag_qc: '0',
+      remoteplace: 'txt.yqq.song',
+    });
+    const res = await request('GET', `http://c.y.qq.com/soso/fcgi-bin/client_search_cp?${qs}`, {
+      headers: this.qqSearchHeaders,
+    });
+    return res.json?.data;
+  }
+
+  private mapPlaylists(list: unknown): SearchPlaylistHit[] {
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((item: any) => {
+        const id = String(item?.dissid || item?.id || '').trim();
+        const name = String(item?.dissname || item?.title || item?.name || '').trim();
+        if (!id || !name) return null;
+        const cover = String(item?.imgurl || item?.cover || '').trim() || undefined;
+        const trackCount = Number(item?.song_count || item?.songnum || item?.song_cnt || 0) || undefined;
+        const creator = String(item?.creator?.name || item?.nickname || '').trim() || undefined;
+        return { id, name, cover, trackCount, creator, type: 'qq' as const };
+      })
+      .filter((item): item is SearchPlaylistHit => Boolean(item));
+  }
+
+  private mapAlbums(list: unknown): SearchAlbumHit[] {
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((item: any) => {
+        const id = String(item?.albumMID || item?.albummid || item?.albumid || item?.id || '').trim();
+        const name = String(item?.albumName || item?.albumname || item?.name || '').trim();
+        if (!id || !name) return null;
+        const albummid = String(item?.albumMID || item?.albummid || id).trim();
+        const cover = albummid
+          ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albummid}.jpg`
+          : (String(item?.albumPic || '').trim() || undefined);
+        const artists: string[] = [];
+        if (Array.isArray(item?.singer)) {
+          for (const singer of item.singer) {
+            const singerName = String(singer?.name || singer?.title || '').trim();
+            if (singerName) artists.push(singerName);
+          }
+        }
+        const artist = artists.join(', ') || undefined;
+        return { id, name, cover, artist, type: 'qq' as const };
+      })
+      .filter((item): item is SearchAlbumHit => Boolean(item));
+  }
+
+  private mapArtists(list: unknown): SearchArtistHit[] {
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((item: any) => {
+        const id = String(item?.singerMID || item?.singermid || item?.mid || item?.id || '').trim();
+        const name = String(item?.singerName || item?.singername || item?.name || '').trim();
+        if (!id || !name) return null;
+        const cover = String(item?.singerPic || item?.pic || '').trim() || undefined;
+        return { id, name, cover, type: 'qq' as const };
+      })
+      .filter((item): item is SearchArtistHit => Boolean(item));
+  }
+
+  async searchByCategory(
+    query: string,
+    page: number,
+    category: SearchCategory,
+  ): Promise<{ data: SearchResultData; hasMore: boolean; category: SearchCategory } | null> {
+    if (category === 'song') {
+      const result = await this.searchByName(query, page);
+      if (!result?.tracks.length) return null;
+      return { data: result.tracks, hasMore: result.hasMore, category: 'song' };
+    }
+
+    if (category === 'all') {
+      const previewLimit = 5;
+      const [songResult, playlistRaw, albumRaw, artistRaw] = await Promise.all([
+        this.searchByName(query, page),
+        this.qqSearchRaw(query, 3, 1, previewLimit),
+        this.qqSearchRaw(query, 2, 1, previewLimit),
+        this.qqSearchRaw(query, 8, 1, previewLimit),
+      ]);
+      const bundle: SearchBundle = {
+        songs: songResult?.tracks || [],
+        playlists: this.mapPlaylists(playlistRaw?.songlist?.list || playlistRaw?.songlist),
+        albums: this.mapAlbums(albumRaw?.album?.list),
+        artists: this.mapArtists(artistRaw?.singer?.list),
+      };
+      if (!bundle.songs.length && !bundle.playlists.length && !bundle.albums.length && !bundle.artists.length) {
+        return null;
+      }
+      return {
+        data: bundle,
+        hasMore: Boolean(songResult?.hasMore),
+        category: 'all',
+      };
+    }
+
+    const limit = 20;
+    if (category === 'playlist') {
+      const raw = await this.qqSearchRaw(query, 3, page, limit);
+      const playlists = this.mapPlaylists(raw?.songlist?.list || raw?.songlist);
+      if (!playlists.length) return null;
+      return { data: playlists, hasMore: playlists.length >= limit, category };
+    }
+    if (category === 'album') {
+      const raw = await this.qqSearchRaw(query, 2, page, limit);
+      const albums = this.mapAlbums(raw?.album?.list);
+      if (!albums.length) return null;
+      return { data: albums, hasMore: albums.length >= limit, category };
+    }
+    const raw = await this.qqSearchRaw(query, 8, page, limit);
+    const artists = this.mapArtists(raw?.singer?.list);
+    if (!artists.length) return null;
+    return { data: artists, hasMore: artists.length >= limit, category };
   }
 
   async searchByNameForMatch(query: string, page: number): Promise<MatchSearchTrack[]> {

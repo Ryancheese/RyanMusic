@@ -1,4 +1,4 @@
-import type { MusicSource, SearchResponse, Track } from './types';
+import type { MusicSource, SearchCategory, SearchResponse, Track } from './types';
 import { getSizedCoverUrl } from './utils/coverUrl';
 
 function origin(): string {
@@ -43,19 +43,30 @@ export async function searchMusic(options: {
   filter: 'name' | 'id' | 'url';
   type: MusicSource | '_';
   page?: number;
+  category?: SearchCategory;
 }): Promise<SearchResponse> {
   const body = new URLSearchParams({
     input: options.input,
     filter: options.filter,
     type: options.type,
     page: String(options.page || 1),
+    category: options.category || 'all',
   });
 
   const response = await postForm(body);
 
   const json = (await response.json()) as SearchResponse;
-  if (json.code === 200 && Array.isArray(json.data)) {
-    json.data = json.data.map(normalizeTrack);
+  if (json.code === 200) {
+    if (Array.isArray(json.data)) {
+      json.data = json.data.map((item) => (
+        'songid' in item ? normalizeTrack(item as Track) : item
+      ));
+    } else if (json.data && typeof json.data === 'object' && 'songs' in json.data) {
+      json.data = {
+        ...json.data,
+        songs: json.data.songs.map(normalizeTrack),
+      };
+    }
   }
   return json;
 }
@@ -66,8 +77,9 @@ export async function fetchTrackById(type: MusicSource, songid: string): Promise
     filter: 'id',
     type,
     page: 1,
+    category: 'song',
   });
-  if (result.code !== 200 || !result.data?.length) return null;
+  if (result.code !== 200 || !Array.isArray(result.data) || !result.data.length) return null;
   return result.data[0];
 }
 

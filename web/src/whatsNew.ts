@@ -1,14 +1,12 @@
 /** 当前应用版本（与 Info.plist / Windows Version / server package 保持一致） */
-export const APP_VERSION = '2.0.7';
+export const APP_VERSION = '2.0.8';
 
 const SEEN_KEY = 'ryanmusic-whats-new-seen';
 
 /** 本版启动后弹窗展示的更新说明 */
-export const WHATS_NEW_NOTES = `• 新用户界面引导，可在设置或帮助里再看一遍
-• 歌单 / 推荐切换增加过渡动画
-• 舞台评论同一首歌只出现一次，点舞台不再打断
-• 凝彩歌词省略号间距更疏
-• 修复 QQ 音乐推荐接口`;
+export const WHATS_NEW_NOTES = `• 搜索支持综合、单曲、歌单、专辑、歌手五类分类
+• 歌单搜索结果可直接打开
+• 专辑、歌手点击可快速查看相关单曲`;
 
 export function shouldShowWhatsNew(currentVersion = APP_VERSION): boolean {
   try {

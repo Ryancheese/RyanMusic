@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export const VERSION = '2.0.7';
+export const VERSION = '2.0.8';
 
 export const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -43,11 +43,52 @@ export interface Track {
   delisted?: boolean;
 }
 
+export type SearchCategory = 'all' | 'song' | 'playlist' | 'album' | 'artist';
+
+export interface SearchPlaylistHit {
+  id: string;
+  name: string;
+  cover?: string;
+  trackCount?: number;
+  creator?: string;
+  type: MusicSource;
+}
+
+export interface SearchAlbumHit {
+  id: string;
+  name: string;
+  cover?: string;
+  artist?: string;
+  type: MusicSource;
+}
+
+export interface SearchArtistHit {
+  id: string;
+  name: string;
+  cover?: string;
+  type: MusicSource;
+}
+
+export interface SearchBundle {
+  songs: Track[];
+  playlists: SearchPlaylistHit[];
+  albums: SearchAlbumHit[];
+  artists: SearchArtistHit[];
+}
+
+export type SearchResultData =
+  | Track[]
+  | SearchBundle
+  | SearchPlaylistHit[]
+  | SearchAlbumHit[]
+  | SearchArtistHit[];
+
 export interface SearchPayload {
-  data: Track[] | '';
+  data: SearchResultData | '';
   code: number;
   error: string;
   has_more?: boolean;
+  category?: SearchCategory;
 }
 
 /** 歌词匹配面板搜索（不经过 wrap，保留原始封面 URL） */

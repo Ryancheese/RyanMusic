@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
-import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type Track, type VisualizerMode } from './types';
-import { buildDownloadUrl, canNativeSave, coverImageUrl, coverRefreshUrl, fetchKugouStatus, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type LyricSearchCandidate, type PlayQuality } from './api';
+import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type SearchAlbumHit, type SearchArtistHit, type SearchBundle, type SearchCategory, type SearchPlaylistHit, type Track, type VisualizerMode } from './types';
+import { buildDownloadUrl, canNativeSave, coverImageUrl, coverRefreshUrl, fetchKugouStatus, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type CloudPlaylist, type LyricSearchCandidate, type PlayQuality } from './api';
 import { accentWashVars, contrastText, extractAccentFromImage } from './lib/color';
 import { isMobileViewport, isWindowsApp, prefersLightweightVisualizer } from './lib/media';
 import WindowControls from './components/WindowControls';
@@ -107,6 +107,11 @@ const App: React.FC = () => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Track[]>([]);
+  const [searchBundle, setSearchBundle] = useState<SearchBundle | null>(null);
+  const [searchPlaylists, setSearchPlaylists] = useState<SearchPlaylistHit[]>([]);
+  const [searchAlbums, setSearchAlbums] = useState<SearchAlbumHit[]>([]);
+  const [searchArtists, setSearchArtists] = useState<SearchArtistHit[]>([]);
+  const [searchCategory, setSearchCategory] = useState<SearchCategory>('all');
   const [searchPage, setSearchPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -532,16 +537,30 @@ const App: React.FC = () => {
   }, []);
 
   const runSearch = useCallback(
-    async (text: string, page = 1, append = false, sourceOverride?: MusicSource) => {
+    async (
+      text: string,
+      page = 1,
+      append = false,
+      sourceOverride?: MusicSource,
+      categoryOverride?: SearchCategory,
+    ) => {
       const input = text.trim();
       if (!input) return;
       lastQueryRef.current = input;
       const activeSource = sourceOverride || searchSource;
+      const activeCategory = categoryOverride || searchCategory;
+      const clearResults = () => {
+        setResults([]);
+        setSearchBundle(null);
+        setSearchPlaylists([]);
+        setSearchAlbums([]);
+        setSearchArtists([]);
+      };
       if (append) setLoadingMore(true);
       else {
         setSearching(true);
         setSearchError('');
-        if (page === 1) setResults([]);
+        if (page === 1) clearResults();
       }
       try {
         const filter = /^https?:\/\//i.test(input) ? 'url' as const : 'name' as const;
@@ -550,13 +569,36 @@ const App: React.FC = () => {
           filter,
           type: filter === 'url' ? '_' : activeSource,
           page,
+          category: filter === 'name' ? activeCategory : 'song',
         });
-        if (result.code !== 200 || !result.data?.length) {
+        const empty = (() => {
+          if (activeCategory === 'all' && result.data && typeof result.data === 'object' && 'songs' in result.data) {
+            const bundle = result.data;
+            return !bundle.songs.length && !bundle.playlists.length && !bundle.albums.length && !bundle.artists.length;
+          }
+          return !Array.isArray(result.data) || !result.data.length;
+        })();
+        if (result.code !== 200 || empty) {
           if (!append) setSearchError(result.error || '没有找到相关信息');
           setHasMore(false);
           return;
         }
-        setResults((prev) => (append ? [...prev, ...result.data] : result.data));
+        if (activeCategory === 'all' && result.data && typeof result.data === 'object' && 'songs' in result.data) {
+          const bundle = result.data;
+          setSearchBundle((prev) => {
+            if (!append || !prev) return bundle;
+            return { ...prev, songs: [...prev.songs, ...bundle.songs] };
+          });
+          setResults((prev) => (append ? [...prev, ...bundle.songs] : bundle.songs));
+        } else if (activeCategory === 'song' && Array.isArray(result.data)) {
+          setResults((prev) => (append ? [...prev, ...result.data as Track[]] : result.data as Track[]));
+        } else if (activeCategory === 'playlist' && Array.isArray(result.data)) {
+          setSearchPlaylists((prev) => (append ? [...prev, ...result.data as SearchPlaylistHit[]] : result.data as SearchPlaylistHit[]));
+        } else if (activeCategory === 'album' && Array.isArray(result.data)) {
+          setSearchAlbums((prev) => (append ? [...prev, ...result.data as SearchAlbumHit[]] : result.data as SearchAlbumHit[]));
+        } else if (activeCategory === 'artist' && Array.isArray(result.data)) {
+          setSearchArtists((prev) => (append ? [...prev, ...result.data as SearchArtistHit[]] : result.data as SearchArtistHit[]));
+        }
         setHasMore(Boolean(result.has_more) && filter === 'name');
         setSearchPage(page);
         if (!append && page === 1 && filter === 'name') {
@@ -564,7 +606,7 @@ const App: React.FC = () => {
         }
         const url = filter === 'url'
           ? `?url=${encodeURIComponent(input)}`
-          : `?name=${encodeURIComponent(input)}&type=${activeSource}`;
+          : `?name=${encodeURIComponent(input)}&type=${activeSource}&category=${activeCategory}`;
         window.history.replaceState(null, '', url);
       } catch (error) {
         if (!append) setSearchError(error instanceof Error ? error.message : '搜索失败');
@@ -573,7 +615,7 @@ const App: React.FC = () => {
         setLoadingMore(false);
       }
     },
-    [searchSource],
+    [searchCategory, searchSource],
   );
 
   useEffect(() => {
@@ -1128,8 +1170,18 @@ const App: React.FC = () => {
     const name = params.get('name');
     const url = params.get('url');
     const type = params.get('type');
+    const category = params.get('category');
     const doc = parseLegalTab(params.get('doc'));
     if (type === 'qq' || type === 'netease') setSearchSource(type);
+    if (
+      category === 'all'
+      || category === 'song'
+      || category === 'playlist'
+      || category === 'album'
+      || category === 'artist'
+    ) {
+      setSearchCategory(category);
+    }
     if (url || name) {
       const text = url || name || '';
       setQuery(text);
@@ -1372,23 +1424,36 @@ const App: React.FC = () => {
         open={searchOpen}
         query={query}
         source={searchSource}
+        category={searchCategory}
         isDaylight={isDaylight}
         theme={theme}
         isSearching={searching}
         isLoadingMore={loadingMore}
         error={searchError}
+        bundle={searchBundle}
         tracks={results}
+        playlists={searchPlaylists}
+        albums={searchAlbums}
+        artists={searchArtists}
         hasMore={hasMore}
         onQueryChange={setQuery}
         onSourceChange={(next: MusicSource) => {
           setSearchSource(next);
           if (query.trim()) void runSearch(query, 1, false, next);
         }}
+        onCategoryChange={(next) => {
+          setSearchCategory(next);
+          if (query.trim()) void runSearch(query, 1, false, undefined, next);
+        }}
         onSubmit={() => void runSearch(query)}
         onClose={() => {
           returnToSearchRef.current = false;
           setQuery('');
           setResults([]);
+          setSearchBundle(null);
+          setSearchPlaylists([]);
+          setSearchAlbums([]);
+          setSearchArtists([]);
           setSearchError('');
           setSearchOpen(false);
         }}
@@ -1410,6 +1475,28 @@ const App: React.FC = () => {
           setQuery(text);
           setSearchSource(nextSource);
           void runSearch(text, 1, false, nextSource);
+        }}
+        onOpenPlaylist={(playlist) => {
+          const cloudPlaylist: CloudPlaylist = {
+            id: playlist.id,
+            name: playlist.name,
+            cover: playlist.cover,
+            trackCount: playlist.trackCount,
+          };
+          returnToSearchRef.current = true;
+          setSearchOpen(false);
+          setView('home');
+          setHomeTab(playlist.type);
+          if (playlist.type === 'qq') void openQqPlaylist(cloudPlaylist);
+          else void openNeteasePlaylist(cloudPlaylist);
+        }}
+        onOpenAlbum={(album) => {
+          setSearchCategory('song');
+          void runSearch([album.artist, album.name].filter(Boolean).join(' '), 1, false, album.type, 'song');
+        }}
+        onOpenArtist={(artist) => {
+          setSearchCategory('song');
+          void runSearch(artist.name, 1, false, artist.type, 'song');
         }}
       />
 

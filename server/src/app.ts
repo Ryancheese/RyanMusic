@@ -6,7 +6,7 @@ import { KugouAccount } from './accounts/kugou.ts';
 import { NeteaseAccount } from './accounts/netease.ts';
 import { QqAccount } from './accounts/qq.ts';
 import { FileCache } from './cache.ts';
-import { NETEASE_UA, UA, VERSION, apiSecret, bootstrapBase, randomCnIp, type MusicSource } from './config.ts';
+import { NETEASE_UA, UA, VERSION, apiSecret, bootstrapBase, randomCnIp, type MusicSource, type SearchCategory } from './config.ts';
 import { LyricsService } from './lyrics.ts';
 import { NeteaseService } from './netease.ts';
 import { spaHtml } from './pages.ts';
@@ -472,6 +472,14 @@ export function createApp(options: AppOptions) {
       const filter = post.filter;
       const type = post.type as MusicSource | undefined;
       const page = Number(post.page || 1) || 1;
+      const rawCategory = String(post.category || 'all').trim() as SearchCategory;
+      const category: SearchCategory = (
+        rawCategory === 'all'
+        || rawCategory === 'song'
+        || rawCategory === 'playlist'
+        || rawCategory === 'album'
+        || rawCategory === 'artist'
+      ) ? rawCategory : 'all';
       if (!input || !filter || !type) {
         return jsonResponse('', 403, '(°ー°〃) 传入的数据不对啊');
       }
@@ -488,13 +496,22 @@ export function createApp(options: AppOptions) {
       }
 
       try {
-        let result: { tracks: import('./config.ts').Track[]; hasMore?: boolean } | null = null;
         if (filter === 'name') {
-          result =
-            type === 'qq'
-              ? await qq.searchByName(input, page)
-              : await netease.searchByName(input, page);
-        } else if (filter === 'id') {
+          const activeCategory = category === 'all' ? 'all' : category;
+          const result = type === 'qq'
+            ? await qq.searchByCategory(input, page, activeCategory)
+            : await netease.searchByCategory(input, page, activeCategory);
+          if (!result) {
+            return jsonResponse('', 404, 'ㄟ( ▔, ▔ )ㄏ 没有找到相关信息');
+          }
+          return jsonResponse(result.data, 200, '', {
+            has_more: Boolean(result.hasMore),
+            category: result.category,
+          });
+        }
+
+        let result: { tracks: import('./config.ts').Track[]; hasMore?: boolean } | null = null;
+        if (filter === 'id') {
           const tracks = type === 'qq' ? await qq.songsByIds([input]) : await netease.songsByIds([input]);
           result = { tracks, hasMore: false };
         } else {
@@ -509,7 +526,7 @@ export function createApp(options: AppOptions) {
         if (!result || !result.tracks.length) {
           return jsonResponse('', 404, 'ㄟ( ▔, ▔ )ㄏ 没有找到相关信息');
         }
-        return jsonResponse(result.tracks, 200, '', { has_more: Boolean(result.hasMore) });
+        return jsonResponse(result.tracks, 200, '', { has_more: Boolean(result.hasMore), category: 'song' });
       } catch (err) {
         return jsonResponse('', 502, `(°ー°〃) ${err instanceof Error ? err.message : '搜索失败'}`);
       }

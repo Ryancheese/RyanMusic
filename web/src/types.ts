@@ -39,11 +39,52 @@ export interface Track {
   delisted?: boolean;
 }
 
+export type SearchCategory = 'all' | 'song' | 'playlist' | 'album' | 'artist';
+
+export interface SearchPlaylistHit {
+  id: string;
+  name: string;
+  cover?: string;
+  trackCount?: number;
+  creator?: string;
+  type: MusicSource;
+}
+
+export interface SearchAlbumHit {
+  id: string;
+  name: string;
+  cover?: string;
+  artist?: string;
+  type: MusicSource;
+}
+
+export interface SearchArtistHit {
+  id: string;
+  name: string;
+  cover?: string;
+  type: MusicSource;
+}
+
+export interface SearchBundle {
+  songs: Track[];
+  playlists: SearchPlaylistHit[];
+  albums: SearchAlbumHit[];
+  artists: SearchArtistHit[];
+}
+
+export type SearchResultData =
+  | Track[]
+  | SearchBundle
+  | SearchPlaylistHit[]
+  | SearchAlbumHit[]
+  | SearchArtistHit[];
+
 export interface SearchResponse {
-  data: Track[];
+  data: SearchResultData;
   code: number;
   error: string;
   has_more?: boolean;
+  category?: SearchCategory;
 }
 
 export interface LyricLine {

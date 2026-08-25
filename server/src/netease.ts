@@ -1,4 +1,14 @@
-import { bootstrapBase, type MatchSearchTrack, type Track } from './config.ts';
+import {
+  bootstrapBase,
+  type MatchSearchTrack,
+  type SearchAlbumHit,
+  type SearchArtistHit,
+  type SearchBundle,
+  type SearchCategory,
+  type SearchPlaylistHit,
+  type SearchResultData,
+  type Track,
+} from './config.ts';
 import { FileCache } from './cache.ts';
 import { encodeLinuxData, linuxForward, neteaseApi, neteaseHttp, eapiRequest, weapiRequest } from './crypto/netease.ts';
 import { followLocation, request } from './http.ts';
@@ -75,6 +85,135 @@ export class NeteaseService {
       .filter((item): item is NonNullable<typeof item> => Boolean(item))
       .map((item) => this.wrap({ ...item, lrc: '', url: '' }));
     return { tracks, hasMore: sliced.has_more };
+  }
+
+  private async cloudSearchRaw(query: string, type: number, page: number, limit = 20) {
+    const offset = Math.max(0, (page - 1) * limit);
+    const encoded = encodeLinuxData({
+      method: 'POST',
+      url: 'http://music.163.com/api/cloudsearch/pc',
+      params: { s: query, type, offset, limit },
+    });
+    const res = await neteaseHttp('POST', 'http://music.163.com/api/linux/forward', encoded, '', {
+      Referer: 'http://music.163.com/',
+    });
+    return res.json?.result;
+  }
+
+  private mapPlaylists(list: unknown): SearchPlaylistHit[] {
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((item: any) => {
+        const id = String(item?.id || '').trim();
+        const name = String(item?.name || '').trim();
+        if (!id || !name) return null;
+        const coverRaw = String(item?.coverImgUrl || item?.picUrl || '').trim();
+        const cover = coverRaw
+          ? httpsNeteaseUrl(coverRaw.includes('?') ? coverRaw : `${coverRaw}?param=300x300`)
+          : undefined;
+        const trackCount = Number(item?.trackCount || 0) || undefined;
+        const creator = String(item?.creator?.nickname || item?.user?.nickname || '').trim() || undefined;
+        return { id, name, cover, trackCount, creator, type: 'netease' as const };
+      })
+      .filter((item): item is SearchPlaylistHit => Boolean(item));
+  }
+
+  private mapAlbums(list: unknown): SearchAlbumHit[] {
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((item: any) => {
+        const id = String(item?.id || '').trim();
+        const name = String(item?.name || '').trim();
+        if (!id || !name) return null;
+        const coverRaw = String(item?.picUrl || item?.blurPicUrl || '').trim();
+        const cover = coverRaw
+          ? httpsNeteaseUrl(coverRaw.includes('?') ? coverRaw : `${coverRaw}?param=300x300`)
+          : undefined;
+        const artists: string[] = [];
+        if (Array.isArray(item?.artists)) {
+          for (const artist of item.artists) {
+            if (artist?.name) artists.push(String(artist.name));
+          }
+        } else if (item?.artist?.name) {
+          artists.push(String(item.artist.name));
+        }
+        const artist = artists.join(', ') || undefined;
+        return { id, name, cover, artist, type: 'netease' as const };
+      })
+      .filter((item): item is SearchAlbumHit => Boolean(item));
+  }
+
+  private mapArtists(list: unknown): SearchArtistHit[] {
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((item: any) => {
+        const id = String(item?.id || '').trim();
+        const name = String(item?.name || '').trim();
+        if (!id || !name) return null;
+        const coverRaw = String(item?.img1v1Url || item?.picUrl || '').trim();
+        const cover = coverRaw
+          ? httpsNeteaseUrl(coverRaw.includes('?') ? coverRaw : `${coverRaw}?param=300x300`)
+          : undefined;
+        return { id, name, cover, type: 'netease' as const };
+      })
+      .filter((item): item is SearchArtistHit => Boolean(item));
+  }
+
+  async searchByCategory(
+    query: string,
+    page: number,
+    category: SearchCategory,
+  ): Promise<{ data: SearchResultData; hasMore: boolean; category: SearchCategory } | null> {
+    if (category === 'song') {
+      const result = await this.searchByName(query, page);
+      if (!result?.tracks.length) return null;
+      return { data: result.tracks, hasMore: result.hasMore, category: 'song' };
+    }
+
+    if (category === 'all') {
+      const previewLimit = 5;
+      const [songResult, playlistRaw, albumRaw, artistRaw] = await Promise.all([
+        this.searchByName(query, page),
+        this.cloudSearchRaw(query, 1000, 1, previewLimit),
+        this.cloudSearchRaw(query, 10, 1, previewLimit),
+        this.cloudSearchRaw(query, 100, 1, previewLimit),
+      ]);
+      const bundle: SearchBundle = {
+        songs: songResult?.tracks || [],
+        playlists: this.mapPlaylists(playlistRaw?.playlists),
+        albums: this.mapAlbums(albumRaw?.albums),
+        artists: this.mapArtists(artistRaw?.artists),
+      };
+      if (!bundle.songs.length && !bundle.playlists.length && !bundle.albums.length && !bundle.artists.length) {
+        return null;
+      }
+      return {
+        data: bundle,
+        hasMore: Boolean(songResult?.hasMore),
+        category: 'all',
+      };
+    }
+
+    const typeMap: Record<'playlist' | 'album' | 'artist', number> = {
+      playlist: 1000,
+      album: 10,
+      artist: 100,
+    };
+    const limit = 20;
+    const raw = await this.cloudSearchRaw(query, typeMap[category], page, limit);
+    if (category === 'playlist') {
+      const playlists = this.mapPlaylists(raw?.playlists);
+      if (!playlists.length) return null;
+      return { data: playlists, hasMore: playlists.length >= limit, category };
+    }
+    if (category === 'album') {
+      const albums = this.mapAlbums(raw?.albums);
+      if (!albums.length) return null;
+      return { data: albums, hasMore: albums.length >= limit, category };
+    }
+    const artists = this.mapArtists(raw?.artists);
+    if (!artists.length) return null;
+    return { data: artists, hasMore: artists.length >= limit, category };
   }
 
   async searchByNameForMatch(query: string, page: number): Promise<MatchSearchTrack[]> {
