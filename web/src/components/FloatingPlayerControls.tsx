@@ -9,6 +9,7 @@ import { chromeButtonStyle, chromeCapsuleStyle } from '../lib/controlGlass';
 import { findLatestActiveLineIndex, resolveVisualizerLyrics } from '../lib/lyrics';
 import { useControlAppearanceStore } from '../store/controlAppearanceStore';
 import { useLyricSettingsStore } from '../store/lyricSettingsStore';
+import { showToast } from '../store/toastStore';
 import type { LoopMode, PlayerStatus, Track } from '../types';
 import { isInterludeLine } from '../utils/lyrics/parserCore';
 
@@ -324,33 +325,21 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     return () => observer.disconnect();
   }, [showSideChrome, hideDock]);
 
+  const showFullscreenBtn = isMobileWeb && currentView === 'player' && !hideDock;
+  const onFullscreenClick = () => {
+    if (!webFullscreenSupported) {
+      showToast({
+        kind: 'info',
+        title: '当前浏览器不支持网页全屏',
+        detail: '可尝试用系统浏览器的全屏，或添加到主屏幕以获得沉浸体验',
+      });
+      return;
+    }
+    void toggleWebFullscreen();
+  };
+
   return (
     <>
-      {isMobileWeb && currentView === 'player' && webFullscreenSupported && !hideDock ? (
-        <motion.button
-          type="button"
-          aria-label={webFullscreen ? '退出网页全屏' : '网页全屏'}
-          title={webFullscreen ? '退出网页全屏' : '网页全屏'}
-          className={`player-web-fullscreen-btn fixed right-3 z-[70] flex h-10 w-10 items-center justify-center rounded-full outline-none ring-0 ${
-            isHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
-          }`}
-          style={{
-            // 移动浏览器顶栏/刘海常盖住 0.75rem；再下移到与播放页顶栏控件同高
-            top: 'max(3.5rem, calc(var(--safe-top) + 2.75rem))',
-            ...chromeButtonStyle(opacity, blur, webFullscreen),
-          }}
-          initial={false}
-          animate={{ opacity: isHidden ? 0 : 1, scale: isHidden ? 0.94 : 1 }}
-          transition={{ duration: 0.22, ease: 'easeOut' }}
-          onClick={(event) => {
-            event.stopPropagation();
-            void toggleWebFullscreen();
-          }}
-        >
-          {webFullscreen ? <Minimize2 size={16} strokeWidth={1.8} /> : <Maximize2 size={16} strokeWidth={1.8} />}
-        </motion.button>
-      ) : null}
-
       <motion.div
       className={`pointer-events-none absolute left-1/2 z-60 flex w-full -translate-x-1/2 justify-center transition-all duration-300 ${
         currentView === 'home'
@@ -572,7 +561,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
 
         {showSideChrome && onTogglePanel ? (
           <motion.div
-            className="relative shrink-0"
+            className="relative flex shrink-0 flex-col items-center gap-1.5"
             initial={false}
             animate={{ x: rightX }}
             transition={CONTROL_HOVER_SPRING}
@@ -580,6 +569,29 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
             <div className="pointer-events-auto absolute bottom-[calc(100%+1.55rem)] left-0 z-10 origin-bottom-left">
               {children}
             </div>
+            {showFullscreenBtn ? (
+              <motion.button
+                type="button"
+                aria-label={webFullscreen ? '退出网页全屏' : '网页全屏'}
+                title={webFullscreen ? '退出网页全屏' : '网页全屏'}
+                className={`player-web-fullscreen-btn relative z-20 flex ${sideBtnClass} items-center justify-center rounded-full outline-none ring-0`}
+                style={chromeButtonStyle(opacity, blur, webFullscreen)}
+                initial={false}
+                animate={{ scale: sideHover === 'right' ? sideHoverScale : 1 }}
+                whileTap={{ scale: Math.max(0.92, sideHoverScale - 0.1) }}
+                transition={CONTROL_HOVER_SPRING}
+                onMouseEnter={() => setSideHover('right')}
+                onMouseLeave={() => setSideHover((prev) => (prev === 'right' ? null : prev))}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onFullscreenClick();
+                }}
+              >
+                {webFullscreen
+                  ? <Minimize2 size={18} strokeWidth={1.8} />
+                  : <Maximize2 size={18} strokeWidth={1.8} />}
+              </motion.button>
+            ) : null}
             <motion.button
               type="button"
               aria-label={panelOpen ? '收起正在播放' : '展开正在播放'}
