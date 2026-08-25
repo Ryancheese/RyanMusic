@@ -1,5 +1,6 @@
 import {
   bootstrapBase,
+  isServerlessEnv,
   UA,
   type MatchSearchTrack,
   type SearchAlbumHit,
@@ -355,6 +356,14 @@ export class QqService {
       this.cache.setTtl('qq_play_v7', songmid, url, 600);
       return url;
     }
+
+    if (isServerlessEnv()) {
+      const official = await this.officialPlayUrl(songmid, '');
+      if (official && !isQqTrialMediaUrl(official)) {
+        this.cache.setTtl('qq_play_v7', songmid, official, 600);
+        return official;
+      }
+    }
     return null;
   }
 
@@ -458,17 +467,19 @@ export class QqService {
   private async bootstrapPlayUrl(songmid: string): Promise<string | null> {
     const base = bootstrapBase();
     if (!base) return null;
+    const timeoutMs = isServerlessEnv() ? 10_000 : 4_500;
     const res = await request('POST', `${base}/`, {
       headers: { 'X-Requested-With': 'XMLHttpRequest', Referer: `${base}/` },
       body: { input: songmid, filter: 'id', type: 'qq', page: 1 },
+      timeoutMs,
     });
     const apiPath = res.json?.data?.[0]?.url as string | undefined;
     if (!apiPath) return null;
     const api = `${base}/${String(apiPath).replace(/^\//, '')}`;
-    let loc = await followLocation(api, `${base}/`, 4_500);
+    let loc = await followLocation(api, `${base}/`, timeoutMs);
     if (!loc) return null;
     if (/stream\.qqmusic\.qq\.com|aqqmusic\.tc\.qq\.com/i.test(loc)) return loc;
-    return (await followLocation(loc, `${base}/`)) || loc;
+    return (await followLocation(loc, `${base}/`, timeoutMs)) || loc;
   }
 
   async resolvePicUrl(songmid: string): Promise<string | null> {

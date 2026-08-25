@@ -28,6 +28,11 @@ function bootstrapBase() {
   if (!trimmed) return null;
   return trimmed.replace(/\/+$/, "");
 }
+function isServerlessEnv() {
+  return Boolean(
+    process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NOW_REGION
+  );
+}
 function apiSecret(coreMarker) {
   const explicit = process.env.MC_API_SECRET;
   if (explicit) return explicit;
@@ -260,6 +265,9 @@ function installDirectNetwork() {
   } catch {
   }
   if (dnsPatched) return;
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NOW_REGION) {
+    return;
+  }
   dnsPatched = true;
   try {
     dns.lookup = patchedLookup;
@@ -441,9 +449,7 @@ var init_http = __esm({
       "ftp_proxy",
       "FTP_PROXY"
     ];
-    if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.NOW_REGION) {
-      installDirectNetwork();
-    }
+    installDirectNetwork();
   }
 });
 
@@ -7021,6 +7027,13 @@ var NeteaseService = class _NeteaseService {
       this.cache.setTtl("netease_play_v6", songid, safeUrl, 1800);
       return safeUrl;
     }
+    if (isServerlessEnv()) {
+      const direct = await this.anonymousPlayUrl(songid);
+      if (direct) {
+        this.cache.setTtl("netease_play_v6", songid, direct, 600);
+        return direct;
+      }
+    }
     return null;
   }
   async probePlayQualities(songid, cookie) {
@@ -7113,22 +7126,46 @@ var NeteaseService = class _NeteaseService {
   async bootstrapPlayUrl(songid) {
     const base = bootstrapBase();
     if (!base) return null;
+    const timeoutMs = isServerlessEnv() ? 1e4 : 2500;
     const res = await request("POST", `${base}/`, {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
         Referer: `${base}/`
       },
       body: { input: songid, filter: "id", type: "netease", page: 1 },
-      timeoutMs: 2500
+      timeoutMs
     });
     const apiPath = res.json?.data?.[0]?.url;
     if (!apiPath) return null;
     const api = `${base}/${apiPath.replace(/^\//, "")}`;
-    const loc = await followLocation(api, `${base}/`, 2500);
+    const loc = await followLocation(api, `${base}/`, timeoutMs);
     if (!loc || isBadMediaUrl(loc) || isNeteaseTrialMediaUrl(loc)) return null;
     if (/(126\.net|163\.com|music\.163)/i.test(loc)) return loc;
-    const hop = await followLocation(loc, `${base}/`, 2e3);
+    const hop = await followLocation(loc, `${base}/`, Math.min(timeoutMs, 4e3));
     return hop && !isNeteaseTrialMediaUrl(hop) ? hop : loc;
+  }
+  /** Vercel 等 serverless 环境 bootstrap 不稳定时的直连回退 */
+  async anonymousPlayUrl(songid) {
+    const id = Number(songid);
+    if (!id) return null;
+    try {
+      const encoded = encodeLinuxData({
+        method: "POST",
+        url: "http://music.163.com/api/song/enhance/player/url/v1",
+        params: { ids: `[${id}]`, level: "exhigh", encodeType: "aac", csrf_token: "" }
+      });
+      const res = await neteaseHttp("POST", "http://music.163.com/api/linux/forward", encoded, "", {
+        Referer: "http://music.163.com/"
+      });
+      const item = res.json?.data?.[0];
+      const url = item?.url;
+      if (!url || isNeteaseTrialPlayItem(item) || isBadMediaUrl(url) || isNeteaseTrialMediaUrl(url) || /\/404/i.test(url)) {
+        return null;
+      }
+      return httpsNeteaseUrl(url);
+    } catch {
+      return null;
+    }
   }
   async resolvePicUrl(songid) {
     const encoded = encodeLinuxData({
@@ -7537,6 +7574,13 @@ var QqService = class {
       this.cache.setTtl("qq_play_v7", songmid, url, 600);
       return url;
     }
+    if (isServerlessEnv()) {
+      const official = await this.officialPlayUrl(songmid, "");
+      if (official && !isQqTrialMediaUrl(official)) {
+        this.cache.setTtl("qq_play_v7", songmid, official, 600);
+        return official;
+      }
+    }
     return null;
   }
   async pyqPlayUrl(songmid) {
@@ -7633,17 +7677,19 @@ var QqService = class {
   async bootstrapPlayUrl(songmid) {
     const base = bootstrapBase();
     if (!base) return null;
+    const timeoutMs = isServerlessEnv() ? 1e4 : 4500;
     const res = await request("POST", `${base}/`, {
       headers: { "X-Requested-With": "XMLHttpRequest", Referer: `${base}/` },
-      body: { input: songmid, filter: "id", type: "qq", page: 1 }
+      body: { input: songmid, filter: "id", type: "qq", page: 1 },
+      timeoutMs
     });
     const apiPath = res.json?.data?.[0]?.url;
     if (!apiPath) return null;
     const api = `${base}/${String(apiPath).replace(/^\//, "")}`;
-    let loc = await followLocation(api, `${base}/`, 4500);
+    let loc = await followLocation(api, `${base}/`, timeoutMs);
     if (!loc) return null;
     if (/stream\.qqmusic\.qq\.com|aqqmusic\.tc\.qq\.com/i.test(loc)) return loc;
-    return await followLocation(loc, `${base}/`) || loc;
+    return await followLocation(loc, `${base}/`, timeoutMs) || loc;
   }
   async resolvePicUrl(songmid) {
     const qs = new URLSearchParams({ songmid, format: "json" });
@@ -7782,7 +7828,7 @@ function createApp(options) {
     () => qqAccount.sessionCookie()
   );
   const privateBase = bootstrapBase();
-  if (privateBase && !process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  if (privateBase && !isServerlessEnv()) {
     void request("GET", `${privateBase}/`, { timeoutMs: 2e3 });
   }
   const app = new Hono2();

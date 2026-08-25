@@ -108,6 +108,14 @@ export function bootstrapBase(): string | null {
   return trimmed.replace(/\/+$/, '');
 }
 
+export function isServerlessEnv(): boolean {
+  return Boolean(
+    process.env.VERCEL
+    || process.env.AWS_LAMBDA_FUNCTION_NAME
+    || process.env.NOW_REGION,
+  );
+}
+
 export function apiSecret(coreMarker: string): string {
   const explicit = process.env.MC_API_SECRET;
   if (explicit) return explicit;

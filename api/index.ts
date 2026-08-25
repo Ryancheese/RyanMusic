@@ -27,7 +27,12 @@ function buildRequest(req: VercelRequest): Request {
   const path = req.url || '/';
   const url = new URL(path, `https://${host}`);
 
-  if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+  if (
+    url.searchParams.has('get')
+    && (url.pathname === '/api' || url.pathname === '/' || url.pathname === '/index.php')
+  ) {
+    url.pathname = '/api.php';
+  } else if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
     url.pathname = url.pathname.slice(4) || '/';
   }
 

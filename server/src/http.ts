@@ -277,6 +277,9 @@ export function installDirectNetwork(): void {
     // ignore
   }
   if (dnsPatched) return;
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NOW_REGION) {
+    return;
+  }
   dnsPatched = true;
   try {
     (dns as typeof dns & { lookup: typeof patchedLookup }).lookup = patchedLookup as typeof dns.lookup;
@@ -285,9 +288,7 @@ export function installDirectNetwork(): void {
   }
 }
 
-if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.NOW_REGION) {
-  installDirectNetwork();
-}
+installDirectNetwork();
 
 function thirdPartyTimeout(url: string): number {
   if (/90svip\.cn|myhkw\.cn/i.test(url)) return 6_000;

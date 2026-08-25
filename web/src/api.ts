@@ -113,7 +113,8 @@ export async function fetchSignedMedia(
 }
 
 export function coverRefreshUrl(type: MusicSource, songid: string): string {
-  return `${origin()}?cover=1&type=${encodeURIComponent(type)}&id=${encodeURIComponent(songid)}`;
+  const base = origin().replace(/\/$/, '') || window.location.origin;
+  return `${base}/?cover=1&type=${encodeURIComponent(type)}&id=${encodeURIComponent(songid)}`;
 }
 
 /** 126.net 用 param 缩略图；桌面 WebView2 再经本地代理带 Referer，避免 CDN 防盗链。 */
@@ -129,7 +130,8 @@ export function coverImageUrl(url?: string, size = 400): string {
   else if (!/^https?:\/\//i.test(raw)) return raw;
 
   const sized = getSizedCoverUrl(absolute, size) || absolute;
-  return `${origin()}?img=1&url=${encodeURIComponent(sized)}`;
+  const base = origin().replace(/\/$/, '') || window.location.origin;
+  return `${base}/?img=1&url=${encodeURIComponent(sized)}`;
 }
 
 export function buildDownloadUrl(url: string, name: string): string {
@@ -137,7 +139,7 @@ export function buildDownloadUrl(url: string, name: string): string {
     const sep = url.includes('?') ? '&' : '?';
     return `${url}${sep}dl=1&name=${encodeURIComponent(name)}`;
   }
-  return `${origin()}?download=1&url=${encodeURIComponent(url)}&name=${encodeURIComponent(name)}`;
+  return `${(origin().replace(/\/$/, '') || window.location.origin)}/?download=1&url=${encodeURIComponent(url)}&name=${encodeURIComponent(name)}`;
 }
 
 export async function postAction<T = unknown>(

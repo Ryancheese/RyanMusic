@@ -6,7 +6,7 @@ import { KugouAccount } from './accounts/kugou.ts';
 import { NeteaseAccount } from './accounts/netease.ts';
 import { QqAccount } from './accounts/qq.ts';
 import { FileCache } from './cache.ts';
-import { NETEASE_UA, UA, VERSION, apiSecret, bootstrapBase, randomCnIp, type MusicSource, type SearchCategory } from './config.ts';
+import { NETEASE_UA, UA, VERSION, apiSecret, bootstrapBase, isServerlessEnv, randomCnIp, type MusicSource, type SearchCategory } from './config.ts';
 import { LyricsService } from './lyrics.ts';
 import { NeteaseService } from './netease.ts';
 import { spaHtml } from './pages.ts';
@@ -119,7 +119,7 @@ export function createApp(options: AppOptions) {
     () => qqAccount.sessionCookie(),
   );
   const privateBase = bootstrapBase();
-  if (privateBase && !process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  if (privateBase && !isServerlessEnv()) {
     void request('GET', `${privateBase}/`, { timeoutMs: 2_000 });
   }
   const app = new Hono();

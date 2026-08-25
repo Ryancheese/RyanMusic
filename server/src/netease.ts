@@ -1,5 +1,6 @@
 import {
   bootstrapBase,
+  isServerlessEnv,
   type MatchSearchTrack,
   type SearchAlbumHit,
   type SearchArtistHit,
@@ -366,6 +367,14 @@ export class NeteaseService {
       this.cache.setTtl('netease_play_v6', songid, safeUrl, 1800);
       return safeUrl;
     }
+
+    if (isServerlessEnv()) {
+      const direct = await this.anonymousPlayUrl(songid);
+      if (direct) {
+        this.cache.setTtl('netease_play_v6', songid, direct, 600);
+        return direct;
+      }
+    }
     return null;
   }
 
@@ -482,22 +491,47 @@ export class NeteaseService {
   private async bootstrapPlayUrl(songid: string): Promise<string | null> {
     const base = bootstrapBase();
     if (!base) return null;
+    const timeoutMs = isServerlessEnv() ? 10_000 : 2_500;
     const res = await request('POST', `${base}/`, {
       headers: {
         'X-Requested-With': 'XMLHttpRequest',
         Referer: `${base}/`,
       },
       body: { input: songid, filter: 'id', type: 'netease', page: 1 },
-      timeoutMs: 2_500,
+      timeoutMs,
     });
     const apiPath = res.json?.data?.[0]?.url as string | undefined;
     if (!apiPath) return null;
     const api = `${base}/${apiPath.replace(/^\//, '')}`;
-    const loc = await followLocation(api, `${base}/`, 2_500);
+    const loc = await followLocation(api, `${base}/`, timeoutMs);
     if (!loc || isBadMediaUrl(loc) || isNeteaseTrialMediaUrl(loc)) return null;
     if (/(126\.net|163\.com|music\.163)/i.test(loc)) return loc;
-    const hop = await followLocation(loc, `${base}/`, 2_000);
+    const hop = await followLocation(loc, `${base}/`, Math.min(timeoutMs, 4_000));
     return hop && !isNeteaseTrialMediaUrl(hop) ? hop : loc;
+  }
+
+  /** Vercel 等 serverless 环境 bootstrap 不稳定时的直连回退 */
+  private async anonymousPlayUrl(songid: string): Promise<string | null> {
+    const id = Number(songid);
+    if (!id) return null;
+    try {
+      const encoded = encodeLinuxData({
+        method: 'POST',
+        url: 'http://music.163.com/api/song/enhance/player/url/v1',
+        params: { ids: `[${id}]`, level: 'exhigh', encodeType: 'aac', csrf_token: '' },
+      });
+      const res = await neteaseHttp('POST', 'http://music.163.com/api/linux/forward', encoded, '', {
+        Referer: 'http://music.163.com/',
+      });
+      const item = res.json?.data?.[0];
+      const url = item?.url as string | undefined;
+      if (!url || isNeteaseTrialPlayItem(item) || isBadMediaUrl(url) || isNeteaseTrialMediaUrl(url) || /\/404/i.test(url)) {
+        return null;
+      }
+      return httpsNeteaseUrl(url);
+    } catch {
+      return null;
+    }
   }
 
   async resolvePicUrl(songid: string): Promise<string | null> {
