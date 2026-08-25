@@ -8,7 +8,7 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// src/config.ts
+// server/src/config.ts
 import { createHash } from "node:crypto";
 function randomCnIp() {
   const a = CN_IP_A[Math.floor(Math.random() * CN_IP_A.length)];
@@ -35,16 +35,16 @@ function apiSecret(coreMarker) {
 }
 var VERSION, UA, NETEASE_UA, CN_IP_A;
 var init_config = __esm({
-  "src/config.ts"() {
+  "server/src/config.ts"() {
     "use strict";
-    VERSION = "1.8.70";
+    VERSION = "2.0.8";
     UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     NETEASE_UA = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.29.205117";
     CN_IP_A = [36, 58, 111, 112, 114, 117, 120, 123, 183, 218, 223];
   }
 });
 
-// src/http.ts
+// server/src/http.ts
 var http_exports = {};
 __export(http_exports, {
   PROXY_ENV_KEYS: () => PROXY_ENV_KEYS,
@@ -126,10 +126,10 @@ async function dohResolve(host) {
   ]);
 }
 async function raceFirstNonNull(tasks) {
-  return new Promise((resolve2) => {
+  return new Promise((resolve) => {
     let pending = tasks.length;
     if (!pending) {
-      resolve2(null);
+      resolve(null);
       return;
     }
     let settled = false;
@@ -137,14 +137,14 @@ async function raceFirstNonNull(tasks) {
       void task.then((value) => {
         if (!settled && value) {
           settled = true;
-          resolve2(value);
+          resolve(value);
           return;
         }
         pending -= 1;
-        if (!settled && pending === 0) resolve2(null);
+        if (!settled && pending === 0) resolve(null);
       }).catch(() => {
         pending -= 1;
-        if (!settled && pending === 0) resolve2(null);
+        if (!settled && pending === 0) resolve(null);
       });
     }
   });
@@ -169,10 +169,10 @@ function firstLookupIp(address) {
   return v4?.address || null;
 }
 function systemLookup(hostname, opts) {
-  return new Promise((resolve2) => {
+  return new Promise((resolve) => {
     const forced = { ...opts, family: opts.family || 4 };
     originalLookup(hostname, forced, (err, address, family) => {
-      resolve2({ err, address, family });
+      resolve({ err, address, family });
     });
   });
 }
@@ -197,9 +197,9 @@ function patchedLookup(hostname, options, callback) {
     finish(null, ip2, 4);
   };
   const system = systemLookup(hostname, opts);
-  const publicDns = new Promise((resolve2) => {
+  const publicDns = new Promise((resolve) => {
     setTimeout(() => {
-      void resolveHost(hostname).then(resolve2).catch(() => resolve2(null));
+      void resolveHost(hostname).then(resolve).catch(() => resolve(null));
     }, SYSTEM_DNS_GRACE_MS);
   });
   void Promise.race([
@@ -407,7 +407,7 @@ async function followLocation(url, referer, timeoutMs = REDIRECT_TIMEOUT_MS) {
 }
 var FAKE_IP_MASK, FAKE_IP_NET, DEFAULT_TIMEOUT_MS, BUFFER_TIMEOUT_MS, REDIRECT_TIMEOUT_MS, DNS_TIMEOUT_MS, DOH_TIMEOUT_MS, SYSTEM_DNS_GRACE_MS, hostCache, dnsPatched, originalLookup, cnResolver, intlResolver, PROXY_ENV_KEYS;
 var init_http = __esm({
-  "src/http.ts"() {
+  "server/src/http.ts"() {
     "use strict";
     init_config();
     FAKE_IP_MASK = 4294836224;
@@ -445,7 +445,7 @@ var init_http = __esm({
   }
 });
 
-// src/util.ts
+// server/src/util.ts
 function decodeEntities(str) {
   return str.replace(/&#13;/g, "").replace(/&#10;/g, "\n").replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))).replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&nbsp;/g, " ").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
@@ -456,10 +456,22 @@ function timedLyricScore(text) {
   const lrc = (raw2.match(/\[\d{2}:\d{2}/g) || []).length;
   return word * 10 + lrc;
 }
+function isPureMusicLyricText(text) {
+  const raw2 = String(text || "").replace(/\[[^\]]+\]/g, "").replace(/\(\d+,\d+(?:,\d+)?\)/g, "").replace(/<\d+,\d+[^>]*>/g, "").replace(/\s+/g, " ").trim();
+  if (!raw2) return false;
+  return raw2.includes(PURE_MUSIC_NOTICE) || raw2.includes("\u7EAF\u97F3\u4E50,\u8BF7\u6B23\u8D4F");
+}
 function isPlaceholderLyricText(text) {
   const raw2 = String(text || "").replace(/\[[^\]]+\]/g, "").replace(/\(\d+,\d+(?:,\d+)?\)/g, "").replace(/<\d+,\d+[^>]*>/g, "").replace(/\s+/g, " ").trim();
   if (!raw2) return true;
+  if (isPureMusicLyricText(text)) return true;
   return PLACEHOLDER_LYRIC_RE.test(raw2);
+}
+function hasNeteasePureMusicFlag(source) {
+  if (!source) return false;
+  return Boolean(
+    source.pureMusic || source.lrc?.pureMusic || source.yrc?.pureMusic || source.ytlrc?.pureMusic || source.tlyric?.pureMusic
+  );
 }
 function effectiveTimedLyricScore(text) {
   if (isPlaceholderLyricText(text)) return 0;
@@ -519,25 +531,25 @@ function nameSearchSourcePage(page) {
   return n < 1 || Number.isNaN(n) ? 1 : n;
 }
 function firstTruthy(tasks) {
-  return new Promise((resolve2) => {
+  return new Promise((resolve) => {
     let pending = tasks.length;
     let settled = false;
     if (!pending) {
-      resolve2(null);
+      resolve(null);
       return;
     }
     for (const task of tasks) {
       void task().then((value) => {
         if (!settled && value) {
           settled = true;
-          resolve2(value);
+          resolve(value);
           return;
         }
         pending -= 1;
-        if (!settled && pending === 0) resolve2(null);
+        if (!settled && pending === 0) resolve(null);
       }).catch(() => {
         pending -= 1;
-        if (!settled && pending === 0) resolve2(null);
+        if (!settled && pending === 0) resolve(null);
       });
     }
   });
@@ -573,16 +585,22 @@ function isNeteaseDelisted(song, privilege) {
   const priv = privilege || song?.privilege || song?.priv;
   if (priv) {
     const st = Number(priv.st);
-    if (st === -200 || st === -100) return true;
-    if (Number(priv.pl) <= 0 && Number(priv.dl) <= 0 && st < 0) return true;
+    if (st === -200) return true;
+    const hasBrHint = priv.playMaxbr != null || priv.maxbr != null || priv.playMaxBrLevel != null || priv.maxBrLevel != null;
+    if (!hasBrHint) return Number(song?.st) === -200;
+    const playBr = Math.max(
+      Number(priv.playMaxbr || 0),
+      Number(priv.maxbr || 0),
+      Number(priv.pl || 0)
+    );
+    const dlBr = Math.max(Number(priv.dl || 0), Number(priv.downloadMaxbr || 0));
+    if (st < 0 && playBr <= 0 && dlBr <= 0) return true;
   }
   return Number(song?.st) === -200;
 }
 function isQqDelisted(song) {
   const action = song?.action;
   if (action && Number(action.play) === 0) return true;
-  const pay = song?.pay;
-  if (pay && Number(pay.pay_play) === 0 && Number(pay.price_play) > 0) return true;
   return false;
 }
 function isQqPrivatePlayUrl(url) {
@@ -635,16 +653,239 @@ function parseSongUrl(url) {
   if (qq?.[3]) return { site: "qq", id: qq[3] };
   return null;
 }
-var PLACEHOLDER_LYRIC_RE;
+var PLACEHOLDER_LYRIC_RE, PURE_MUSIC_NOTICE;
 var init_util = __esm({
-  "src/util.ts"() {
+  "server/src/util.ts"() {
     "use strict";
-    PLACEHOLDER_LYRIC_RE = /^(?:暂无歌词|无歌词|纯音乐|此歌曲为没有填词的纯音乐|instrumental|not\s*available|no\s*lyrics?)[\s.…]*$/iu;
+    PLACEHOLDER_LYRIC_RE = /^(?:暂无歌词|无歌词|纯音乐(?:[，,]?\s*请欣赏)?|此歌曲为没有填词的纯音乐|instrumental|not\s*available|no\s*lyrics?)[\s.…]*$/iu;
+    PURE_MUSIC_NOTICE = "\u7EAF\u97F3\u4E50\uFF0C\u8BF7\u6B23\u8D4F";
   }
 });
 
-// src/crypto/netease.ts
-import { createCipheriv, createHash as createHash2, randomInt } from "node:crypto";
+// server/src/kugouLyrics.ts
+import { createHash as createHash2 } from "node:crypto";
+import { inflateRawSync, inflateSync, unzipSync } from "node:zlib";
+function md5(value) {
+  return createHash2("md5").update(value).digest("hex");
+}
+function hasKrcHeader(bytes) {
+  return bytes.length >= 4 && bytes[0] === 107 && bytes[1] === 114 && bytes[2] === 99 && bytes[3] === 49;
+}
+function looksLikeTimedLyric(text) {
+  return /\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/.test(text) || /<\d{1,2}:\d{2}(?:[.:]\d{1,3})?>/.test(text) || text.trimStart().startsWith("WEBVTT") || /\[\d+,\d+\]/.test(text);
+}
+function krcDecrypt(encrypted) {
+  if (encrypted.length <= 4) throw new Error("Invalid KRC data");
+  const data = encrypted.subarray(4);
+  const decrypted = Buffer.alloc(data.length);
+  for (let i = 0; i < data.length; i += 1) {
+    decrypted[i] = data[i] ^ KRC_KEY[i % KRC_KEY.length];
+  }
+  const attempts = [
+    () => inflateSync(decrypted),
+    () => inflateRawSync(decrypted),
+    () => unzipSync(decrypted)
+  ];
+  for (const attempt of attempts) {
+    try {
+      return attempt().toString("utf8");
+    } catch {
+    }
+  }
+  throw new Error("KRC decompress failed");
+}
+function decodeDownloadedLyric(bytes, contentType) {
+  const isPlainText = String(contentType) === "2";
+  if (isPlainText || !hasKrcHeader(bytes)) {
+    const text = bytes.toString("utf8").replace(/^\uFEFF/, "");
+    if (looksLikeTimedLyric(text)) return text;
+    throw new Error("Unexpected plain lyric payload");
+  }
+  try {
+    return krcDecrypt(bytes);
+  } catch (error) {
+    const fallback = bytes.toString("utf8");
+    if (looksLikeTimedLyric(fallback)) return fallback;
+    throw error;
+  }
+}
+function signParams(params) {
+  const sortedKeys = Object.keys(params).sort();
+  let str = SIGN_SALT;
+  for (const key of sortedKeys) {
+    str += `${key}=${params[key]}`;
+  }
+  str += SIGN_SALT;
+  return md5(str);
+}
+async function requestKugou(url, params, module, headers = {}) {
+  const clientTimeMs = Date.now();
+  const clientTimeSec = Math.floor(clientTimeMs / 1e3);
+  const mid = md5(String(clientTimeMs));
+  const finalParams = { ...params };
+  if (module !== "Lyric") {
+    Object.assign(finalParams, {
+      userid: finalParams.userid ?? "0",
+      appid: "3116",
+      token: finalParams.token ?? "",
+      clienttime: clientTimeSec,
+      iscorrection: "1",
+      uuid: "-",
+      mid,
+      dfid: "-",
+      clientver: "11070",
+      platform: "AndroidFilter"
+    });
+  } else {
+    Object.assign(finalParams, {
+      appid: "3116",
+      clientver: "11070"
+    });
+  }
+  finalParams.signature = signParams(finalParams);
+  const urlObj = new URL(url);
+  for (const [key, value] of Object.entries(finalParams)) {
+    urlObj.searchParams.set(key, String(value));
+  }
+  const res = await request("GET", urlObj.toString(), {
+    timeoutMs: 6e3,
+    headers: {
+      "User-Agent": `Android14-1070-11070-201-0-${module}-wifi`,
+      Connection: "Keep-Alive",
+      "Accept-Encoding": "gzip, deflate",
+      "KG-Rec": "1",
+      "KG-RC": "1",
+      "KG-CLIENTTIMEMS": String(clientTimeMs),
+      mid,
+      ...headers
+    }
+  });
+  const data = res.json;
+  if (!data) throw new Error("Kugou response empty");
+  if (data.error_code !== void 0 && data.error_code !== 0 && data.error_code !== 200) {
+    throw new Error(`Kugou API error ${data.error_code}`);
+  }
+  return data;
+}
+function kugouCoverUrl(info, hash) {
+  const direct = String(info?.Image || info?.album_img || info?.imgUrl || info?.album_img_url || "").trim().replace(/\{size\}/gi, "240");
+  if (/^https?:\/\//i.test(direct)) return direct;
+  const h = String(hash || info?.FileHash || info?.hash || "").trim();
+  if (h.length >= 8) return `https://imgessl.kugou.com/stdmusic/240/${h.slice(0, 8)}/${h}.jpg`;
+  return "";
+}
+function mapSearchResult(info) {
+  const singers = Array.isArray(info?.Singers) ? info.Singers : [];
+  const artists = singers.map((s) => String(s?.name || "").trim()).filter(Boolean).join(", ") || String(info?.singername || "").split("\u3001").map((s) => s.trim()).filter(Boolean).join(", ");
+  const id = Number(info?.ID || info?.album_audio_id || 0);
+  const hash = String(info?.FileHash || info?.hash || "").trim();
+  const name = String(info?.SongName || info?.songname || "").replace(/<[^>]+>/g, "").trim();
+  if (!hash || !name) return null;
+  return {
+    id,
+    name,
+    artists,
+    album: String(info?.AlbumName || info?.album_name || "").trim(),
+    durationMs: Math.max(0, Number(info?.Duration ?? info?.duration ?? 0)) * 1e3,
+    kgHash: hash,
+    pic: kugouCoverUrl(info, hash)
+  };
+}
+async function searchKugouSongs(keyword, page = 1, pageSize = 20) {
+  const query = keyword.trim();
+  if (!query) return [];
+  try {
+    const data = await requestKugou(
+      "http://complexsearch.kugou.com/v2/search/song",
+      {
+        sorttype: "0",
+        keyword: query,
+        pagesize: pageSize,
+        page
+      },
+      "SearchSong",
+      { "x-router": "complexsearch.kugou.com" }
+    );
+    return (data?.data?.lists || []).map(mapSearchResult).filter((item) => Boolean(item));
+  } catch {
+    const data = await requestKugou(
+      "http://mobiles.kugou.com/api/v3/search/song",
+      {
+        showtype: "14",
+        highlight: "",
+        pagesize: String(pageSize),
+        tag_aggr: "1",
+        plat: "0",
+        sver: "5",
+        keyword: query,
+        correct: "1",
+        api_ver: "1",
+        version: "9108",
+        page: String(page)
+      },
+      "SearchSong"
+    );
+    return (data?.data?.info || []).map(mapSearchResult).filter((item) => Boolean(item));
+  }
+}
+async function fetchKugouLyricText(song) {
+  if (!song.kgHash) throw new Error("Missing Kugou hash");
+  const searchRes = await requestKugou(
+    "https://lyrics.kugou.com/v1/search",
+    {
+      album_audio_id: song.id,
+      duration: song.durationMs,
+      hash: song.kgHash,
+      keyword: `${song.artists} - ${song.name}`.trim(),
+      lrctxt: "1",
+      man: "no"
+    },
+    "Lyric"
+  );
+  const candidate = searchRes?.candidates?.[0];
+  if (!candidate?.id || !candidate?.accesskey) return "";
+  const downloadRes = await requestKugou(
+    "http://lyrics.kugou.com/download",
+    {
+      accesskey: candidate.accesskey,
+      charset: "utf8",
+      client: "mobi",
+      fmt: "krc",
+      id: candidate.id,
+      ver: "1"
+    },
+    "Lyric"
+  ).catch(async () => requestKugou(
+    "http://lyrics.kugou.com/download",
+    {
+      accesskey: candidate.accesskey,
+      charset: "utf8",
+      client: "mobi",
+      fmt: "lrc",
+      id: candidate.id,
+      ver: "1"
+    },
+    "Lyric"
+  ));
+  const base64 = String(downloadRes?.content || "");
+  if (!base64) return "";
+  const bytes = Buffer.from(base64, "base64");
+  const lyricText = decodeDownloadedLyric(bytes, downloadRes?.contenttype);
+  return decodeEntities(lyricText);
+}
+var KRC_KEY, SIGN_SALT;
+var init_kugouLyrics = __esm({
+  "server/src/kugouLyrics.ts"() {
+    "use strict";
+    init_http();
+    init_util();
+    KRC_KEY = Buffer.from([64, 71, 97, 119, 94, 50, 116, 71, 81, 54, 49, 45, 206, 210, 110, 105]);
+    SIGN_SALT = "LnT6xpN3khm36zse0QzvmgTZ3waWdRSA";
+  }
+});
+
+// server/src/crypto/netease.ts
+import { createCipheriv, createHash as createHash4, randomInt } from "node:crypto";
 function modPow(base, exp, mod) {
   let result = 1n;
   let b = base % mod;
@@ -686,7 +927,7 @@ function weapiEncode(object) {
 }
 function eapiEncode(apiPath, object) {
   const text = JSON.stringify(object);
-  const digest = createHash2("md5").update(`nobody${apiPath}use${text}md5forencrypt`).digest("hex");
+  const digest = createHash4("md5").update(`nobody${apiPath}use${text}md5forencrypt`).digest("hex");
   const payload = `${apiPath}-36cd479b6b5-${text}-36cd479b6b5-${digest}`;
   return { params: aesEcb(EAPI_KEY, payload).toString("hex").toUpperCase() };
 }
@@ -694,7 +935,7 @@ function cookieCsrf(cookie) {
   const m = cookie.match(/(?:^|;\s*)(?:__csrf|MUSIC_CSRF)=([^;]+)/);
   return m ? m[1].trim() : "";
 }
-function mergeCookies(existing, incoming) {
+function mergeCookies2(existing, incoming) {
   const map = /* @__PURE__ */ new Map();
   for (const part of `${existing};${incoming}`.split(";")) {
     const item = part.trim();
@@ -761,7 +1002,7 @@ function eapiClientHeader(cookie) {
   const now = String(Math.floor(Date.now() / 1e3));
   const header = {
     osver: "Microsoft-Windows-10-Professional-build-19045-64bit",
-    deviceId: `p${createHash2("md5").update(now + String(randomInt(0, 999999))).digest("hex").slice(0, 15)}`,
+    deviceId: `p${createHash4("md5").update(now + String(randomInt(0, 999999))).digest("hex").slice(0, 15)}`,
     os: "pc",
     appver: "3.1.17.204416",
     versioncode: "140",
@@ -818,7 +1059,7 @@ async function eapiRequest(apiPath, data, cookie = "") {
 }
 var LINUX_KEY, WEAPI_PRESET, WEAPI_IV, EAPI_KEY, BASE62, RSA_N, RSA_E;
 var init_netease = __esm({
-  "src/crypto/netease.ts"() {
+  "server/src/crypto/netease.ts"() {
     "use strict";
     init_config();
     init_http();
@@ -835,7 +1076,7 @@ var init_netease = __esm({
   }
 });
 
-// src/sign.ts
+// server/src/sign.ts
 var sign_exports = {};
 __export(sign_exports, {
   proxyUrl: () => proxyUrl,
@@ -868,12 +1109,12 @@ function proxyUrl(secret, get, type, id) {
   return `api.php?${params.toString()}`;
 }
 var init_sign = __esm({
-  "src/sign.ts"() {
+  "server/src/sign.ts"() {
     "use strict";
   }
 });
 
-// src/crossPlay.ts
+// server/src/crossPlay.ts
 function normalizeMatchText2(value) {
   return String(value || "").toLowerCase().replace(/[\(\[（【].*?[\)\]）】]/g, "").replace(/[\s\p{P}\p{S}]/gu, "").trim();
 }
@@ -936,26 +1177,30 @@ function pickBestCrossPlayTrack(target, tracks, mode = "strict") {
 }
 var AUTO_MATCH_MIN_SCORE2, AUTO_MATCH_SEARCH_LIMIT2;
 var init_crossPlay = __esm({
-  "src/crossPlay.ts"() {
+  "server/src/crossPlay.ts"() {
     "use strict";
     AUTO_MATCH_MIN_SCORE2 = 72;
     AUTO_MATCH_SEARCH_LIMIT2 = 8;
   }
 });
 
-// src/comments.ts
+// server/src/comments.ts
 var comments_exports = {};
 __export(comments_exports, {
+  commentSourceOrder: () => commentSourceOrder,
   fetchNeteaseCommentPage: () => fetchNeteaseCommentPage,
+  isCommentSource: () => isCommentSource,
   isPlaceholderCommentContent: () => isPlaceholderCommentContent,
   loadSongComments: () => loadSongComments,
-  mapNeteaseComment: () => mapNeteaseComment
+  mapKugouComment: () => mapKugouComment,
+  mapNeteaseComment: () => mapNeteaseComment,
+  mapQqComment: () => mapQqComment
 });
-import { createHash as createHash5 } from "node:crypto";
-function ok3(data) {
+import { createHash as createHash6 } from "node:crypto";
+function ok4(data) {
   return { code: 200, error: "", data };
 }
-function fail3(code, error) {
+function fail4(code, error) {
   return { code, error, data: "" };
 }
 function isPlaceholderCommentContent(content) {
@@ -1028,18 +1273,221 @@ function pageCacheKey(songid, offset, limit) {
   return `${songid}_${offset}_${limit}`;
 }
 function hashKey(value) {
-  return createHash5("sha1").update(value).digest("hex");
+  return createHash6("sha1").update(value).digest("hex");
+}
+function isCommentSource(value) {
+  return value === "netease" || value === "qq" || value === "kugou";
+}
+function commentSourceOrder(preferred) {
+  return [preferred, ...COMMENT_SOURCE_FALLBACK.filter((item) => item !== preferred)];
+}
+function hasUsableComments(payload) {
+  return payload.hotComments.length > 0 || payload.comments.length > 0 || payload.total > 0;
+}
+function toMatchTracks(items) {
+  return items.map((item) => ({
+    type: "qq",
+    songid: item.songid,
+    title: item.title,
+    author: item.author,
+    lrc: "",
+    url: "",
+    pic: ""
+  }));
+}
+function normalizeUnixMs(value) {
+  if (typeof value === "string" && /[-/]/.test(value) && Number.isNaN(Number(value))) {
+    const parsed = Date.parse(value.includes("T") ? value : value.replace(/-/g, "/"));
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  const n = Number(value) || 0;
+  if (!n) return 0;
+  return n < 1e12 ? n * 1e3 : n;
+}
+function mapQqComment(raw2) {
+  const id = String(raw2?.commentid || raw2?.id || "").trim();
+  const content = String(raw2?.rootcommentcontent || raw2?.middlecommentcontent || raw2?.content || "").trim();
+  if (!id || !content || isPlaceholderCommentContent(content)) return null;
+  const replyRaw = Array.isArray(raw2?.middlecommentcontent) ? raw2.middlecommentcontent[0] : null;
+  const replyContent = String(replyRaw?.replycontent || replyRaw?.subcommentcontent || replyRaw?.content || "").trim();
+  const time = normalizeUnixMs(raw2?.time || raw2?.timestamp);
+  return {
+    id,
+    userId: String(raw2?.uin || raw2?.encrypt_uin || raw2?.userid || ""),
+    nickname: String(raw2?.nick || raw2?.nickname || "QQ \u97F3\u4E50\u7528\u6237"),
+    avatar: String(raw2?.avatarurl || raw2?.avatar || raw2?.headurl || "").replace(/^http:\/\//, "https://"),
+    content,
+    time,
+    timeStr: String(raw2?.timestr || raw2?.timeStr || ""),
+    likedCount: Number(raw2?.praisenum || raw2?.praise_num || raw2?.likedCount || 0) || 0,
+    liked: Boolean(raw2?.ispraise || raw2?.liked),
+    location: String(raw2?.location || raw2?.ip_location || "").trim(),
+    reply: replyContent && !isPlaceholderCommentContent(replyContent) ? {
+      nickname: String(replyRaw?.nick || replyRaw?.nickname || replyRaw?.replyname || "QQ \u97F3\u4E50\u7528\u6237"),
+      content: replyContent
+    } : null
+  };
+}
+function mapKugouComment(raw2) {
+  const user = raw2?.user_info || raw2?.user || {};
+  const id = String(raw2?.id || raw2?.commentid || raw2?.special_child_id || "").trim();
+  const content = String(raw2?.content || raw2?.content_text || "").trim();
+  if (!id || !content || isPlaceholderCommentContent(content)) return null;
+  const replyContent = String(raw2?.pcontent || raw2?.reply_content || raw2?.be_reply?.content || "").trim();
+  const avatar = String(
+    user.user_pic || user.pic || raw2?.user_pic || raw2?.userpic || ""
+  ).replace(/\{size\}/gi, "100").replace(/^http:\/\//, "https://");
+  const time = normalizeUnixMs(raw2?.addtime || raw2?.add_time || raw2?.update_time || raw2?.time);
+  return {
+    id,
+    userId: String(user.user_id || user.userid || raw2?.user_id || ""),
+    nickname: String(user.user_name || user.nickname || raw2?.user_name || "\u9177\u72D7\u7528\u6237"),
+    avatar,
+    content,
+    time,
+    timeStr: String(raw2?.add_time_str || raw2?.timeStr || ""),
+    likedCount: Number(raw2?.like || raw2?.like_num || raw2?.likes || raw2?.support || 0) || 0,
+    liked: Boolean(raw2?.is_like || raw2?.liked),
+    location: String(raw2?.location || raw2?.city || "").trim(),
+    reply: replyContent && !isPlaceholderCommentContent(replyContent) ? {
+      nickname: String(raw2?.puser || raw2?.reply_user_name || raw2?.be_reply?.user_name || "\u9177\u72D7\u7528\u6237"),
+      content: replyContent
+    } : null
+  };
+}
+function mapQqList(raw2) {
+  if (!Array.isArray(raw2)) return [];
+  return uniqueComments(raw2.map(mapQqComment).filter((item) => Boolean(item)));
+}
+function mapKugouList(raw2) {
+  if (!Array.isArray(raw2)) return [];
+  return uniqueComments(raw2.map(mapKugouComment).filter((item) => Boolean(item)));
+}
+async function resolveQqSong(qq, cache, post) {
+  const type = (post.type || "").trim();
+  const id = String(post.id || "").trim();
+  let songmid = type === "qq" ? id : "";
+  let matched = null;
+  if (!songmid) {
+    const title = String(post.title || "").trim();
+    const artist = String(post.artist || "").trim();
+    if (!title) return { error: fail4(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D QQ \u97F3\u4E50\u8BC4\u8BBA") };
+    const matchKey = hashKey(`qq:${title}|${artist}`);
+    const cachedMatch = cache.read(
+      "qq_comment_match_v1",
+      matchKey
+    );
+    if (cachedMatch && cachedMatch.expires > Date.now() / 1e3 && cachedMatch.songmid) {
+      songmid = cachedMatch.songmid;
+      matched = { type: "qq", songid: songmid, title: cachedMatch.title, author: cachedMatch.author };
+    } else {
+      const query = [title, artist].filter(Boolean).join(" ");
+      const found = await qq.searchByName(query, 1).catch(() => null);
+      const best = pickBestCrossPlayTrack({ title, artist }, found?.tracks || []);
+      if (!best?.songid) return { error: fail4(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684 QQ \u97F3\u4E50\u8BC4\u8BBA") };
+      songmid = String(best.songid);
+      matched = { type: "qq", songid: songmid, title: best.title, author: best.author };
+      cache.write("qq_comment_match_v1", matchKey, {
+        expires: Math.floor(Date.now() / 1e3) + 6 * 3600,
+        songmid,
+        title: best.title,
+        author: best.author
+      });
+    }
+  }
+  const numeric = await qq.songNumericId(songmid).catch(() => 0);
+  if (!numeric) return { error: fail4(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684 QQ \u97F3\u4E50\u8BC4\u8BBA") };
+  return { songmid, songid: String(numeric), matched };
+}
+async function fetchQqCommentPage(songid, offset, limit) {
+  const pagenum = Math.floor(offset / limit);
+  const qs = new URLSearchParams({
+    biztype: "1",
+    topid: songid,
+    cmd: "8",
+    pagenum: String(pagenum),
+    pagesize: String(limit),
+    lasthotcommentid: "",
+    cid: "205360772",
+    reqtype: "2",
+    format: "json"
+  });
+  const res = await request("GET", `https://c.y.qq.com/base/fcgi-bin/fcg_global_comment_h5.fcg?${qs}`, {
+    timeoutMs: 8e3,
+    headers: { Referer: "https://y.qq.com/" }
+  });
+  const json = res.json;
+  if (!json) return null;
+  const comments = json.comment?.commentlist || json.comment?.commentList;
+  const hot = json.hot_comment?.commentlist || json.hot_comment?.commentList;
+  if (!Array.isArray(comments) && !Array.isArray(hot)) return null;
+  return { json, via: "h5" };
+}
+async function resolveKugouSong(cache, post) {
+  const title = String(post.title || "").trim();
+  const artist = String(post.artist || "").trim();
+  if (!title) return { error: fail4(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D\u9177\u72D7\u8BC4\u8BBA") };
+  const matchKey = hashKey(`kugou:${title}|${artist}`);
+  const cachedMatch = cache.read(
+    "kugou_comment_match_v1",
+    matchKey
+  );
+  if (cachedMatch && cachedMatch.expires > Date.now() / 1e3 && cachedMatch.hash) {
+    return {
+      hash: cachedMatch.hash,
+      mixsongid: cachedMatch.mixsongid,
+      matched: { type: "kugou", songid: cachedMatch.hash, title: cachedMatch.title, author: cachedMatch.author }
+    };
+  }
+  const query = [title, artist].filter(Boolean).join(" ");
+  const found = await searchKugouSongs(query, 1, 8).catch(() => []);
+  const best = pickBestCrossPlayTrack(
+    { title, artist },
+    toMatchTracks(found.map((item) => ({ songid: item.kgHash, title: item.name, author: item.artists })))
+  );
+  const hit = found.find((item) => item.kgHash === best?.songid) || found[0];
+  if (!hit?.kgHash || !best) return { error: fail4(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684\u9177\u72D7\u8BC4\u8BBA") };
+  cache.write("kugou_comment_match_v1", matchKey, {
+    expires: Math.floor(Date.now() / 1e3) + 6 * 3600,
+    hash: hit.kgHash,
+    mixsongid: String(hit.id || ""),
+    title: hit.name,
+    author: hit.artists
+  });
+  return {
+    hash: hit.kgHash,
+    mixsongid: String(hit.id || ""),
+    matched: { type: "kugou", songid: hit.kgHash, title: hit.name, author: hit.artists }
+  };
+}
+async function fetchKugouCommentPage(hash, mixsongid, offset, limit) {
+  const page = Math.floor(offset / limit) + 1;
+  const tries = [
+    `https://mcomment.kugou.com/index.php?r=commentsv2/getCommentWithLike&code=fc4be23b4e972707f36b8a828a93ba8a&hash=${encodeURIComponent(hash)}&p=${page}&pagesize=${limit}`,
+    mixsongid ? `https://mcomment.kugou.com/index.php?r=commentsv2/getCommentWithLike&code=fc4be23b4e972707f36b8a828a93ba8a&mixsongid=${encodeURIComponent(mixsongid)}&childrenid=${encodeURIComponent(mixsongid)}&p=${page}&pagesize=${limit}` : ""
+  ].filter(Boolean);
+  for (const url of tries) {
+    const res = await request("GET", url, {
+      timeoutMs: 8e3,
+      headers: { Referer: "https://www.kugou.com/" }
+    });
+    const json = res.json;
+    const list = json?.list || json?.data?.list || json?.comments || json?.data?.comments;
+    const hot = json?.weightList || json?.data?.weightList || json?.hotList;
+    if (Array.isArray(list) || Array.isArray(hot)) return { json, via: "mcomment" };
+  }
+  return null;
 }
 async function resolveNeteaseSong(netease, cache, post) {
   const type = (post.type || "netease").trim();
   const id = String(post.id || "").trim();
   if (type === "netease" || !type && /^\d+$/.test(id)) {
-    if (!/^\d+$/.test(id)) return { error: fail3(400, "\u6B4C\u66F2 ID \u65E0\u6548") };
+    if (!/^\d+$/.test(id)) return { error: fail4(400, "\u6B4C\u66F2 ID \u65E0\u6548") };
     return { songid: id, matched: null };
   }
   const title = String(post.title || "").trim();
   const artist = String(post.artist || "").trim();
-  if (!title) return { error: fail3(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D\u7F51\u6613\u4E91\u8BC4\u8BBA") };
+  if (!title) return { error: fail4(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D\u7F51\u6613\u4E91\u8BC4\u8BBA") };
   const matchKey = hashKey(`${type}:${title}|${artist}`);
   const cachedMatch = cache.read(
     "netease_comment_match_v1",
@@ -1055,7 +1503,7 @@ async function resolveNeteaseSong(netease, cache, post) {
   const found = await netease.searchByName(query, 1).catch(() => null);
   const best = pickBestCrossPlayTrack({ title, artist }, found?.tracks || []);
   if (!best?.songid || !/^\d+$/.test(String(best.songid))) {
-    return { error: fail3(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684\u7F51\u6613\u4E91\u6B4C\u66F2\u8BC4\u8BBA") };
+    return { error: fail4(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684\u7F51\u6613\u4E91\u6B4C\u66F2\u8BC4\u8BBA") };
   }
   cache.write("netease_comment_match_v1", matchKey, {
     expires: Math.floor(Date.now() / 1e3) + 6 * 3600,
@@ -1068,26 +1516,17 @@ async function resolveNeteaseSong(netease, cache, post) {
     matched: { type: "netease", songid: String(best.songid), title: best.title, author: best.author }
   };
 }
-async function loadSongComments(netease, cache, post, cookie = "") {
-  const id = String(post.id || post.songid || "").trim();
-  const title = String(post.title || "").trim();
-  const artist = String(post.artist || post.author || "").trim();
-  const type = String(post.type || "").trim();
-  if (!id && !title) return fail3(400, "\u7F3A\u5C11\u6B4C\u66F2\u4FE1\u606F");
-  let offset = Math.max(0, Number(post.offset || 0) || 0);
-  let limit = Number(post.limit || 20) || 20;
-  if (limit < 1) limit = 20;
-  if (limit > 50) limit = 50;
-  const resolved = await resolveNeteaseSong(netease, cache, { type, id, title, artist });
+async function loadNeteaseComments(netease, cache, post, offset, limit, cookie) {
+  const resolved = await resolveNeteaseSong(netease, cache, post);
   if ("error" in resolved) return resolved.error;
   const { songid, matched } = resolved;
-  const cacheKey = pageCacheKey(songid, offset, limit);
-  const cached = cache.read("netease_comments_v1", cacheKey);
+  const cacheKey = pageCacheKey(`netease:${songid}`, offset, limit);
+  const cached = cache.read("song_comments_v1", cacheKey);
   if (cached?.payload && cached.expires > Date.now() / 1e3) {
-    return ok3({ ...cached.payload, matched: cached.payload.matched || matched });
+    return ok4({ ...cached.payload, matched: cached.payload.matched || matched });
   }
   const page = await fetchNeteaseCommentPage(songid, offset, limit, cookie);
-  if (!page) return fail3(502, "\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+  if (!page) return fail4(502, "\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
   const payload = {
     total: Number(page.json.total || 0) || 0,
     more: Boolean(page.json.more),
@@ -1095,39 +1534,155 @@ async function loadSongComments(netease, cache, post, cookie = "") {
     limit,
     hotComments: offset === 0 ? uniqueComments(mapList(page.json.topComments).concat(mapList(page.json.hotComments))) : [],
     comments: mapList(page.json.comments),
+    source: "netease",
+    sourceId: songid,
     neteaseId: songid,
     matched,
     via: page.via
   };
-  cache.write("netease_comments_v1", cacheKey, {
+  cache.write("song_comments_v1", cacheKey, {
     expires: Math.floor(Date.now() / 1e3) + 90,
     payload
   });
-  return ok3(payload);
+  return ok4(payload);
 }
-var MOBILE_ONLY_COMMENT_RE, DELETED_COMMENT_RE;
+async function loadQqComments(qq, cache, post, offset, limit) {
+  const resolved = await resolveQqSong(qq, cache, post);
+  if ("error" in resolved) return resolved.error;
+  const cacheKey = pageCacheKey(`qq:${resolved.songid}`, offset, limit);
+  const cached = cache.read("song_comments_v1", cacheKey);
+  if (cached?.payload && cached.expires > Date.now() / 1e3) {
+    return ok4({ ...cached.payload, matched: cached.payload.matched || resolved.matched });
+  }
+  const page = await fetchQqCommentPage(resolved.songid, offset, limit);
+  if (!page) return fail4(502, "QQ \u97F3\u4E50\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+  const comments = mapQqList(page.json.comment?.commentlist || page.json.comment?.commentList);
+  const hotComments = offset === 0 ? mapQqList(page.json.hot_comment?.commentlist || page.json.hot_comment?.commentList) : [];
+  const total = Number(page.json.comment?.commenttotal || page.json.comment?.commentTotal || comments.length) || 0;
+  const payload = {
+    total,
+    more: offset + comments.length < total,
+    offset,
+    limit,
+    hotComments,
+    comments,
+    source: "qq",
+    sourceId: resolved.songid,
+    neteaseId: resolved.songid,
+    matched: resolved.matched,
+    via: page.via
+  };
+  cache.write("song_comments_v1", cacheKey, {
+    expires: Math.floor(Date.now() / 1e3) + 90,
+    payload
+  });
+  return ok4(payload);
+}
+async function loadKugouComments(cache, post, offset, limit) {
+  const resolved = await resolveKugouSong(cache, post);
+  if ("error" in resolved) return resolved.error;
+  const cacheKey = pageCacheKey(`kugou:${resolved.hash}`, offset, limit);
+  const cached = cache.read("song_comments_v1", cacheKey);
+  if (cached?.payload && cached.expires > Date.now() / 1e3) {
+    return ok4({ ...cached.payload, matched: cached.payload.matched || resolved.matched });
+  }
+  const page = await fetchKugouCommentPage(resolved.hash, resolved.mixsongid, offset, limit);
+  if (!page) return fail4(502, "\u9177\u72D7\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+  const json = page.json;
+  const comments = mapKugouList(json.list || json.data?.list || json.comments || json.data?.comments);
+  const hotComments = offset === 0 ? mapKugouList(json.weightList || json.data?.weightList || json.hotList || json.data?.hotList) : [];
+  const total = Number(json.count || json.data?.count || json.total || comments.length) || 0;
+  const payload = {
+    total,
+    more: offset + comments.length < total,
+    offset,
+    limit,
+    hotComments,
+    comments,
+    source: "kugou",
+    sourceId: resolved.hash,
+    neteaseId: resolved.hash,
+    matched: resolved.matched,
+    via: page.via
+  };
+  cache.write("song_comments_v1", cacheKey, {
+    expires: Math.floor(Date.now() / 1e3) + 90,
+    payload
+  });
+  return ok4(payload);
+}
+async function loadSongComments(netease, qq, cache, post, cookies = {}) {
+  const id = String(post.id || post.songid || "").trim();
+  const title = String(post.title || "").trim();
+  const artist = String(post.artist || post.author || "").trim();
+  const type = String(post.type || "").trim();
+  if (!id && !title) return fail4(400, "\u7F3A\u5C11\u6B4C\u66F2\u4FE1\u606F");
+  let offset = Math.max(0, Number(post.offset || 0) || 0);
+  let limit = Number(post.limit || 20) || 20;
+  if (limit < 1) limit = 20;
+  if (limit > 50) limit = 50;
+  const locked = isCommentSource(post.source) ? post.source : null;
+  const wantBest = post.mode === "best" || post.preferred === "auto";
+  const preferred = isCommentSource(post.preferred) ? post.preferred : "netease";
+  const ctx = { type, id, title, artist };
+  const loadOne = (source) => source === "qq" ? loadQqComments(qq, cache, ctx, offset, limit) : source === "kugou" ? loadKugouComments(cache, ctx, offset, limit) : loadNeteaseComments(netease, cache, ctx, offset, limit, cookies.netease || "");
+  if (locked || offset > 0) {
+    const source = locked || preferred;
+    return loadOne(source);
+  }
+  if (wantBest) {
+    const results = await Promise.all(
+      COMMENT_SOURCE_FALLBACK.map(async (source) => ({ source, result: await loadOne(source) }))
+    );
+    let best = null;
+    let bestTotal = -1;
+    let lastError2 = null;
+    for (const { result } of results) {
+      if (result.code === 200 && result.data && hasUsableComments(result.data)) {
+        const total = Number(result.data.total) || 0;
+        if (total > bestTotal) {
+          bestTotal = total;
+          best = result;
+        }
+      } else if (result.code !== 200) {
+        lastError2 = result;
+      } else {
+        lastError2 = fail4(404, "\u6682\u65E0\u8BC4\u8BBA");
+      }
+    }
+    return best || lastError2 || fail4(404, "\u6682\u65E0\u8BC4\u8BBA");
+  }
+  const order = commentSourceOrder(preferred);
+  let lastError = null;
+  for (const source of order) {
+    const result = await loadOne(source);
+    if (result.code === 400 && source === order[0] && !title) return result;
+    if (result.code === 200 && result.data && hasUsableComments(result.data)) return result;
+    lastError = result.code === 200 ? fail4(404, "\u6682\u65E0\u8BC4\u8BBA") : result;
+  }
+  return lastError || fail4(404, "\u6682\u65E0\u8BC4\u8BBA");
+}
+var MOBILE_ONLY_COMMENT_RE, DELETED_COMMENT_RE, COMMENT_SOURCE_FALLBACK;
 var init_comments = __esm({
-  "src/comments.ts"() {
+  "server/src/comments.ts"() {
     "use strict";
     init_crossPlay();
     init_netease();
+    init_http();
+    init_kugouLyrics();
     init_util();
     MOBILE_ONLY_COMMENT_RE = /\[(?:发布了(?:语音|图片|视频|动态)|语音|图片|视频)[^\]]*?(?:请前往|前往).*?(?:移动端|手机).*?版本[^\]]*\]/u;
     DELETED_COMMENT_RE = /^\[(?:该)?评论已删除\]$/u;
+    COMMENT_SOURCE_FALLBACK = ["netease", "qq", "kugou"];
   }
 });
 
-// src/index.ts
-import { createServer } from "node:http";
-import { dirname as dirname2, join as join7, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
-// src/app.ts
+// server/src/app.ts
 import { createReadStream, existsSync as existsSync4, statSync as statSync2 } from "node:fs";
-import { join as join6, normalize, extname } from "node:path";
+import { join as join7, normalize, extname } from "node:path";
 import { Readable } from "node:stream";
 
-// node_modules/hono/dist/compose.js
+// server/node_modules/hono/dist/compose.js
 var compose = (middleware, onError, onNotFound) => {
   return (context, next) => {
     let index = -1;
@@ -1171,10 +1726,10 @@ var compose = (middleware, onError, onNotFound) => {
   };
 };
 
-// node_modules/hono/dist/request/constants.js
+// server/node_modules/hono/dist/request/constants.js
 var GET_MATCH_RESULT = /* @__PURE__ */ Symbol();
 
-// node_modules/hono/dist/utils/buffer.js
+// server/node_modules/hono/dist/utils/buffer.js
 var bufferToFormData = (arrayBuffer, contentType) => {
   const response = new Response(arrayBuffer, {
     headers: {
@@ -1185,7 +1740,7 @@ var bufferToFormData = (arrayBuffer, contentType) => {
   return response.formData();
 };
 
-// node_modules/hono/dist/utils/body.js
+// server/node_modules/hono/dist/utils/body.js
 var isRawRequest = (request2) => "headers" in request2;
 var parseBody = async (request2, options = /* @__PURE__ */ Object.create(null)) => {
   const { all = false, dot = false } = options;
@@ -1271,7 +1826,7 @@ var handleParsingNestedValues = (form, key, value) => {
   });
 };
 
-// node_modules/hono/dist/utils/url.js
+// server/node_modules/hono/dist/utils/url.js
 var splitPath = (path) => {
   const paths = path.split("/");
   if (paths[0] === "") {
@@ -1473,7 +2028,7 @@ var getQueryParams = (url, key) => {
 };
 var decodeURIComponent_ = decodeURIComponent;
 
-// node_modules/hono/dist/request.js
+// server/node_modules/hono/dist/request.js
 var HonoRequest = class {
   /**
    * `.raw` can get the raw Request object.
@@ -1754,7 +2309,7 @@ var HonoRequest = class {
   }
 };
 
-// node_modules/hono/dist/utils/html.js
+// server/node_modules/hono/dist/utils/html.js
 var HtmlEscapedCallbackPhase = {
   Stringify: 1,
   BeforeStream: 2,
@@ -1796,7 +2351,7 @@ var resolveCallback = async (str, phase, preserveCallbacks, context, buffer) => 
   }
 };
 
-// node_modules/hono/dist/context.js
+// server/node_modules/hono/dist/context.js
 var TEXT_PLAIN = "text/plain; charset=UTF-8";
 var setDefaultContentType = (contentType, headers) => {
   return {
@@ -2068,11 +2623,11 @@ var Context = class {
     }
     return Object.fromEntries(this.#var);
   }
-  #newResponse(data, arg2, headers) {
+  #newResponse(data, arg, headers) {
     let responseHeaders = this.#res ? new Headers(this.#res.headers) : this.#preparedHeaders;
-    if (typeof arg2 === "object" && arg2.headers) {
+    if (typeof arg === "object" && arg.headers) {
       responseHeaders ??= new Headers();
-      for (const [key, value] of new Headers(arg2.headers)) {
+      for (const [key, value] of new Headers(arg.headers)) {
         if (key === "set-cookie") {
           responseHeaders.append(key, value);
         } else {
@@ -2104,7 +2659,7 @@ var Context = class {
         }
       }
     }
-    const status = typeof arg2 === "number" ? arg2 : arg2?.status ?? this.#status;
+    const status = typeof arg === "number" ? arg : arg?.status ?? this.#status;
     return createResponseInstance(data, {
       status,
       headers: responseHeaders ?? headers
@@ -2132,7 +2687,7 @@ var Context = class {
    * })
    * ```
    */
-  body = (data, arg2, headers) => this.#newResponse(data, arg2, headers);
+  body = (data, arg, headers) => this.#newResponse(data, arg, headers);
   /**
    * `.text()` can render text as `Content-Type:text/plain`.
    *
@@ -2145,10 +2700,10 @@ var Context = class {
    * })
    * ```
    */
-  text = (text, arg2, headers) => {
-    return !this.#preparedHeaders && !this.#status && !arg2 && !headers && !this.finalized ? new Response(text) : this.#newResponse(
+  text = (text, arg, headers) => {
+    return !this.#preparedHeaders && !this.#status && !arg && !headers && !this.finalized ? new Response(text) : this.#newResponse(
       text,
-      arg2,
+      arg,
       setDefaultContentType(TEXT_PLAIN, headers)
     );
   };
@@ -2164,15 +2719,15 @@ var Context = class {
    * })
    * ```
    */
-  json = (object, arg2, headers) => {
+  json = (object, arg, headers) => {
     return this.#newResponse(
       JSON.stringify(object),
-      arg2,
+      arg,
       setDefaultContentType("application/json", headers)
     );
   };
-  html = (html, arg2, headers) => {
-    const res = (html2) => this.#newResponse(html2, arg2, setDefaultContentType("text/html; charset=UTF-8", headers));
+  html = (html, arg, headers) => {
+    const res = (html2) => this.#newResponse(html2, arg, setDefaultContentType("text/html; charset=UTF-8", headers));
     return typeof html === "object" ? resolveCallback(html, HtmlEscapedCallbackPhase.Stringify, false, {}).then(res) : res(html);
   };
   /**
@@ -2218,7 +2773,7 @@ var Context = class {
   };
 };
 
-// node_modules/hono/dist/router.js
+// server/node_modules/hono/dist/router.js
 var METHOD_NAME_ALL = "ALL";
 var METHOD_NAME_ALL_LOWERCASE = "all";
 var METHODS = ["get", "post", "put", "delete", "options", "patch", "query"];
@@ -2226,10 +2781,10 @@ var MESSAGE_MATCHER_IS_ALREADY_BUILT = "Can not add a route since the matcher is
 var UnsupportedPathError = class extends Error {
 };
 
-// node_modules/hono/dist/utils/constants.js
+// server/node_modules/hono/dist/utils/constants.js
 var COMPOSED_HANDLER = "__COMPOSED_HANDLER";
 
-// node_modules/hono/dist/hono-base.js
+// server/node_modules/hono/dist/hono-base.js
 var notFoundHandler = (c) => {
   return c.text("404 Not Found", 404);
 };
@@ -2335,14 +2890,14 @@ var Hono = class _Hono {
    * app.route("/api", app2) // GET /api/user
    * ```
    */
-  route(path, app2) {
+  route(path, app) {
     const subApp = this.basePath(path);
-    app2.routes.map((r) => {
+    app.routes.map((r) => {
       let handler;
-      if (app2.errorHandler === errorHandler) {
+      if (app.errorHandler === errorHandler) {
         handler = r.handler;
       } else {
-        handler = async (c, next) => (await compose([], app2.errorHandler)(c, () => r.handler(c, next))).res;
+        handler = async (c, next) => (await compose([], app.errorHandler)(c, () => r.handler(c, next))).res;
         handler[COMPOSED_HANDLER] = r.handler;
       }
       subApp.#addRoute(r.method, r.path, handler, r.basePath);
@@ -2606,7 +3161,7 @@ var Hono = class _Hono {
   };
 };
 
-// node_modules/hono/dist/router/reg-exp-router/matcher.js
+// server/node_modules/hono/dist/router/reg-exp-router/matcher.js
 var emptyParam = [];
 function match(method, path) {
   const matchers = this.buildAllMatchers();
@@ -2627,7 +3182,7 @@ function match(method, path) {
   return match2(method, path);
 }
 
-// node_modules/hono/dist/router/reg-exp-router/node.js
+// server/node_modules/hono/dist/router/reg-exp-router/node.js
 var LABEL_REG_EXP_STR = "[^/]+";
 var ONLY_WILDCARD_REG_EXP_STR = ".*";
 var TAIL_WILDCARD_REG_EXP_STR = "(?:|/.*)";
@@ -2734,7 +3289,7 @@ var Node = class _Node {
   }
 };
 
-// node_modules/hono/dist/router/reg-exp-router/trie.js
+// server/node_modules/hono/dist/router/reg-exp-router/trie.js
 var Trie = class {
   #context = { varIndex: 0 };
   #root = new Node();
@@ -2798,7 +3353,7 @@ var Trie = class {
   }
 };
 
-// node_modules/hono/dist/router/reg-exp-router/router.js
+// server/node_modules/hono/dist/router/reg-exp-router/router.js
 var wildcardRegExpCache = /* @__PURE__ */ Object.create(null);
 function buildWildcardRegExp(path) {
   return wildcardRegExpCache[path] ??= new RegExp(
@@ -2956,7 +3511,7 @@ var RegExpRouter = class {
   }
 };
 
-// node_modules/hono/dist/router/smart-router/router.js
+// server/node_modules/hono/dist/router/smart-router/router.js
 var SmartRouter = class {
   name = "SmartRouter";
   #routers = [];
@@ -3011,7 +3566,7 @@ var SmartRouter = class {
   }
 };
 
-// node_modules/hono/dist/router/trie-router/node.js
+// server/node_modules/hono/dist/router/trie-router/node.js
 var emptyParams = /* @__PURE__ */ Object.create(null);
 var hasChildren = (children) => {
   for (const _ in children) {
@@ -3195,7 +3750,7 @@ var Node2 = class _Node2 {
   }
 };
 
-// node_modules/hono/dist/router/trie-router/router.js
+// server/node_modules/hono/dist/router/trie-router/router.js
 var TrieRouter = class {
   name = "TrieRouter";
   #node;
@@ -3217,7 +3772,7 @@ var TrieRouter = class {
   }
 };
 
-// node_modules/hono/dist/hono.js
+// server/node_modules/hono/dist/hono.js
 var Hono2 = class extends Hono {
   /**
    * Creates an instance of the Hono class.
@@ -3232,11 +3787,13 @@ var Hono2 = class extends Hono {
   }
 };
 
-// src/accounts/netease.ts
-init_netease();
+// server/src/accounts/kugou.ts
+init_http();
+init_kugouLyrics();
+import { createHash as createHash3 } from "node:crypto";
 import { join as join2 } from "node:path";
 
-// src/accounts/session.ts
+// server/src/accounts/session.ts
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 function readJson(path) {
@@ -3271,7 +3828,7 @@ function cookieToMap(cookie) {
   }
   return map;
 }
-function mergeCookies2(existing, incoming) {
+function mergeCookies(existing, incoming) {
   const map = cookieToMap(existing);
   const extra = cookieToMap(incoming);
   for (const [k, v] of Object.entries(extra)) {
@@ -3305,11 +3862,293 @@ function qqGuid() {
   }).toUpperCase();
 }
 
-// src/accounts/netease.ts
+// server/src/accounts/kugou.ts
+var WEB_SIGN_KEY = "NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt";
+var QR_APPID = "1014";
+var QR_SRCAPPID = "2919";
+function md52(value) {
+  return createHash3("md5").update(value).digest("hex");
+}
+function signWeb(params) {
+  const keys = Object.keys(params).sort();
+  let raw2 = WEB_SIGN_KEY;
+  for (const key of keys) raw2 += `${key}=${params[key]}`;
+  raw2 += WEB_SIGN_KEY;
+  return md52(raw2);
+}
+function kugouMid(seed) {
+  return BigInt(`0x${md52(seed)}`).toString();
+}
+function decodeComponent(value) {
+  try {
+    return decodeURIComponent(value.replace(/\+/g, " "));
+  } catch {
+    return value;
+  }
+}
+function parseInnerKuGoo(raw2) {
+  const map = {};
+  for (const part of raw2.split("&")) {
+    const eq = part.indexOf("=");
+    if (eq <= 0) continue;
+    map[part.slice(0, eq)] = decodeComponent(part.slice(eq + 1));
+  }
+  return map;
+}
+function extractCredentials(cookie) {
+  const map = cookieToMap(cookie);
+  const inner = parseInnerKuGoo(map.KuGoo || map.kugoo || map.Kugoo || "");
+  const userid = String(
+    map.userid || map.KugooID || map.kugouid || inner.KugooID || inner.userid || ""
+  ).trim();
+  const token = String(map.token || map.t || inner.t || inner.token || "").trim();
+  const nickname = String(map.NickName || inner.NickName || inner.nickname || "").trim();
+  const avatar = String(map.Pic || inner.Pic || inner.pic || map.photo || "").trim();
+  return { userid, token, nickname, avatar };
+}
+function isVipValue(value) {
+  const n = Number(value);
+  if (Number.isFinite(n) && n > 0) return true;
+  const text = String(value || "").toLowerCase();
+  return text === "1" || text === "true" || text === "vip";
+}
+var KugouAccount = class {
+  authFile;
+  qrFile;
+  constructor(cache) {
+    this.authFile = join2(cache.dir("kugou_auth"), "session.json");
+    this.qrFile = join2(cache.dir("kugou_auth"), "qr_session.json");
+  }
+  read() {
+    return readJson(this.authFile);
+  }
+  write(data) {
+    writeJson(this.authFile, { ...data, updatedAt: Math.floor(Date.now() / 1e3) });
+  }
+  status() {
+    const auth = this.read();
+    if (!auth) return { loggedIn: false };
+    return {
+      loggedIn: true,
+      uid: Number(auth.userid) || 0,
+      nickname: auth.nickname,
+      avatar: auth.avatar || "",
+      vip: auth.vip ?? 0,
+      updatedAt: auth.updatedAt || 0
+    };
+  }
+  sessionCookie() {
+    return this.read()?.cookie ?? null;
+  }
+  credentials() {
+    const auth = this.read();
+    if (!auth?.userid || !auth.token) return null;
+    return { userid: auth.userid, token: auth.token };
+  }
+  async handle(action, post) {
+    switch (action) {
+      case "kugou_status":
+        return ok(await this.statusFresh());
+      case "kugou_logout":
+        removeFile(this.authFile);
+        removeFile(this.qrFile);
+        return ok({ ok: true });
+      case "kugou_cookie_save":
+        return this.cookieSave(post.cookie || "");
+      case "kugou_qr_key":
+        return this.qrKey();
+      case "kugou_qr_check":
+        return this.qrCheck(post.key || "");
+      default:
+        return fail(400, "\u672A\u77E5\u64CD\u4F5C");
+    }
+  }
+  async statusFresh() {
+    const auth = this.read();
+    if (!auth) return { loggedIn: false };
+    const profile = await this.fetchProfile(auth.userid, auth.token, auth.cookie).catch(() => null);
+    if (!profile) return this.status();
+    this.write({
+      ...auth,
+      nickname: profile.nickname || auth.nickname,
+      avatar: profile.avatar || auth.avatar,
+      vip: profile.vip
+    });
+    return this.status();
+  }
+  async cookieSave(raw2) {
+    const cookie = normalizeCookie(raw2);
+    if (!cookie) return fail(400, "\u8BF7\u7C98\u8D34\u9177\u72D7 Cookie");
+    const creds = extractCredentials(cookie);
+    if (!creds.userid || !creds.token) {
+      return fail(400, "Cookie \u9700\u5305\u542B userid \u4E0E token\uFF08\u6216 KuGoo\uFF09");
+    }
+    const profile = await this.fetchProfile(creds.userid, creds.token, cookie).catch(() => null);
+    this.write({
+      cookie,
+      userid: creds.userid,
+      token: creds.token,
+      nickname: profile?.nickname || creds.nickname || "\u9177\u72D7\u7528\u6237",
+      avatar: profile?.avatar || creds.avatar || "",
+      vip: profile?.vip ?? 0
+    });
+    return ok(this.status());
+  }
+  async fetchProfile(userid, token, cookie = "") {
+    const tries = [
+      () => requestKugou(
+        "http://userinfo.user.kugou.com/v2/get_user_info",
+        { userid, token },
+        "UserInfo"
+      ),
+      () => requestKugou(
+        "https://gatewayretry.kugou.com/v1/get_user_info",
+        { userid, token },
+        "UserInfo",
+        { "x-router": "userinfo.kugou.com" }
+      )
+    ];
+    for (const tryFetch of tries) {
+      try {
+        const json = await tryFetch();
+        const data = json?.data || json?.user || json;
+        const nickname = String(
+          data?.nickname || data?.nick_name || data?.user_name || data?.username || ""
+        ).trim();
+        const avatar = String(
+          data?.pic || data?.photo || data?.headimg || data?.avatar || data?.userpic || ""
+        ).replace(/\{size\}/gi, "150").trim();
+        const vip = isVipValue(data?.vip_type) || isVipValue(data?.is_vip) || isVipValue(data?.m_type) || isVipValue(data?.user_type) || isVipValue(data?.vip) || isVipValue(data?.vip_info?.is_vip) || isVipValue(data?.vip_info?.vip_type) ? 1 : 0;
+        if (nickname || avatar || json) {
+          return {
+            nickname: nickname || cookieGet(cookie, "NickName") || "\u9177\u72D7\u7528\u6237",
+            avatar,
+            vip
+          };
+        }
+      } catch {
+      }
+    }
+    if (cookie) {
+      const fallback = extractCredentials(cookie);
+      if (fallback.nickname || fallback.avatar) {
+        return { nickname: fallback.nickname || "\u9177\u72D7\u7528\u6237", avatar: fallback.avatar, vip: 0 };
+      }
+    }
+    return null;
+  }
+  async qrKey() {
+    const clienttime = Math.floor(Date.now() / 1e3);
+    const mid = kugouMid(`ryanmusic-${Date.now()}`);
+    const uuid = md52(`${mid}${clienttime}`);
+    const params = {
+      appid: QR_APPID,
+      clientver: "2000",
+      clienttime,
+      mid,
+      uuid,
+      dfid: "-",
+      plat: 4,
+      type: 1,
+      srcappid: QR_SRCAPPID,
+      qrcode_txt: `https://h5.kugou.com/apps/loginQRCode/html/index.html?appid=${QR_APPID}&`
+    };
+    params.signature = signWeb(params);
+    const url = new URL("https://login-user.kugou.com/v2/qrcode");
+    for (const [key2, value] of Object.entries(params)) url.searchParams.set(key2, String(value));
+    const res = await request("GET", url.toString(), {
+      timeoutMs: 8e3,
+      headers: {
+        Referer: "https://www.kugou.com/",
+        Origin: "https://www.kugou.com",
+        mid: String(mid),
+        dfid: "-",
+        clienttime: String(clienttime)
+      }
+    });
+    const key = String(res.json?.data?.qrcode || res.json?.qrcode || "").trim();
+    if (!key) {
+      const detail = String(res.json?.data || res.json?.error_msg || res.json?.error_code || "").trim();
+      return fail(502, detail ? `\u65E0\u6CD5\u83B7\u53D6\u9177\u72D7\u4E8C\u7EF4\u7801\uFF08${detail}\uFF09\uFF0C\u8BF7\u6539\u7528 Cookie` : "\u65E0\u6CD5\u83B7\u53D6\u9177\u72D7\u4E8C\u7EF4\u7801\uFF0C\u8BF7\u6539\u7528 Cookie");
+    }
+    writeJson(this.qrFile, { key, createdAt: Date.now() });
+    const qrurl = `https://h5.kugou.com/apps/loginQRCode/html/index.html?appid=${QR_APPID}&qrcode=${encodeURIComponent(key)}`;
+    const qrimg = String(res.json?.data?.qrcode_img || res.json?.data?.qrcode_url || "").trim();
+    return ok({
+      key,
+      qrurl,
+      qrimg: qrimg || `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrurl)}`
+    });
+  }
+  async qrCheck(keyHint) {
+    const session = readJson(this.qrFile);
+    const key = (keyHint || session?.key || "").trim();
+    if (!key) return fail(400, "\u7F3A\u5C11\u4E8C\u7EF4\u7801 key");
+    const clienttime = Math.floor(Date.now() / 1e3);
+    const mid = kugouMid(`ryanmusic-check-${clienttime}`);
+    const uuid = md52(`${mid}${clienttime}`);
+    const params = {
+      appid: QR_APPID,
+      clientver: "2000",
+      clienttime,
+      mid,
+      uuid,
+      dfid: "-",
+      plat: 4,
+      srcappid: QR_SRCAPPID,
+      qrcode: key
+    };
+    params.signature = signWeb(params);
+    const url = new URL("https://login-user.kugou.com/v2/get_userinfo_qrcode");
+    for (const [k, value] of Object.entries(params)) url.searchParams.set(k, String(value));
+    const res = await request("GET", url.toString(), {
+      timeoutMs: 8e3,
+      headers: {
+        Referer: "https://www.kugou.com/",
+        Origin: "https://www.kugou.com",
+        mid: String(mid),
+        dfid: "-",
+        clienttime: String(clienttime)
+      }
+    });
+    const data = res.json?.data || {};
+    const status = Number(data.status ?? data.qrcode_status ?? res.json?.status ?? 1);
+    if (status === 0) return ok({ status: 0, message: "\u4E8C\u7EF4\u7801\u5DF2\u8FC7\u671F" });
+    if (status === 2) return ok({ status: 2, message: "\u5DF2\u626B\u7801\uFF0C\u8BF7\u5728\u624B\u673A\u4E0A\u786E\u8BA4" });
+    if (status !== 4) return ok({ status: 1, message: "\u7B49\u5F85\u626B\u7801\u2026" });
+    const userid = String(data.userid || data.user_id || "").trim();
+    const token = String(data.token || "").trim();
+    if (!userid || !token) return fail(502, "\u626B\u7801\u6210\u529F\u4F46\u672A\u62FF\u5230\u767B\u5F55\u51ED\u8BC1\uFF0C\u8BF7\u6539\u7528 Cookie");
+    const cookie = mergeCookies(res.cookies || "", `userid=${userid}; token=${token}`);
+    const nickname = String(data.nickname || data.nick_name || "\u9177\u72D7\u7528\u6237").trim();
+    const avatar = String(data.pic || data.photo || data.headimg || "").trim();
+    const profile = await this.fetchProfile(userid, token, cookie).catch(() => null);
+    this.write({
+      cookie,
+      userid,
+      token,
+      nickname: profile?.nickname || nickname,
+      avatar: profile?.avatar || avatar,
+      vip: profile?.vip ?? 0
+    });
+    removeFile(this.qrFile);
+    return ok({ status: 4, loggedIn: true, ...this.status() });
+  }
+};
+function ok(data) {
+  return { code: 200, error: "", data };
+}
+function fail(code, error, data = "") {
+  return { code, error, data };
+}
+
+// server/src/accounts/netease.ts
+init_netease();
+import { join as join3 } from "node:path";
 var NeteaseAccount = class {
   constructor(cache, netease) {
     this.netease = netease;
-    this.file = join2(cache.dir("netease_auth"), "session.json");
+    this.file = join3(cache.dir("netease_auth"), "session.json");
   }
   file;
   read() {
@@ -3340,9 +4179,9 @@ var NeteaseAccount = class {
   async handle(action, post) {
     switch (action) {
       case "netease_status":
-        return ok(this.status());
+        return ok2(this.status());
       case "netease_logout":
-        return ok(this.logout());
+        return ok2(this.logout());
       case "netease_cookie_save":
         return this.cookieSave(post.cookie || "");
       case "netease_qr_key":
@@ -3351,6 +4190,12 @@ var NeteaseAccount = class {
         return this.qrCheck(post.key || "");
       case "netease_playlists":
         return this.playlists();
+      case "netease_recommend_feed":
+        return this.recommendFeed(post);
+      case "netease_daily_songs":
+        return this.dailySongs();
+      case "netease_personal_fm":
+        return this.personalFm();
       case "netease_likelist":
         return this.likelist(post);
       case "netease_like":
@@ -3364,7 +4209,7 @@ var NeteaseAccount = class {
       case "netease_songs_by_ids":
         return this.songsByIds(post.ids || "");
       default:
-        return fail(400, "\u672A\u77E5\u64CD\u4F5C");
+        return fail2(400, "\u672A\u77E5\u64CD\u4F5C");
     }
   }
   async accountGet(cookie) {
@@ -3384,11 +4229,11 @@ var NeteaseAccount = class {
   }
   async cookieSave(raw2) {
     const cookie = normalizeCookie(raw2);
-    if (!cookie || !/MUSIC_U=/.test(cookie)) return fail(400, "\u8BF7\u7C98\u8D34\u5305\u542B MUSIC_U \u7684 Cookie");
+    if (!cookie || !/MUSIC_U=/.test(cookie)) return fail2(400, "\u8BF7\u7C98\u8D34\u5305\u542B MUSIC_U \u7684 Cookie");
     const account = await this.accountGet(cookie);
-    if (!account) return fail(401, "Cookie \u65E0\u6548\u6216\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u91CD\u65B0\u4ECE\u6D4F\u89C8\u5668\u590D\u5236");
+    if (!account) return fail2(401, "Cookie \u65E0\u6548\u6216\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u91CD\u65B0\u4ECE\u6D4F\u89C8\u5668\u590D\u5236");
     this.write({ cookie, csrf: cookieCsrf(cookie), ...account });
-    return ok(this.status());
+    return ok2(this.status());
   }
   async qrKey() {
     let unikey = "";
@@ -3406,8 +4251,8 @@ var NeteaseAccount = class {
       unikey = String(res.json?.unikey || "");
       if (unikey) via = "api-t3";
     }
-    if (!unikey) return fail(502, "\u65E0\u6CD5\u83B7\u53D6\u4E8C\u7EF4\u7801\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u6216\u6539\u7528 Cookie");
-    return ok({
+    if (!unikey) return fail2(502, "\u65E0\u6CD5\u83B7\u53D6\u4E8C\u7EF4\u7801\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u6216\u6539\u7528 Cookie");
+    return ok2({
       key: unikey,
       qrurl: `https://music.163.com/login?codekey=${encodeURIComponent(unikey)}`,
       via
@@ -3416,12 +4261,12 @@ var NeteaseAccount = class {
   extractLoginCookie(res) {
     let cookie = res.cookies || "";
     const bodyCookie = res.json?.cookie;
-    if (typeof bodyCookie === "string") cookie = mergeCookies(cookie, bodyCookie);
-    if (Array.isArray(bodyCookie)) cookie = mergeCookies(cookie, bodyCookie.join("; "));
+    if (typeof bodyCookie === "string") cookie = mergeCookies2(cookie, bodyCookie);
+    if (Array.isArray(bodyCookie)) cookie = mergeCookies2(cookie, bodyCookie.join("; "));
     return cookie;
   }
   async qrCheck(key) {
-    if (!key) return fail(400, "\u7F3A\u5C11\u4E8C\u7EF4\u7801 key");
+    if (!key) return fail2(400, "\u7F3A\u5C11\u4E8C\u7EF4\u7801 key");
     const params = { type: 3, key };
     let res = await eapiRequest("/api/login/qrcode/client/login", params, "");
     let via = "eapi";
@@ -3436,11 +4281,11 @@ var NeteaseAccount = class {
       message: String(res.json?.message || ""),
       via
     };
-    if (code !== 803) return ok(payload);
+    if (code !== 803) return ok2(payload);
     let cookie = this.extractLoginCookie(res);
     if (!/MUSIC_U=/.test(cookie)) {
       const retry = await eapiRequest("/api/login/qrcode/client/login", params, "");
-      cookie = mergeCookies(cookie, this.extractLoginCookie(retry));
+      cookie = mergeCookies2(cookie, this.extractLoginCookie(retry));
     }
     if (!/MUSIC_U=/.test(cookie)) {
       return { code: 502, error: "\u626B\u7801\u6210\u529F\u4F46\u672A\u62FF\u5230 Cookie\uFF0C\u8BF7\u6539\u7528 Cookie \u767B\u5F55", data: { ...payload, loggedIn: false } };
@@ -3450,7 +4295,7 @@ var NeteaseAccount = class {
       return { code: 502, error: "\u767B\u5F55\u6001\u6821\u9A8C\u5931\u8D25\uFF0C\u8BF7\u6539\u7528 Cookie", data: { ...payload, loggedIn: false } };
     }
     this.write({ cookie, csrf: cookieCsrf(cookie), ...account });
-    return ok({ ...payload, loggedIn: true, ...account });
+    return ok2({ ...payload, loggedIn: true, ...account });
   }
   requireAuth() {
     const auth = this.read();
@@ -3459,7 +4304,7 @@ var NeteaseAccount = class {
   }
   async playlists() {
     const auth = this.requireAuth();
-    if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
+    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
     const res = await neteaseApi(
       "/api/user/playlist",
       { uid: auth.uid, limit: 1e3, offset: 0 },
@@ -3467,8 +4312,8 @@ var NeteaseAccount = class {
       "POST"
     );
     const list = res.json?.playlist;
-    if (!Array.isArray(list)) return fail(502, "\u62C9\u53D6\u6B4C\u5355\u5931\u8D25");
-    return ok({
+    if (!Array.isArray(list)) return fail2(502, "\u62C9\u53D6\u6B4C\u5355\u5931\u8D25");
+    return ok2({
       playlists: list.map((pl, index) => ({
         id: String(pl.id || ""),
         name: String(pl.name || "\u672A\u547D\u540D\u6B4C\u5355"),
@@ -3509,9 +4354,9 @@ var NeteaseAccount = class {
   }
   async likeSong(post) {
     const auth = this.requireAuth();
-    if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
+    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
     const id = String(post.id || "").replace(/\D/g, "");
-    if (!id) return fail(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    if (!id) return fail2(400, "\u6B4C\u66F2 ID \u65E0\u6548");
     const like = post.like !== "0" && post.like !== "false";
     const res = await weapiRequest(
       `/weapi/radio/like?alg=itembased&trackId=${id}&like=${like}&time=25`,
@@ -3524,25 +4369,25 @@ var NeteaseAccount = class {
     );
     const code = Number(res.json?.code ?? 0);
     if (code !== 200) {
-      return fail(502, String(res.json?.message || res.error || "\u559C\u6B22\u64CD\u4F5C\u5931\u8D25"), {
+      return fail2(502, String(res.json?.message || res.error || "\u559C\u6B22\u64CD\u4F5C\u5931\u8D25"), {
         liked: like,
         code
       });
     }
-    return ok({ liked: like, id });
+    return ok2({ liked: like, id });
   }
   async likeCheck(post) {
     const auth = this.requireAuth();
-    if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
+    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
     const id = Number(String(post.id || "").replace(/\D/g, ""));
-    if (!id) return fail(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    if (!id) return fail2(400, "\u6B4C\u66F2 ID \u65E0\u6548");
     const res = await neteaseApi("/api/song/like/get", { uid: auth.uid }, auth.cookie, "POST");
     const ids = Array.isArray(res.json?.ids) ? res.json.ids.map(Number) : [];
-    return ok({ liked: ids.includes(id), id: String(id) });
+    return ok2({ liked: ids.includes(id), id: String(id) });
   }
   async likelist(post) {
     const auth = this.requireAuth();
-    if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
+    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
     const [offset, limit] = this.pageParams(post);
     const res = await neteaseApi("/api/song/like/get", { uid: auth.uid }, auth.cookie, "POST");
     const ids = Array.isArray(res.json?.ids) ? res.json.ids.map(Number) : [];
@@ -3562,7 +4407,7 @@ var NeteaseAccount = class {
       }
       if (likedId > 0) {
         const page = await this.playlistPage(likedId, auth.cookie, offset, limit);
-        return ok({
+        return ok2({
           playlistId: String(likedId),
           name: page.name || "\u6211\u559C\u6B22",
           total: page.total,
@@ -3570,10 +4415,10 @@ var NeteaseAccount = class {
           tracks: page.tracks
         });
       }
-      return ok({ playlistId: "", name: "\u6211\u559C\u6B22", total: 0, trackIds: [], tracks: [] });
+      return ok2({ playlistId: "", name: "\u6211\u559C\u6B22", total: 0, trackIds: [], tracks: [] });
     }
     const pageIds = ids.slice(offset, offset + limit);
-    return ok({
+    return ok2({
       playlistId: "likelist",
       name: "\u6211\u559C\u6B22",
       total: ids.length,
@@ -3583,11 +4428,11 @@ var NeteaseAccount = class {
   }
   async playlistAdd(post) {
     const auth = this.requireAuth();
-    if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
+    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
     const pid = String(post.playlistId || post.id || "").replace(/\D/g, "");
     const trackId = String(post.songid || "").replace(/\D/g, "");
-    if (!pid) return fail(400, "\u6B4C\u5355 ID \u65E0\u6548");
-    if (!trackId) return fail(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    if (!pid) return fail2(400, "\u6B4C\u5355 ID \u65E0\u6548");
+    if (!trackId) return fail2(400, "\u6B4C\u66F2 ID \u65E0\u6548");
     const res = await weapiRequest(
       "/weapi/playlist/manipulate/tracks",
       {
@@ -3601,48 +4446,139 @@ var NeteaseAccount = class {
     );
     const code = Number(res.json?.code ?? 0);
     if (code !== 200) {
-      return fail(502, String(res.json?.message || res.error || "\u6DFB\u52A0\u5230\u6B4C\u5355\u5931\u8D25"), {
+      return fail2(502, String(res.json?.message || res.error || "\u6DFB\u52A0\u5230\u6B4C\u5355\u5931\u8D25"), {
         playlistId: pid,
         songid: trackId,
         code
       });
     }
-    return ok({ playlistId: pid, songid: trackId, added: true });
+    return ok2({ playlistId: pid, songid: trackId, added: true });
   }
   async playlistDetail(post) {
     const auth = this.requireAuth();
-    if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
+    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
     const id = (post.id || "").trim();
-    if (!/^\d+$/.test(id)) return fail(400, "\u6B4C\u5355 ID \u65E0\u6548");
+    if (!/^\d+$/.test(id)) return fail2(400, "\u6B4C\u5355 ID \u65E0\u6548");
     const [offset, limit] = this.pageParams(post);
     const page = await this.playlistPage(Number(id), auth.cookie, offset, limit);
-    return ok(page);
+    return ok2(page);
   }
   async songsByIds(raw2) {
     const auth = this.requireAuth();
-    if (!auth) return fail(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
-    if (!raw2.trim()) return ok({ tracks: [] });
+    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
+    if (!raw2.trim()) return ok2({ tracks: [] });
     let ids = raw2.split(",").map((n) => Number(n)).filter((n) => n > 0);
     if (ids.length > 10) ids = ids.slice(0, 10);
-    return ok({ tracks: await this.netease.songsByIdsV3(ids, auth.cookie) });
+    return ok2({ tracks: await this.netease.songsByIdsV3(ids, auth.cookie) });
+  }
+  coverFromSong(song) {
+    const pic = String(song?.al?.picUrl || song?.album?.picUrl || song?.picUrl || "");
+    return pic || "";
+  }
+  async recommendFeed(post) {
+    const auth = this.requireAuth();
+    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
+    let limit = Number(post.limit || 24);
+    if (limit <= 0) limit = 24;
+    if (limit > 35) limit = 35;
+    const [dailyRes, fmRes, personalizedRes] = await Promise.all([
+      weapiRequest("/weapi/v3/discovery/recommend/songs", {}, auth.cookie),
+      weapiRequest("/weapi/v1/radio/timeline", { limit: 3 }, auth.cookie),
+      weapiRequest("/weapi/personalized/playlist", { limit, total: true, n: 1e3 }, auth.cookie)
+    ]);
+    const dailySongs = dailyRes.json?.data?.dailySongs || dailyRes.json?.recommendDailySongs || dailyRes.json?.data?.songs || [];
+    const fmSongs = fmRes.json?.data || fmRes.json?.result || [];
+    const personalized = personalizedRes.json?.result || [];
+    const items = [
+      {
+        id: "__daily__",
+        name: "\u6BCF\u65E5\u63A8\u8350",
+        cover: this.coverFromSong(Array.isArray(dailySongs) ? dailySongs[0] : null),
+        trackCount: Array.isArray(dailySongs) ? dailySongs.length : 0,
+        recommendKind: "daily",
+        description: "\u6839\u636E\u4F60\u7684\u53E3\u5473\u751F\u6210\uFF0C\u6BCF\u5929\u66F4\u65B0"
+      },
+      {
+        id: "__fm__",
+        name: "\u79C1\u4EBA FM",
+        cover: this.coverFromSong(Array.isArray(fmSongs) ? fmSongs[0] : null),
+        trackCount: Array.isArray(fmSongs) ? fmSongs.length : 0,
+        recommendKind: "fm",
+        description: "\u65E0\u9650\u79C1\u4EBA\u7535\u53F0"
+      }
+    ];
+    if (Array.isArray(personalized)) {
+      for (const pl of personalized) {
+        items.push({
+          id: String(pl.id || ""),
+          name: String(pl.name || "\u63A8\u8350\u6B4C\u5355"),
+          cover: String(pl.coverImgUrl || pl.picUrl || ""),
+          trackCount: Number(pl.trackCount || 0),
+          recommendKind: "playlist",
+          description: String(pl.copywriter || pl.reason || pl.creator?.nickname || "\u4E2A\u6027\u63A8\u8350")
+        });
+      }
+    }
+    if (Number(dailyRes.json?.code ?? 0) !== 200 && Number(fmRes.json?.code ?? 0) !== 200 && !personalized.length) {
+      return fail2(502, "\u62C9\u53D6\u63A8\u8350\u5185\u5BB9\u5931\u8D25");
+    }
+    return ok2({ items });
+  }
+  async dailySongs() {
+    const auth = this.requireAuth();
+    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
+    const res = await weapiRequest("/weapi/v3/discovery/recommend/songs", {}, auth.cookie);
+    const code = Number(res.json?.code ?? 0);
+    if (code !== 200) {
+      return fail2(502, String(res.json?.message || res.error || "\u62C9\u53D6\u6BCF\u65E5\u63A8\u8350\u5931\u8D25"));
+    }
+    const raw2 = res.json?.data?.dailySongs || res.json?.recommendDailySongs || res.json?.data?.songs || [];
+    if (!Array.isArray(raw2) || !raw2.length) {
+      return ok2({ name: "\u6BCF\u65E5\u63A8\u8350", total: 0, tracks: [] });
+    }
+    const ids = raw2.map((song) => Number(song.id)).filter((id) => id > 0);
+    const tracks = await this.netease.songsByIdsV3(ids, auth.cookie);
+    return ok2({
+      id: "__daily__",
+      name: "\u6BCF\u65E5\u63A8\u8350",
+      total: tracks.length,
+      tracks
+    });
+  }
+  async personalFm() {
+    const auth = this.requireAuth();
+    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55\u7F51\u6613\u4E91");
+    let res = await weapiRequest("/weapi/v1/radio/timeline", { limit: 10 }, auth.cookie);
+    let raw2 = res.json?.data;
+    if (!Array.isArray(raw2) || !raw2.length) {
+      res = await weapiRequest("/weapi/personal_fm", {}, auth.cookie);
+      raw2 = res.json?.data;
+    }
+    const code = Number(res.json?.code ?? 0);
+    if (code !== 200 || !Array.isArray(raw2) || !raw2.length) {
+      return fail2(502, String(res.json?.message || res.error || "\u62C9\u53D6\u79C1\u4EBA FM \u5931\u8D25"));
+    }
+    const ids = raw2.map((song) => Number(song.id || song.song?.id)).filter((id) => id > 0);
+    const tracks = await this.netease.songsByIdsV3(ids, auth.cookie);
+    return ok2({ tracks });
   }
 };
-function ok(data) {
+function ok2(data) {
   return { code: 200, error: "", data };
 }
-function fail(code, error, data = "") {
+function fail2(code, error, data = "") {
   return { code, error, data };
 }
 
-// src/accounts/qq.ts
+// server/src/accounts/qq.ts
 init_http();
-import { createHash as createHash3 } from "node:crypto";
-import { join as join3 } from "node:path";
+import { createHash as createHash5 } from "node:crypto";
+import { join as join4 } from "node:path";
 var QqAccount = class {
   constructor(cache, qq) {
     this.qq = qq;
-    this.authFile = join3(cache.dir("qq_auth"), "session.json");
-    this.qrFile = join3(cache.dir("qq_auth"), "qr_session.json");
+    this.authFile = join4(cache.dir("qq_auth"), "session.json");
+    this.qrFile = join4(cache.dir("qq_auth"), "qr_session.json");
   }
   authFile;
   qrFile;
@@ -3659,6 +4595,7 @@ var QqAccount = class {
       loggedIn: true,
       uin: auth.uin,
       nickname: auth.nickname,
+      avatar: auth.avatar || "",
       vip: auth.vip ?? 0,
       updatedAt: auth.updatedAt || 0
     };
@@ -3669,11 +4606,11 @@ var QqAccount = class {
   async handle(action, post) {
     switch (action) {
       case "qq_status":
-        return ok2(await this.statusFresh());
+        return ok3(await this.statusFresh());
       case "qq_logout":
         removeFile(this.authFile);
         removeFile(this.qrFile);
-        return ok2({ ok: true });
+        return ok3({ ok: true });
       case "qq_cookie_save":
         return this.cookieSave(post.cookie || "");
       case "qq_qr_key":
@@ -3682,6 +4619,14 @@ var QqAccount = class {
         return this.qrCheck();
       case "qq_playlists":
         return this.playlists();
+      case "qq_recommend_feed":
+        return this.recommendFeed(post);
+      case "qq_personal_fm":
+        return this.personalFm();
+      case "qq_daily_songs":
+        return this.dailySongs();
+      case "qq_radar_songs":
+        return this.radarSongs();
       case "qq_likelist":
         return this.likelist();
       case "qq_like":
@@ -3693,7 +4638,7 @@ var QqAccount = class {
       case "qq_playlist_add":
         return this.playlistAdd(post);
       default:
-        return fail2(400, "\u672A\u77E5\u64CD\u4F5C");
+        return fail3(400, "\u672A\u77E5\u64CD\u4F5C");
     }
   }
   extractUin(cookie) {
@@ -3704,6 +4649,87 @@ var QqAccount = class {
   hasMusicKey(cookie) {
     const map = cookieToMap(cookie);
     return Boolean(map.qm_keyst || map.qqmusic_key);
+  }
+  /** 统一把头像 URL 收成 https */
+  normalizeAvatarUrl(...candidates) {
+    for (const candidate of candidates) {
+      const raw2 = String(candidate || "").trim();
+      if (!raw2 || raw2 === "null" || raw2 === "undefined") continue;
+      if (raw2.startsWith("//")) return `https:${raw2}`;
+      if (raw2.startsWith("http://")) return `https://${raw2.slice(7)}`;
+      if (raw2.startsWith("https://")) return raw2;
+    }
+    return "";
+  }
+  avatarFromProfilePayload(data) {
+    if (!data || typeof data !== "object") return "";
+    const creator = data.creator || {};
+    const userinfo = data.userinfo || data.userInfo || {};
+    const info = data.info || data.profile?.info || {};
+    const profile = data.profile || {};
+    return this.normalizeAvatarUrl(
+      creator.headurl,
+      creator.headpic,
+      creator.avatarUrl,
+      creator.logo,
+      creator.avatar,
+      userinfo.headurl,
+      userinfo.headpic,
+      userinfo.avatarUrl,
+      userinfo.logo,
+      info.logo,
+      info.headurl,
+      info.headpic,
+      info.avatarUrl,
+      profile.avatarUrl,
+      profile.logo,
+      data.headurl,
+      data.headpic,
+      data.logo,
+      data.avatarUrl
+    );
+  }
+  /** Folia 同源：GetLoginUserInfo 的 info.logo 是完整头像 URL */
+  async fetchLoginUserAvatar(uin, cookie) {
+    const attempts = [
+      {
+        module: "userInfo.BaseUserInfoServer",
+        method: "GetLoginUserInfo",
+        param: {}
+      },
+      {
+        module: "userInfo.BaseUserInfoServer",
+        method: "get_user_baseinfo_v2",
+        param: { vec_uin: [uin] }
+      }
+    ];
+    for (const attempt of attempts) {
+      try {
+        const payload = {
+          comm: { ct: 24, cv: 0, uin, format: "json" },
+          req: attempt
+        };
+        const res = await request("POST", "https://u.y.qq.com/cgi-bin/musicu.fcg", {
+          headers: {
+            Cookie: cookie,
+            Referer: "https://y.qq.com/",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload),
+          timeoutMs: 6e3
+        });
+        const root = res.json?.req?.data || res.json?.req_0?.data || res.json?.data || {};
+        const map = root.map || root.infos || root;
+        const byUin = map?.[uin] || map?.[String(uin)] || {};
+        const avatar = this.avatarFromProfilePayload(root) || this.avatarFromProfilePayload(byUin) || this.normalizeAvatarUrl(byUin.headurl, byUin.logo, byUin.headpic);
+        const nickname = String(
+          root?.profile?.info?.nick || root?.info?.nick || byUin.nick || byUin.nickname || ""
+        ).trim();
+        if (avatar || nickname) return { ...nickname ? { nickname } : {}, ...avatar ? { avatar } : {} };
+      } catch {
+      }
+    }
+    return {};
   }
   async profileValidate(cookie, allowFallback = false) {
     const uin = this.extractUin(cookie);
@@ -3726,10 +4752,29 @@ var QqAccount = class {
       }
     );
     if (!res.json || Number(res.json.code) === 1e3) {
-      return allowFallback ? { uin, nickname: `QQ ${uin}`, cookie } : null;
+      if (!allowFallback) return null;
+      const login = await this.fetchLoginUserAvatar(uin, cookie);
+      return {
+        uin,
+        nickname: login.nickname || `QQ ${uin}`,
+        avatar: login.avatar || "",
+        cookie
+      };
     }
-    const nickname = res.json.data?.creator?.nick || res.json.data?.userinfo?.nick || `QQ ${uin}`;
-    return { uin, nickname: String(nickname), cookie };
+    const data = res.json.data || {};
+    let nickname = data?.creator?.nick || data?.userinfo?.nick || data?.userInfo?.nick || `QQ ${uin}`;
+    let avatar = this.avatarFromProfilePayload(data);
+    if (!avatar) {
+      const login = await this.fetchLoginUserAvatar(uin, cookie);
+      if (login.avatar) avatar = login.avatar;
+      if (login.nickname && String(nickname).startsWith("QQ ")) nickname = login.nickname;
+    }
+    return {
+      uin,
+      nickname: String(nickname),
+      avatar: avatar || "",
+      cookie
+    };
   }
   async fetchVip(uin, cookie) {
     const payload = {
@@ -3758,27 +4803,56 @@ var QqAccount = class {
     return Number.isFinite(value) && value > 0 ? value : 0;
   }
   async withVip(account) {
-    return { ...account, vip: await this.fetchVip(account.uin, account.cookie) };
+    return {
+      ...account,
+      avatar: account.avatar || "",
+      vip: await this.fetchVip(account.uin, account.cookie)
+    };
   }
   async statusFresh() {
     const auth = this.read();
     if (!auth) return { loggedIn: false };
+    let next = auth;
+    let dirty = false;
     if (auth.vip == null) {
-      this.write({ ...auth, vip: await this.fetchVip(auth.uin, auth.cookie) });
+      next = { ...next, vip: await this.fetchVip(auth.uin, auth.cookie) };
+      dirty = true;
     }
+    if (!next.avatar) {
+      const profile = await this.profileValidate(auth.cookie, true);
+      if (profile?.avatar) {
+        next = {
+          ...next,
+          avatar: profile.avatar,
+          nickname: profile.nickname || next.nickname
+        };
+        dirty = true;
+      } else {
+        const login = await this.fetchLoginUserAvatar(auth.uin, auth.cookie);
+        if (login.avatar) {
+          next = {
+            ...next,
+            avatar: login.avatar,
+            nickname: login.nickname || next.nickname
+          };
+          dirty = true;
+        }
+      }
+    }
+    if (dirty) this.write(next);
     return this.status();
   }
   async cookieSave(raw2) {
     let cookie = normalizeCookie(raw2);
-    if (!cookie) return fail2(400, "\u8BF7\u7C98\u8D34 Cookie");
+    if (!cookie) return fail3(400, "\u8BF7\u7C98\u8D34 Cookie");
     const map = cookieToMap(cookie);
     if (Number(map.login_type) === 2 && map.wxuin) {
-      cookie = mergeCookies2(cookie, `uin=${map.wxuin}`);
+      cookie = mergeCookies(cookie, `uin=${map.wxuin}`);
     }
     const account = await this.profileValidate(cookie);
-    if (!account) return fail2(401, "Cookie \u65E0\u6548\uFF1A\u9700\u542B uin \u4E0E qm_keyst/qqmusic_key\uFF0C\u8BF7\u4ECE y.qq.com \u590D\u5236");
+    if (!account) return fail3(401, "Cookie \u65E0\u6548\uFF1A\u9700\u542B uin \u4E0E qm_keyst/qqmusic_key\uFF0C\u8BF7\u4ECE y.qq.com \u590D\u5236");
     this.write(await this.withVip(account));
-    return ok2(this.status());
+    return ok3(this.status());
   }
   async qqGet(url, cookie = "", extra = {}) {
     const headers = {
@@ -3820,13 +4894,13 @@ var QqAccount = class {
       headers: { Referer: "https://xui.ptlogin2.qq.com/" }
     });
     const qrsig = cookieGet(buf?.cookies || "", "qrsig");
-    if (!buf || buf.status >= 400 || !qrsig) return fail2(502, "\u65E0\u6CD5\u83B7\u53D6 QQ \u4E8C\u7EF4\u7801\uFF0C\u8BF7\u6539\u7528 Cookie");
+    if (!buf || buf.status >= 400 || !qrsig) return fail3(502, "\u65E0\u6CD5\u83B7\u53D6 QQ \u4E8C\u7EF4\u7801\uFF0C\u8BF7\u6539\u7528 Cookie");
     const img = buf.body.toString("base64");
     const ptqrtoken = hash33(qrsig);
     writeJson(this.qrFile, { qrsig, ptqrtoken, createdAt: Date.now() / 1e3 });
-    return ok2({
+    return ok3({
       qrimg: `data:image/png;base64,${img}`,
-      token: createHash3("sha256").update(qrsig).digest("hex").slice(0, 16)
+      token: createHash5("sha256").update(qrsig).digest("hex").slice(0, 16)
     });
   }
   parsePtui(body) {
@@ -3852,7 +4926,7 @@ var QqAccount = class {
       if (!url) break;
       const res = await this.qqGet(url, cookie, { Referer: referer });
       hops++;
-      cookie = mergeCookies2(cookie, res.cookies);
+      cookie = mergeCookies(cookie, res.cookies);
       last = res;
       let loc = this.headerLocation(res.headers);
       if (!loc && res.body) {
@@ -3876,10 +4950,10 @@ ${body}`;
     if (!data || typeof data !== "object") return cookie;
     if (data.musicid) {
       const mid = String(data.musicid).replace(/\D/g, "");
-      if (mid) cookie = mergeCookies2(cookie, `uin=o${mid.padStart(10, "0")}; qqmusic_uin=${mid}`);
+      if (mid) cookie = mergeCookies(cookie, `uin=o${mid.padStart(10, "0")}; qqmusic_uin=${mid}`);
     }
     const key = data.musickey || data.key || data.qm_keyst;
-    if (key) cookie = mergeCookies2(cookie, `qm_keyst=${key}; qqmusic_key=${key}`);
+    if (key) cookie = mergeCookies(cookie, `qm_keyst=${key}; qqmusic_key=${key}`);
     return cookie;
   }
   async finishQr(checkSigUrl, qrsigCookie) {
@@ -3894,7 +4968,7 @@ ${body}`;
         },
         redirect: "manual"
       });
-      cookie = mergeCookies2(cookie, res.cookies);
+      cookie = mergeCookies(cookie, res.cookies);
       pSkey = cookieGet(cookie, "p_skey") || cookieGet(cookie, "skey");
       const loc2 = this.headerLocation(res.headers);
       if (!loc2) break;
@@ -3929,12 +5003,12 @@ ${body}`;
       redirect: "manual"
     });
     let auth = await postAuthorize(new URLSearchParams(authFields));
-    cookie = mergeCookies2(cookie, auth.cookies);
+    cookie = mergeCookies(cookie, auth.cookies);
     let loc = this.headerLocation(auth.headers);
     let code = this.extractOauthCode(auth.headers, auth.body, loc);
     if (!code) {
       auth = await postAuthorize(new URLSearchParams(authFields).toString(), "application/x-www-form-urlencoded");
-      cookie = mergeCookies2(cookie, auth.cookies);
+      cookie = mergeCookies(cookie, auth.cookies);
       loc = this.headerLocation(auth.headers);
       code = this.extractOauthCode(auth.headers, auth.body, loc);
     }
@@ -3970,7 +5044,7 @@ ${body}`;
           headers: { Referer: "https://y.qq.com/", Cookie: cookie, ...headers },
           body
         });
-        cookie = mergeCookies2(cookie, login.cookies);
+        cookie = mergeCookies(cookie, login.cookies);
         const json = login.json;
         let data = null;
         if (json) {
@@ -3992,7 +5066,7 @@ ${body}`;
   }
   async qrCheck() {
     const sess = readJson(this.qrFile);
-    if (!sess?.qrsig) return fail2(400, "\u4E8C\u7EF4\u7801\u5DF2\u5931\u6548\uFF0C\u8BF7\u5237\u65B0");
+    if (!sess?.qrsig) return fail3(400, "\u4E8C\u7EF4\u7801\u5DF2\u5931\u6548\uFF0C\u8BF7\u5237\u65B0");
     if (sess.finishFailed) {
       return {
         code: 502,
@@ -4000,7 +5074,7 @@ ${body}`;
         data: { status: 0, loggedIn: false, message: "\u626B\u7801\u6210\u529F\u4F46\u6362\u53D6\u97F3\u4E50\u51ED\u8BC1\u5931\u8D25\uFF0C\u8BF7\u5237\u65B0\u4E8C\u7EF4\u7801\u6216\u6539\u7528 Cookie" }
       };
     }
-    if (sess.finishing) return ok2({ status: 67, message: "\u6B63\u5728\u5B8C\u6210\u767B\u5F55\u2026" });
+    if (sess.finishing) return ok3({ status: 67, message: "\u6B63\u5728\u5B8C\u6210\u767B\u5F55\u2026" });
     const url = `https://ssl.ptlogin2.qq.com/ptqrlogin?${new URLSearchParams({
       u1: "https://graph.qq.com/oauth2.0/login_jump",
       ptqrtoken: String(sess.ptqrtoken || hash33(sess.qrsig)),
@@ -4022,7 +5096,7 @@ ${body}`;
     })}`;
     const res = await this.qqGet(url, `qrsig=${sess.qrsig}`, { Referer: "https://xui.ptlogin2.qq.com/" });
     const parsed = this.parsePtui(res.body);
-    if (!parsed) return ok2({ status: -1, message: "\u8F6E\u8BE2\u5F02\u5E38" });
+    if (!parsed) return ok3({ status: -1, message: "\u8F6E\u8BE2\u5F02\u5E38" });
     const payload = { status: parsed.code, message: "" };
     if (parsed.code === 66) payload.message = "\u7B49\u5F85\u626B\u7801\u2026";
     else if (parsed.code === 67) payload.message = "\u5DF2\u626B\u7801\uFF0C\u8BF7\u5728\u624B\u673A\u4E0A\u786E\u8BA4";
@@ -4033,7 +5107,7 @@ ${body}`;
       }
       sess.finishing = true;
       writeJson(this.qrFile, sess);
-      const account = await this.finishQr(parsed.checkUrl, mergeCookies2(`qrsig=${sess.qrsig}`, res.cookies));
+      const account = await this.finishQr(parsed.checkUrl, mergeCookies(`qrsig=${sess.qrsig}`, res.cookies));
       if (!account) {
         sess.finishFailed = true;
         delete sess.finishing;
@@ -4051,7 +5125,7 @@ ${body}`;
       payload.nickname = account.nickname;
       payload.message = "\u767B\u5F55\u6210\u529F";
     }
-    return ok2(payload);
+    return ok3(payload);
   }
   async fetchPlaylists(uin, cookie) {
     const out = [];
@@ -4136,14 +5210,14 @@ ${body}`;
   }
   async playlists() {
     const auth = this.read();
-    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
-    return ok2({ playlists: await this.fetchPlaylists(auth.uin, auth.cookie) });
+    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    return ok3({ playlists: await this.fetchPlaylists(auth.uin, auth.cookie) });
   }
   async likeSong(post) {
     const auth = this.read();
-    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const songId = Number(String(post.id || "").replace(/\D/g, ""));
-    if (!songId) return fail2(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    if (!songId) return fail3(400, "\u6B4C\u66F2 ID \u65E0\u6548");
     const like = post.like !== "0" && post.like !== "false";
     const map = cookieToMap(auth.cookie);
     const pSkey = map.p_skey || map.pskey || map.skey || "";
@@ -4202,39 +5276,39 @@ ${body}`;
         );
         const legacyCode = Number(legacy.json?.code ?? -1);
         if (legacyCode === 0 || legacyCode === 1e3) {
-          return ok2({ liked: true, id: String(songId) });
+          return ok3({ liked: true, id: String(songId) });
         }
-        return fail2(502, String(legacy.json?.msg || data?.msg || "\u6DFB\u52A0\u5230\u6211\u559C\u6B22\u5931\u8D25"));
+        return fail3(502, String(legacy.json?.msg || data?.msg || "\u6DFB\u52A0\u5230\u6211\u559C\u6B22\u5931\u8D25"));
       }
-      return fail2(502, String(data?.msg || res.error || "\u53D6\u6D88\u559C\u6B22\u5931\u8D25"));
+      return fail3(502, String(data?.msg || res.error || "\u53D6\u6D88\u559C\u6B22\u5931\u8D25"));
     }
-    return ok2({ liked: like, id: String(songId) });
+    return ok3({ liked: like, id: String(songId) });
   }
   async likeCheck(post) {
     const auth = this.read();
-    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const songId = String(post.id || "").replace(/\D/g, "");
-    if (!songId) return fail2(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    if (!songId) return fail3(400, "\u6B4C\u66F2 ID \u65E0\u6548");
     const list = await this.fetchPlaylists(auth.uin, auth.cookie);
     const liked = list.find((pl) => Number(pl.dirid) === 201);
-    if (!liked) return ok2({ liked: false, id: songId });
+    if (!liked) return ok3({ liked: false, id: songId });
     const tracks = await this.playlistTracks(liked.id, auth.cookie);
-    return ok2({ liked: tracks.some((t) => String(t.songid) === songId), id: songId });
+    return ok3({ liked: tracks.some((t) => String(t.songid) === songId), id: songId });
   }
   async likelist() {
     const auth = this.read();
-    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const list = await this.fetchPlaylists(auth.uin, auth.cookie);
     const liked = list.find((pl) => Number(pl.dirid) === 201);
-    if (!liked) return ok2({ playlistId: "", tracks: [], name: "\u6211\u559C\u6B22", total: 0 });
+    if (!liked) return ok3({ playlistId: "", tracks: [], name: "\u6211\u559C\u6B22", total: 0 });
     const tracks = await this.playlistTracks(liked.id, auth.cookie);
-    return ok2({ playlistId: liked.id, name: "\u6211\u559C\u6B22", tracks, total: tracks.length });
+    return ok3({ playlistId: liked.id, name: "\u6211\u559C\u6B22", tracks, total: tracks.length });
   }
   async playlistAdd(post) {
     const auth = this.read();
-    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const songId = Number(String(post.songid || "").replace(/\D/g, ""));
-    if (!songId) return fail2(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    if (!songId) return fail3(400, "\u6B4C\u66F2 ID \u65E0\u6548");
     let dirId = Number(String(post.dirid || "").replace(/\D/g, ""));
     const playlistId = String(post.playlistId || post.id || "").replace(/\D/g, "");
     if (!dirId && playlistId) {
@@ -4276,19 +5350,383 @@ ${body}`;
     const data = res.json?.req_1;
     const code = Number(data?.code ?? res.json?.code ?? -1);
     if (!res.ok || code !== 0) {
-      return fail2(502, String(data?.data?.Msg || data?.data?.msg || "\u6DFB\u52A0\u5230\u6B4C\u5355\u5931\u8D25"), {
+      return fail3(502, String(data?.data?.Msg || data?.data?.msg || "\u6DFB\u52A0\u5230\u6B4C\u5355\u5931\u8D25"), {
         playlistId,
         dirId,
         songid: String(songId),
         code
       });
     }
-    return ok2({ playlistId, dirId, songid: String(songId), added: true });
+    return ok3({ playlistId, dirId, songid: String(songId), added: true });
+  }
+  musiculPayload(auth, reqs) {
+    const map = cookieToMap(auth.cookie);
+    const pSkey = map.p_skey || map.pskey || map.skey || "";
+    const gtk = getGtk(pSkey || map.qqmusic_key || "");
+    return {
+      comm: {
+        g_tk: gtk,
+        uin: Number(auth.uin) || auth.uin,
+        format: "json",
+        platform: "yqq.json",
+        ct: 24,
+        cv: 0
+      },
+      ...reqs
+    };
+  }
+  async musiculPost(auth, reqs) {
+    const payload = this.musiculPayload(auth, reqs);
+    return request("POST", "https://u.y.qq.com/cgi-bin/musicu.fcg", {
+      headers: {
+        Referer: "https://y.qq.com/",
+        Origin: "https://y.qq.com",
+        Cookie: auth.cookie,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+  }
+  radarTracksFromResponse(data) {
+    const vecSongs = data?.VecSongs || [];
+    if (vecSongs.length) {
+      return vecSongs.map((item) => item?.Track || item).filter(Boolean);
+    }
+    return data?.TrackInfoList || [];
+  }
+  radarTrackKey(track) {
+    return String(
+      track?.mid || track?.songmid || track?.id || track?.songid || track?.SongID || ""
+    ).trim();
+  }
+  async fetchRadarRawList(auth, maxTracks = 30) {
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (let page = 1; page <= 4 && out.length < maxTracks; page++) {
+      const radarRes = await this.musiculPost(auth, {
+        req_0: {
+          module: "music.recommend.TrackRelationServer",
+          method: "GetRadarSong",
+          param: { Page: page }
+        }
+      });
+      const data = radarRes.json?.req_0?.data;
+      const rawList = this.radarTracksFromResponse(data);
+      if (!rawList.length) break;
+      for (const item of rawList) {
+        const key = this.radarTrackKey(item);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(item);
+        if (out.length >= maxTracks) break;
+      }
+      if (!data?.HasMore) break;
+    }
+    return out;
+  }
+  dailyMixTitleHints() {
+    return ["\u6BCF\u65E530", "\u6BCF\u65E5 30", "\u4ECA\u65E5\u79C1\u4EAB", "daily mix", "daily30"];
+  }
+  isDailyMixText(...parts) {
+    const text = parts.map((part) => String(part || "")).join(" ").toLowerCase();
+    return this.dailyMixTitleHints().some((hint) => text.includes(hint.toLowerCase()));
+  }
+  playlistIdFromValue(value) {
+    if (value == null) return "";
+    const raw2 = String(value).trim();
+    if (/^\d{6,}$/.test(raw2)) return raw2;
+    const fromUrl = raw2.match(/(?:disstid|dissid|playlist\/)(\d{6,})/i);
+    return fromUrl?.[1] || "";
+  }
+  playlistIdFromObject(obj) {
+    if (!obj || typeof obj !== "object") return "";
+    const candidates = [
+      obj.disstid,
+      obj.dissid,
+      obj.tid,
+      obj.id,
+      obj.diss_id,
+      obj.playlist_id,
+      obj?.basic?.tid,
+      obj?.basic?.disstid,
+      obj?.Playlist?.basic?.tid,
+      obj?.miscellany?.disstid,
+      obj?.miscellany?.tid,
+      obj.jump_url,
+      obj.url,
+      obj.scheme,
+      obj.link
+    ];
+    for (const candidate of candidates) {
+      const id = this.playlistIdFromValue(candidate);
+      if (id) return id;
+    }
+    return "";
+  }
+  coverFromPlaylistObject(obj) {
+    if (!obj || typeof obj !== "object") return "";
+    const cover = obj?.cover || obj?.pic || obj?.picUrl || obj?.imgurl || {};
+    if (typeof cover === "string") return cover.startsWith("//") ? `https:${cover}` : cover;
+    return String(
+      cover?.medium_url || cover?.default_url || cover?.big_url || cover?.url || ""
+    );
+  }
+  deepFindDailyMix(node, depth = 0, titleContext = []) {
+    if (!node || depth > 12) return null;
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const found = this.deepFindDailyMix(item, depth + 1, titleContext);
+        if (found) return found;
+      }
+      return null;
+    }
+    if (typeof node !== "object") return null;
+    const texts = [...titleContext];
+    for (const key of ["title", "subtitle", "main_title", "sub_title", "title_content", "title_template", "name", "desc"]) {
+      if (node[key]) texts.push(String(node[key]));
+    }
+    const id = this.playlistIdFromObject(node);
+    if (id && this.isDailyMixText(...texts)) {
+      return {
+        id,
+        name: String(node?.title || node?.main_title || node?.title_content || "\u6BCF\u65E530\u9996"),
+        cover: this.coverFromPlaylistObject(node),
+        trackCount: Number(node?.song_cnt || node?.songnum || node?.track_count || 30) || 30
+      };
+    }
+    for (const value of Object.values(node)) {
+      const found = this.deepFindDailyMix(value, depth + 1, texts.slice(-6));
+      if (found) return found;
+    }
+    return null;
+  }
+  parseDailyMixFromFeed(data) {
+    const shelves = data?.v_shelf || data?.shelves || [];
+    for (const shelf of shelves) {
+      const niches = shelf?.v_niche || shelf?.niches || [];
+      for (const niche of niches) {
+        const cards = niche?.v_card || niche?.cards || [];
+        for (const card of cards) {
+          const titleParts = [
+            card?.title,
+            card?.subtitle,
+            card?.main_title,
+            card?.sub_title,
+            card?.title_content,
+            card?.title_template,
+            card?.name,
+            niche?.title_content,
+            niche?.title_template,
+            shelf?.title_content
+          ];
+          if (!this.isDailyMixText(...titleParts)) continue;
+          const id = this.playlistIdFromObject(card);
+          if (!id) continue;
+          return {
+            id,
+            name: String(card?.title || card?.main_title || card?.title_content || "\u6BCF\u65E530\u9996"),
+            cover: this.coverFromPlaylistObject(card),
+            trackCount: Number(card?.song_cnt || card?.songnum || card?.track_count || 30) || 30
+          };
+        }
+      }
+    }
+    return this.deepFindDailyMix(data);
+  }
+  async fetchDailyMixFromHomepage(cookie) {
+    const res = await this.qqGet("https://c.y.qq.com/node/musicmac/v6/index.html", cookie);
+    const html = res.body || "";
+    const patterns = [
+      /playlist__name[^>]*>\s*今日私享[\s\S]{0,800}?data-rid=["'](\d+)["']/i,
+      /data-rid=["'](\d+)["'][\s\S]{0,800}?playlist__name[^>]*>\s*今日私享/i,
+      /每日\s*30[\s\S]{0,800}?data-rid=["'](\d+)["']/i
+    ];
+    for (const pattern of patterns) {
+      const match2 = html.match(pattern);
+      if (match2?.[1]) {
+        return { id: match2[1], name: "\u6BCF\u65E530\u9996", cover: "", trackCount: 30 };
+      }
+    }
+    return null;
+  }
+  async resolveDailyMix(auth) {
+    try {
+      const feedRes = await this.musiculPost(auth, {
+        req_0: {
+          module: "music.recommend.RecommendFeed",
+          method: "get_recommend_feed",
+          param: { direction: 0, page: 1, s_num: 0, v_cache: [] }
+        }
+      });
+      const fromFeed = this.parseDailyMixFromFeed(feedRes.json?.req_0?.data);
+      if (fromFeed?.id) return fromFeed;
+    } catch {
+    }
+    return this.fetchDailyMixFromHomepage(auth.cookie);
+  }
+  async fetchRadioRawList(auth, maxTracks = 20) {
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (let i = 0; i < 4 && out.length < maxTracks; i++) {
+      const radioRes = await this.musiculPost(auth, {
+        req_0: {
+          module: "music.radioProxy.MbTrackRadioSvr",
+          method: "get_radio_track",
+          param: { IsGetTrackInfo: 1, IsSetTrack: 0 }
+        }
+      });
+      const rawList = this.radioTracksFromResponse(radioRes.json?.req_0?.data);
+      if (!rawList.length) break;
+      for (const item of rawList) {
+        const key = this.radarTrackKey(item);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(item);
+        if (out.length >= maxTracks) break;
+      }
+    }
+    return out;
+  }
+  radioTracksFromResponse(data) {
+    return data?.tracks || data?.TrackList || [];
+  }
+  albumCoverFromTrack(track) {
+    const albummid = track?.album?.mid || track?.AlbumMID || track?.albumMid || "";
+    return albummid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albummid}.jpg` : "";
+  }
+  recommendPlaylistsFromFeed(data, limit) {
+    const list = data?.List || data?.list || [];
+    const playlists = [];
+    for (const entry of list) {
+      const basic = entry?.Playlist?.basic || entry?.basic || entry;
+      const id = String(basic?.tid || basic?.disstid || basic?.id || "");
+      if (!id) continue;
+      playlists.push({
+        id,
+        name: String(basic?.title || basic?.dissname || "\u63A8\u8350\u6B4C\u5355"),
+        cover: String(
+          basic?.cover?.medium_url || basic?.cover?.default_url || basic?.cover?.big_url || basic?.picUrl || basic?.imgurl || ""
+        ),
+        trackCount: Number(basic?.song_cnt || basic?.songNum || 0),
+        recommendKind: "playlist",
+        description: String(
+          basic?.desc || basic?.description || basic?.creator?.nick || "\u4E2A\u6027\u63A8\u8350"
+        )
+      });
+      if (playlists.length >= limit) break;
+    }
+    return playlists;
+  }
+  async recommendFeed(post) {
+    const auth = this.read();
+    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    let limit = Number(post.limit || 24);
+    if (limit <= 0) limit = 24;
+    if (limit > 35) limit = 35;
+    const [dailyMix, radarPreview, radioRes, feedRes] = await Promise.all([
+      this.resolveDailyMix(auth),
+      this.fetchRadarRawList(auth, 1),
+      this.musiculPost(auth, {
+        req_0: {
+          module: "music.radioProxy.MbTrackRadioSvr",
+          method: "get_radio_track",
+          param: { IsGetTrackInfo: 1, IsSetTrack: 0 }
+        }
+      }),
+      this.musiculPost(auth, {
+        req_0: {
+          module: "music.playlist.PlaylistSquare",
+          method: "GetRecommendFeed",
+          param: { From: 0, Size: limit }
+        }
+      })
+    ]);
+    const radioSongs = this.radioTracksFromResponse(radioRes.json?.req_0?.data);
+    const playlists = this.recommendPlaylistsFromFeed(feedRes.json?.req_0?.data, limit);
+    const items = [];
+    items.push({
+      id: dailyMix?.id || "__qq_daily__",
+      name: dailyMix?.name || "\u6BCF\u65E530\u9996",
+      cover: dailyMix?.cover || "",
+      trackCount: dailyMix?.trackCount || 30,
+      recommendKind: "daily",
+      description: "\u6839\u636E\u4F60\u7684\u53E3\u5473\u751F\u6210\uFF0C\u6BCF\u5929\u66F4\u65B0"
+    });
+    items.push({
+      id: "__qq_radar__",
+      name: "\u79C1\u4EBA\u96F7\u8FBE",
+      cover: this.albumCoverFromTrack(radarPreview[0]),
+      trackCount: 30,
+      recommendKind: "radar",
+      description: "\u6839\u636E\u4F60\u7684\u559C\u597D\u667A\u80FD\u63A8\u8350\uFF0C\u6301\u7EED\u53D1\u73B0\u65B0\u6B4C"
+    });
+    items.push({
+      id: "__qq_fm__",
+      name: "\u731C\u4F60\u559C\u6B22",
+      cover: this.albumCoverFromTrack(radioSongs[0]),
+      trackCount: radioSongs.length || 6,
+      recommendKind: "fm",
+      description: "\u65E0\u9650\u968F\u673A\u7535\u53F0"
+    });
+    items.push(...playlists);
+    if (!dailyMix?.id && !radarPreview.length && !radioSongs.length && !playlists.length) {
+      return fail3(502, "\u62C9\u53D6 QQ \u97F3\u4E50\u63A8\u8350\u5931\u8D25");
+    }
+    return ok3({ items });
+  }
+  async dailySongs() {
+    const auth = this.read();
+    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    const mix = await this.resolveDailyMix(auth);
+    if (!mix?.id) return fail3(502, "\u62C9\u53D6\u6BCF\u65E530\u9996\u5931\u8D25");
+    const tracks = await this.playlistTracks(mix.id, auth.cookie);
+    const meta = await this.qqGet(
+      `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?${new URLSearchParams({
+        type: "1",
+        utf8: "1",
+        disstid: mix.id,
+        format: "json"
+      })}`,
+      auth.cookie
+    );
+    const cover = mix.cover?.trim() || this.albumCoverFromTrack(meta.json?.cdlist?.[0]?.songlist?.[0]) || "";
+    return ok3({
+      id: "__qq_daily__",
+      name: String(meta.json?.cdlist?.[0]?.dissname || mix.name || "\u6BCF\u65E530\u9996"),
+      cover,
+      total: tracks.length,
+      tracks
+    });
+  }
+  async radarSongs() {
+    const auth = this.read();
+    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    const rawList = await this.fetchRadarRawList(auth, 30);
+    if (!rawList.length) return fail3(502, "\u62C9\u53D6\u79C1\u4EBA\u96F7\u8FBE\u5931\u8D25");
+    const tracks = rawList.map((item) => this.qq.trackFromSong(item)).filter(Boolean);
+    return ok3({
+      id: "__qq_radar__",
+      name: "\u79C1\u4EBA\u96F7\u8FBE",
+      cover: this.albumCoverFromTrack(rawList[0]),
+      total: tracks.length,
+      tracks
+    });
+  }
+  async personalFm() {
+    const auth = this.read();
+    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    const rawList = await this.fetchRadioRawList(auth, 20);
+    if (!rawList.length) return fail3(502, "\u62C9\u53D6\u731C\u4F60\u559C\u6B22\u5931\u8D25");
+    const tracks = rawList.map((item) => this.qq.trackFromSong(item)).filter(Boolean);
+    return ok3({ tracks });
   }
   async playlistDetail(id) {
+    const trimmed = id.trim();
+    if (trimmed === "__qq_radar__") return this.radarSongs();
+    if (trimmed === "__qq_daily__") return this.dailySongs();
     const auth = this.read();
-    if (!auth) return fail2(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
-    if (!/^\d+$/.test(id.trim())) return fail2(400, "\u6B4C\u5355 ID \u65E0\u6548");
+    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!/^\d+$/.test(trimmed)) return fail3(400, "\u6B4C\u5355 ID \u65E0\u6548");
     const tracks = await this.playlistTracks(id.trim(), auth.cookie);
     const meta = await this.qqGet(
       `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?${new URLSearchParams({
@@ -4299,7 +5737,7 @@ ${body}`;
       })}`,
       auth.cookie
     );
-    return ok2({
+    return ok3({
       id: id.trim(),
       name: String(meta.json?.cdlist?.[0]?.dissname || ""),
       tracks,
@@ -4310,30 +5748,40 @@ ${body}`;
 function unescapeRedirect(url) {
   return url.replace(/\\\//g, "/").replace(/&amp;/g, "&");
 }
-function ok2(data) {
+function ok3(data) {
   return { code: 200, error: "", data };
 }
-function fail2(code, error, data = "") {
+function fail3(code, error, data = "") {
   return { code, error, data };
 }
 
-// src/cache.ts
+// server/src/cache.ts
 import { mkdirSync as mkdirSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2, existsSync as existsSync2, readdirSync, rmSync, statSync } from "node:fs";
-import { join as join4 } from "node:path";
-var PRESERVE_DIRS = /* @__PURE__ */ new Set(["netease_auth", "qq_auth"]);
+import { join as join5 } from "node:path";
+var PRESERVE_DIRS = /* @__PURE__ */ new Set(["netease_auth", "qq_auth", "kugou_auth"]);
+var CACHE_CATEGORY_IDS = ["lyrics", "play", "comments", "other"];
+function classifyDir(name) {
+  const lower = name.toLowerCase();
+  if (lower.includes("lyric")) return "lyrics";
+  if (lower.includes("comment")) return "comments";
+  if (lower.includes("play") || lower.includes("quality") || lower.includes("pyq")) {
+    return "play";
+  }
+  return "other";
+}
 var FileCache = class {
   constructor(root) {
     this.root = root;
     mkdirSync2(root, { recursive: true });
   }
   dir(subdir) {
-    const path = join4(this.root, subdir);
+    const path = join5(this.root, subdir);
     mkdirSync2(path, { recursive: true });
     return path;
   }
   file(subdir, key) {
     const safe = key.replace(/[^a-zA-Z0-9]/g, "_");
-    return join4(this.dir(subdir), `${safe}.json`);
+    return join5(this.dir(subdir), `${safe}.json`);
   }
   read(subdir, key) {
     const path = this.file(subdir, key);
@@ -4355,16 +5803,17 @@ var FileCache = class {
   setTtl(subdir, key, value, ttlSec, field = "url") {
     this.write(subdir, key, { [field]: value, expires: Math.floor(Date.now() / 1e3) + ttlSec });
   }
-  /** 清理可重建缓存，保留登录 Cookie */
-  clearSafe() {
+  /** 清理可重建缓存，保留登录 Cookie；可按分类清理 */
+  clearSafe(category) {
+    const target = category && category !== "all" ? category : "all";
     let removedBytes = 0;
     let removedEntries = 0;
     const preserved = [];
     if (!existsSync2(this.root)) {
-      return { removedBytes: 0, removedEntries: 0, preserved };
+      return { removedBytes: 0, removedEntries: 0, preserved, category: target };
     }
     for (const name of readdirSync(this.root)) {
-      const full = join4(this.root, name);
+      const full = join5(this.root, name);
       let st;
       try {
         st = statSync(full);
@@ -4375,6 +5824,7 @@ var FileCache = class {
         preserved.push(name);
         continue;
       }
+      if (target !== "all" && classifyDir(name) !== target) continue;
       try {
         removedBytes += measurePath(full);
         rmSync(full, { recursive: true, force: true });
@@ -4382,10 +5832,14 @@ var FileCache = class {
       } catch {
       }
     }
-    return { removedBytes, removedEntries, preserved };
+    return { removedBytes, removedEntries, preserved, category: target };
   }
-  /** 当前缓存占用：可清理项 + 保留的登录目录 */
+  /** 当前缓存占用：可清理项 + 保留的登录目录 + 分类明细 */
   usage() {
+    const buckets = /* @__PURE__ */ new Map();
+    for (const id of CACHE_CATEGORY_IDS) {
+      buckets.set(id, { id, bytes: 0, entries: 0, dirs: [] });
+    }
     let rebuildableBytes = 0;
     let preservedBytes = 0;
     let rebuildableEntries = 0;
@@ -4394,11 +5848,12 @@ var FileCache = class {
         rebuildableBytes: 0,
         preservedBytes: 0,
         totalBytes: 0,
-        rebuildableEntries: 0
+        rebuildableEntries: 0,
+        categories: [...buckets.values()]
       };
     }
     for (const name of readdirSync(this.root)) {
-      const full = join4(this.root, name);
+      const full = join5(this.root, name);
       let st;
       try {
         st = statSync(full);
@@ -4412,12 +5867,18 @@ var FileCache = class {
       }
       rebuildableBytes += size;
       rebuildableEntries += 1;
+      const id = classifyDir(name);
+      const bucket = buckets.get(id);
+      bucket.bytes += size;
+      bucket.entries += 1;
+      bucket.dirs.push(name);
     }
     return {
       rebuildableBytes,
       preservedBytes,
       totalBytes: rebuildableBytes + preservedBytes,
-      rebuildableEntries
+      rebuildableEntries,
+      categories: CACHE_CATEGORY_IDS.map((id) => buckets.get(id))
     };
   }
 };
@@ -4428,7 +5889,7 @@ function measurePath(path) {
     if (!st.isDirectory()) return 0;
     let total = 0;
     for (const name of readdirSync(path)) {
-      total += measurePath(join4(path, name));
+      total += measurePath(join5(path, name));
     }
     return total;
   } catch {
@@ -4436,13 +5897,13 @@ function measurePath(path) {
   }
 }
 
-// src/app.ts
+// server/src/app.ts
 init_config();
 
-// src/crypto/qrcDecrypt.ts
-import { inflateSync, unzipSync } from "node:zlib";
+// server/src/crypto/qrcDecrypt.ts
+import { inflateSync as inflateSync2, unzipSync as unzipSync2 } from "node:zlib";
 
-// src/crypto/qrcDes.ts
+// server/src/crypto/qrcDes.ts
 var QQ_KEY = Buffer.from("!@#)(*$%123ZXC!@!@#)(NHL", "ascii");
 var ENCRYPT = 1;
 var DECRYPT = 0;
@@ -4578,7 +6039,7 @@ function qrcTripleDesDecrypt(hexCipher) {
   return out;
 }
 
-// src/crypto/qrcDecrypt.ts
+// server/src/crypto/qrcDecrypt.ts
 function inflateAuto(data) {
   const candidates = [data];
   for (const magic of [Buffer.from([120, 156]), Buffer.from([120, 1]), Buffer.from([120, 218])]) {
@@ -4587,11 +6048,11 @@ function inflateAuto(data) {
   }
   for (const chunk of candidates) {
     try {
-      return unzipSync(chunk);
+      return unzipSync2(chunk);
     } catch {
     }
     try {
-      return inflateSync(chunk);
+      return inflateSync2(chunk);
     } catch {
     }
   }
@@ -4621,226 +6082,9 @@ function qrcPlainOrDecrypt(raw2) {
   }
 }
 
-// src/lyrics.ts
+// server/src/lyrics.ts
 init_netease();
-
-// src/kugouLyrics.ts
-init_http();
-init_util();
-import { createHash as createHash4 } from "node:crypto";
-import { inflateRawSync, inflateSync as inflateSync2, unzipSync as unzipSync2 } from "node:zlib";
-var KRC_KEY = Buffer.from([64, 71, 97, 119, 94, 50, 116, 71, 81, 54, 49, 45, 206, 210, 110, 105]);
-var SIGN_SALT = "LnT6xpN3khm36zse0QzvmgTZ3waWdRSA";
-function md5(value) {
-  return createHash4("md5").update(value).digest("hex");
-}
-function hasKrcHeader(bytes) {
-  return bytes.length >= 4 && bytes[0] === 107 && bytes[1] === 114 && bytes[2] === 99 && bytes[3] === 49;
-}
-function looksLikeTimedLyric(text) {
-  return /\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/.test(text) || /<\d{1,2}:\d{2}(?:[.:]\d{1,3})?>/.test(text) || text.trimStart().startsWith("WEBVTT") || /\[\d+,\d+\]/.test(text);
-}
-function krcDecrypt(encrypted) {
-  if (encrypted.length <= 4) throw new Error("Invalid KRC data");
-  const data = encrypted.subarray(4);
-  const decrypted = Buffer.alloc(data.length);
-  for (let i = 0; i < data.length; i += 1) {
-    decrypted[i] = data[i] ^ KRC_KEY[i % KRC_KEY.length];
-  }
-  const attempts = [
-    () => inflateSync2(decrypted),
-    () => inflateRawSync(decrypted),
-    () => unzipSync2(decrypted)
-  ];
-  for (const attempt of attempts) {
-    try {
-      return attempt().toString("utf8");
-    } catch {
-    }
-  }
-  throw new Error("KRC decompress failed");
-}
-function decodeDownloadedLyric(bytes, contentType) {
-  const isPlainText = String(contentType) === "2";
-  if (isPlainText || !hasKrcHeader(bytes)) {
-    const text = bytes.toString("utf8").replace(/^\uFEFF/, "");
-    if (looksLikeTimedLyric(text)) return text;
-    throw new Error("Unexpected plain lyric payload");
-  }
-  try {
-    return krcDecrypt(bytes);
-  } catch (error) {
-    const fallback = bytes.toString("utf8");
-    if (looksLikeTimedLyric(fallback)) return fallback;
-    throw error;
-  }
-}
-function signParams(params) {
-  const sortedKeys = Object.keys(params).sort();
-  let str = SIGN_SALT;
-  for (const key of sortedKeys) {
-    str += `${key}=${params[key]}`;
-  }
-  str += SIGN_SALT;
-  return md5(str);
-}
-async function requestKugou(url, params, module, headers = {}) {
-  const clientTimeMs = Date.now();
-  const clientTimeSec = Math.floor(clientTimeMs / 1e3);
-  const mid = md5(String(clientTimeMs));
-  const finalParams = { ...params };
-  if (module !== "Lyric") {
-    Object.assign(finalParams, {
-      userid: "0",
-      appid: "3116",
-      token: "",
-      clienttime: clientTimeSec,
-      iscorrection: "1",
-      uuid: "-",
-      mid,
-      dfid: "-",
-      clientver: "11070",
-      platform: "AndroidFilter"
-    });
-  } else {
-    Object.assign(finalParams, {
-      appid: "3116",
-      clientver: "11070"
-    });
-  }
-  finalParams.signature = signParams(finalParams);
-  const urlObj = new URL(url);
-  for (const [key, value] of Object.entries(finalParams)) {
-    urlObj.searchParams.set(key, String(value));
-  }
-  const res = await request("GET", urlObj.toString(), {
-    timeoutMs: 6e3,
-    headers: {
-      "User-Agent": `Android14-1070-11070-201-0-${module}-wifi`,
-      Connection: "Keep-Alive",
-      "Accept-Encoding": "gzip, deflate",
-      "KG-Rec": "1",
-      "KG-RC": "1",
-      "KG-CLIENTTIMEMS": String(clientTimeMs),
-      mid,
-      ...headers
-    }
-  });
-  const data = res.json;
-  if (!data) throw new Error("Kugou response empty");
-  if (data.error_code !== void 0 && data.error_code !== 0 && data.error_code !== 200) {
-    throw new Error(`Kugou API error ${data.error_code}`);
-  }
-  return data;
-}
-function kugouCoverUrl(info, hash) {
-  const direct = String(info?.Image || info?.album_img || info?.imgUrl || info?.album_img_url || "").trim().replace(/\{size\}/gi, "240");
-  if (/^https?:\/\//i.test(direct)) return direct;
-  const h = String(hash || info?.FileHash || info?.hash || "").trim();
-  if (h.length >= 8) return `https://imgessl.kugou.com/stdmusic/240/${h.slice(0, 8)}/${h}.jpg`;
-  return "";
-}
-function mapSearchResult(info) {
-  const singers = Array.isArray(info?.Singers) ? info.Singers : [];
-  const artists = singers.map((s) => String(s?.name || "").trim()).filter(Boolean).join(", ") || String(info?.singername || "").split("\u3001").map((s) => s.trim()).filter(Boolean).join(", ");
-  const id = Number(info?.ID || info?.album_audio_id || 0);
-  const hash = String(info?.FileHash || info?.hash || "").trim();
-  const name = String(info?.SongName || info?.songname || "").replace(/<[^>]+>/g, "").trim();
-  if (!id || !hash || !name) return null;
-  return {
-    id,
-    name,
-    artists,
-    album: String(info?.AlbumName || info?.album_name || "").trim(),
-    durationMs: Math.max(0, Number(info?.Duration ?? info?.duration ?? 0)) * 1e3,
-    kgHash: hash,
-    pic: kugouCoverUrl(info, hash)
-  };
-}
-async function searchKugouSongs(keyword, page = 1, pageSize = 20) {
-  const query = keyword.trim();
-  if (!query) return [];
-  try {
-    const data = await requestKugou(
-      "http://complexsearch.kugou.com/v2/search/song",
-      {
-        sorttype: "0",
-        keyword: query,
-        pagesize: pageSize,
-        page
-      },
-      "SearchSong",
-      { "x-router": "complexsearch.kugou.com" }
-    );
-    return (data?.data?.lists || []).map(mapSearchResult).filter((item) => Boolean(item));
-  } catch {
-    const data = await requestKugou(
-      "http://mobiles.kugou.com/api/v3/search/song",
-      {
-        showtype: "14",
-        highlight: "",
-        pagesize: String(pageSize),
-        tag_aggr: "1",
-        plat: "0",
-        sver: "5",
-        keyword: query,
-        correct: "1",
-        api_ver: "1",
-        version: "9108",
-        page: String(page)
-      },
-      "SearchSong"
-    );
-    return (data?.data?.info || []).map(mapSearchResult).filter((item) => Boolean(item));
-  }
-}
-async function fetchKugouLyricText(song) {
-  if (!song.kgHash) throw new Error("Missing Kugou hash");
-  const searchRes = await requestKugou(
-    "https://lyrics.kugou.com/v1/search",
-    {
-      album_audio_id: song.id,
-      duration: song.durationMs,
-      hash: song.kgHash,
-      keyword: `${song.artists} - ${song.name}`.trim(),
-      lrctxt: "1",
-      man: "no"
-    },
-    "Lyric"
-  );
-  const candidate = searchRes?.candidates?.[0];
-  if (!candidate?.id || !candidate?.accesskey) return "";
-  const downloadRes = await requestKugou(
-    "http://lyrics.kugou.com/download",
-    {
-      accesskey: candidate.accesskey,
-      charset: "utf8",
-      client: "mobi",
-      fmt: "krc",
-      id: candidate.id,
-      ver: "1"
-    },
-    "Lyric"
-  ).catch(async () => requestKugou(
-    "http://lyrics.kugou.com/download",
-    {
-      accesskey: candidate.accesskey,
-      charset: "utf8",
-      client: "mobi",
-      fmt: "lrc",
-      id: candidate.id,
-      ver: "1"
-    },
-    "Lyric"
-  ));
-  const base64 = String(downloadRes?.content || "");
-  if (!base64) return "";
-  const bytes = Buffer.from(base64, "base64");
-  const lyricText = decodeDownloadedLyric(bytes, downloadRes?.contenttype);
-  return decodeEntities(lyricText);
-}
-
-// src/lyrics.ts
+init_kugouLyrics();
 init_http();
 init_util();
 var AMLL_DB_BASE = "https://amll-ttml-db.stevexmh.net";
@@ -4849,6 +6093,7 @@ var BASE_LYRIC_SOURCE_ORDER = ["netease", "amll", "qq", "kugou"];
 var AUTO_MATCH_MIN_SCORE = 75;
 var AUTO_MATCH_SEARCH_LIMIT = 8;
 var LYRIC_MODAL_SEARCH_LIMIT = 20;
+var CROSS_PLATFORM_UPGRADE_MAX_DURATION_DIFF_MS = 3e3;
 function stripSearchMarkup(value) {
   return String(value || "").replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/\s+/g, " ").trim();
 }
@@ -4869,6 +6114,10 @@ function withSource(lyrics, source) {
 function isWordByWord(lyrics) {
   return timedLyricScore(lyrics.yrc) > 0;
 }
+function durationCloseEnough(a, b) {
+  if (!a || a <= 0 || !b || b <= 0) return false;
+  return Math.abs(a - b) <= CROSS_PLATFORM_UPGRADE_MAX_DURATION_DIFF_MS;
+}
 function pickBetterLyrics(a, b) {
   const aWord = isWordByWord(a);
   const bWord = isWordByWord(b);
@@ -4882,18 +6131,25 @@ function pickBetterLyrics(a, b) {
   }
   return aCov >= bCov ? a : b;
 }
-function pickAutoMatchedLyrics(native, candidate, nativeType) {
+function pickAutoMatchedLyrics(native, candidate, options) {
   if (!hasUsableLyrics(candidate)) return native;
   if (!hasUsableLyrics(native)) return candidate;
+  const nativeType = options?.nativeType;
+  const samePlatform = Boolean(
+    nativeType && (candidate.source === nativeType || candidate.source === "native")
+  );
   const nativeWord = isWordByWord(native);
   const candidateWord = isWordByWord(candidate);
   const nativeCov = coverageScore(native);
   const candidateCov = coverageScore(candidate);
+  if (!samePlatform) {
+    if (nativeWord) return native;
+    if (!candidateWord) return native;
+    if ((candidate.matchScore || 0) < AUTO_MATCH_MIN_SCORE) return native;
+    if (!durationCloseEnough(options?.nativeDurationMs, candidate.durationMs)) return native;
+    return candidate;
+  }
   if (nativeWord) {
-    const samePlatform = nativeType && (candidate.source === nativeType || candidate.source === "native");
-    if (samePlatform) {
-      return pickBetterLyrics(native, candidate);
-    }
     if (!candidateWord || candidateCov < nativeCov * 1.35) {
       return native;
     }
@@ -5046,6 +6302,9 @@ var LyricsService = class {
       this.netease.fetchLyric(songid, cookie)
     ]);
     if (officialRes?.json && (officialRes.json.lrc || officialRes.json.yrc)) official = officialRes.json;
+    if (hasNeteasePureMusicFlag(official) || hasNeteasePureMusicFlag(anonymous) || isPureMusicLyricText(neteaseLyricText(official, "lrc")) || isPureMusicLyricText(neteaseLyricText(anonymous, "lrc"))) {
+      return { lrc: "", yrc: "", tlyric: "" };
+    }
     const lyrics = {
       lrc: pickRicherLyric(neteaseLyricText(official, "lrc"), neteaseLyricText(anonymous, "lrc")),
       yrc: pickRicherLyric(neteaseLyricText(official, "yrc"), neteaseLyricText(anonymous, "yrc")),
@@ -5102,7 +6361,10 @@ var LyricsService = class {
       ]);
       const nativeTagged2 = taggedNative(native2);
       if (best && hasUsableLyrics(best)) {
-        const picked = hasUsableLyrics(native2) ? pickAutoMatchedLyrics(nativeTagged2, best, options.nativeType) : best;
+        const picked = hasUsableLyrics(native2) ? pickAutoMatchedLyrics(nativeTagged2, best, {
+          nativeType: options.nativeType,
+          nativeDurationMs: options.durationMs
+        }) : best;
         if (hasUsableLyrics(picked)) {
           return picked.source ? picked : withSource(picked, options.preferred);
         }
@@ -5143,9 +6405,13 @@ var LyricsService = class {
     const order = buildLyricSourceOrder(options.preferred);
     let best = null;
     let bestScore = 0;
-    const consider = (lyrics, source) => {
+    const consider = (lyrics, source, meta) => {
       if (scoreBundle(lyrics) <= 0) return;
-      const tagged = withSource(lyrics, source);
+      const tagged = {
+        ...withSource(lyrics, source),
+        matchScore: meta?.matchScore,
+        durationMs: meta?.durationMs
+      };
       const score = coverageScore(tagged) + (isWordByWord(tagged) ? 80 : 0);
       if (score > bestScore) {
         best = tagged;
@@ -5156,11 +6422,19 @@ var LyricsService = class {
       if (source === "netease" || source === "qq") {
         if (options.nativeType === source && options.nativeId) {
           const exact = await this.fetch(source, options.nativeId).catch(() => EMPTY_LYRICS);
-          consider(exact, source);
+          consider(exact, source, {
+            matchScore: 100,
+            durationMs: options.durationMs
+          });
           return;
         }
         const found = source === "qq" ? await this.qq.searchByName(query, 1).catch(() => null) : await this.netease.searchByName(query, 1).catch(() => null);
         let hit = pickBestSearchTrack(target, found?.tracks || []);
+        let hitScore = hit ? scoreCandidate(target, {
+          title: hit.title || "",
+          author: hit.author || "",
+          durationMs: hit.durationMs
+        }).score : 0;
         if (!hit?.songid && options.artist.trim()) {
           const titleOnlyFound = source === "qq" ? await this.qq.searchByName(options.title, 1).catch(() => null) : await this.netease.searchByName(options.title, 1).catch(() => null);
           hit = pickBestSearchTrack(
@@ -5168,10 +6442,22 @@ var LyricsService = class {
             titleOnlyFound?.tracks || [],
             "titleOnly"
           );
+          hitScore = hit ? scoreCandidate(
+            { ...target, artist: "" },
+            {
+              title: hit.title || "",
+              author: hit.author || "",
+              durationMs: hit.durationMs
+            }
+          ).score : 0;
         }
         if (hit?.songid) {
           const lyrics = await this.fetch(source, String(hit.songid)).catch(() => EMPTY_LYRICS);
-          consider(lyrics, source);
+          consider(lyrics, source, {
+            matchScore: hitScore,
+            // 只用候选自身时长；缺时长则跨平台升级时 durationCloseEnough 会拒绝
+            durationMs: hit.durationMs && hit.durationMs > 0 ? hit.durationMs : void 0
+          });
         }
         return;
       }
@@ -5180,7 +6466,9 @@ var LyricsService = class {
           ...options,
           searchQuery: query
         }).catch(() => EMPTY_LYRICS);
-        consider(amll, "amll");
+        consider(amll, "amll", {
+          matchScore: hasUsableLyrics(amll) ? AUTO_MATCH_MIN_SCORE : 0
+        });
         return;
       }
       if (source === "kugou") {
@@ -5190,7 +6478,9 @@ var LyricsService = class {
           durationMs: options.durationMs,
           searchQuery: query
         }).catch(() => EMPTY_LYRICS);
-        consider(kugou, "kugou");
+        consider(kugou, "kugou", {
+          matchScore: hasUsableLyrics(kugou) ? AUTO_MATCH_MIN_SCORE : 0
+        });
       }
     });
     await Promise.all(jobs);
@@ -5401,7 +6691,7 @@ var LyricsService = class {
     const [exact] = results.splice(idx, 1);
     return [{
       ...exact,
-      matchScore: Math.max(exact.matchScore, 100),
+      // 置顶正在播放曲目，保留真实歌名/歌手匹配分（不强行改成 100%）
       titleMatched: true,
       artistMatched: true
     }, ...results];
@@ -5438,7 +6728,7 @@ var LyricsService = class {
   }
 };
 
-// src/netease.ts
+// server/src/netease.ts
 init_config();
 init_netease();
 init_http();
@@ -5495,6 +6785,112 @@ var NeteaseService = class _NeteaseService {
     const byId = new Map(songs.map((song) => [String(song.id), song]));
     const tracks = sliced.songids.map((id) => this.trackFromSong(byId.get(String(id)), privById.get(String(id)))).filter((item) => Boolean(item)).map((item) => this.wrap({ ...item, lrc: "", url: "" }));
     return { tracks, hasMore: sliced.has_more };
+  }
+  async cloudSearchRaw(query, type, page, limit = 20) {
+    const offset = Math.max(0, (page - 1) * limit);
+    const encoded = encodeLinuxData({
+      method: "POST",
+      url: "http://music.163.com/api/cloudsearch/pc",
+      params: { s: query, type, offset, limit }
+    });
+    const res = await neteaseHttp("POST", "http://music.163.com/api/linux/forward", encoded, "", {
+      Referer: "http://music.163.com/"
+    });
+    return res.json?.result;
+  }
+  mapPlaylists(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map((item) => {
+      const id = String(item?.id || "").trim();
+      const name = String(item?.name || "").trim();
+      if (!id || !name) return null;
+      const coverRaw = String(item?.coverImgUrl || item?.picUrl || "").trim();
+      const cover = coverRaw ? httpsNeteaseUrl(coverRaw.includes("?") ? coverRaw : `${coverRaw}?param=300x300`) : void 0;
+      const trackCount = Number(item?.trackCount || 0) || void 0;
+      const creator = String(item?.creator?.nickname || item?.user?.nickname || "").trim() || void 0;
+      return { id, name, cover, trackCount, creator, type: "netease" };
+    }).filter((item) => Boolean(item));
+  }
+  mapAlbums(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map((item) => {
+      const id = String(item?.id || "").trim();
+      const name = String(item?.name || "").trim();
+      if (!id || !name) return null;
+      const coverRaw = String(item?.picUrl || item?.blurPicUrl || "").trim();
+      const cover = coverRaw ? httpsNeteaseUrl(coverRaw.includes("?") ? coverRaw : `${coverRaw}?param=300x300`) : void 0;
+      const artists = [];
+      if (Array.isArray(item?.artists)) {
+        for (const artist2 of item.artists) {
+          if (artist2?.name) artists.push(String(artist2.name));
+        }
+      } else if (item?.artist?.name) {
+        artists.push(String(item.artist.name));
+      }
+      const artist = artists.join(", ") || void 0;
+      return { id, name, cover, artist, type: "netease" };
+    }).filter((item) => Boolean(item));
+  }
+  mapArtists(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map((item) => {
+      const id = String(item?.id || "").trim();
+      const name = String(item?.name || "").trim();
+      if (!id || !name) return null;
+      const coverRaw = String(item?.img1v1Url || item?.picUrl || "").trim();
+      const cover = coverRaw ? httpsNeteaseUrl(coverRaw.includes("?") ? coverRaw : `${coverRaw}?param=300x300`) : void 0;
+      return { id, name, cover, type: "netease" };
+    }).filter((item) => Boolean(item));
+  }
+  async searchByCategory(query, page, category) {
+    if (category === "song") {
+      const result = await this.searchByName(query, page);
+      if (!result?.tracks.length) return null;
+      return { data: result.tracks, hasMore: result.hasMore, category: "song" };
+    }
+    if (category === "all") {
+      const previewLimit = 5;
+      const [songResult, playlistRaw, albumRaw, artistRaw] = await Promise.all([
+        this.searchByName(query, page),
+        this.cloudSearchRaw(query, 1e3, 1, previewLimit),
+        this.cloudSearchRaw(query, 10, 1, previewLimit),
+        this.cloudSearchRaw(query, 100, 1, previewLimit)
+      ]);
+      const bundle = {
+        songs: songResult?.tracks || [],
+        playlists: this.mapPlaylists(playlistRaw?.playlists),
+        albums: this.mapAlbums(albumRaw?.albums),
+        artists: this.mapArtists(artistRaw?.artists)
+      };
+      if (!bundle.songs.length && !bundle.playlists.length && !bundle.albums.length && !bundle.artists.length) {
+        return null;
+      }
+      return {
+        data: bundle,
+        hasMore: Boolean(songResult?.hasMore),
+        category: "all"
+      };
+    }
+    const typeMap = {
+      playlist: 1e3,
+      album: 10,
+      artist: 100
+    };
+    const limit = 20;
+    const raw2 = await this.cloudSearchRaw(query, typeMap[category], page, limit);
+    if (category === "playlist") {
+      const playlists = this.mapPlaylists(raw2?.playlists);
+      if (!playlists.length) return null;
+      return { data: playlists, hasMore: playlists.length >= limit, category };
+    }
+    if (category === "album") {
+      const albums = this.mapAlbums(raw2?.albums);
+      if (!albums.length) return null;
+      return { data: albums, hasMore: albums.length >= limit, category };
+    }
+    const artists = this.mapArtists(raw2?.artists);
+    if (!artists.length) return null;
+    return { data: artists, hasMore: artists.length >= limit, category };
   }
   async searchByNameForMatch(query, page) {
     const sourcePage = nameSearchSourcePage(page);
@@ -5796,13 +7192,13 @@ var NeteaseService = class _NeteaseService {
   }
 };
 
-// src/pages.ts
+// server/src/pages.ts
 import { existsSync as existsSync3, readFileSync as readFileSync3 } from "node:fs";
-import { join as join5 } from "node:path";
-function spaHtml(webRoot2) {
+import { join as join6 } from "node:path";
+function spaHtml(webRoot) {
   const manifestPath = [
-    join5(webRoot2, "static/app/manifest.json"),
-    join5(webRoot2, "static/app/.vite/manifest.json")
+    join6(webRoot, "static/app/manifest.json"),
+    join6(webRoot, "static/app/.vite/manifest.json")
   ].find((p) => existsSync3(p));
   if (!manifestPath) return null;
   let manifest;
@@ -5840,7 +7236,7 @@ ${cssTags}
 </html>`;
 }
 
-// src/qq.ts
+// server/src/qq.ts
 init_config();
 init_http();
 init_sign();
@@ -5921,6 +7317,119 @@ var QqService = class {
     const byId = new Map(list.map((song) => [String(song.songmid || song.mid || ""), song]));
     const tracks = sliced.songids.map((id) => this.trackFromSong(byId.get(String(id)))).filter((item) => Boolean(item));
     return { tracks, hasMore: sliced.has_more };
+  }
+  qqSearchHeaders = {
+    Referer: "http://m.y.qq.com",
+    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1"
+  };
+  async qqSearchRaw(query, t, page, limit = 20) {
+    const qs = new URLSearchParams({
+      w: query,
+      p: String(page),
+      n: String(limit),
+      t: String(t),
+      format: "json",
+      new_json: "1",
+      ct: "24",
+      qqmusic_ver: "1298",
+      aggr: "1",
+      cr: "1",
+      lossless: "0",
+      flag_qc: "0",
+      remoteplace: "txt.yqq.song"
+    });
+    const res = await request("GET", `http://c.y.qq.com/soso/fcgi-bin/client_search_cp?${qs}`, {
+      headers: this.qqSearchHeaders
+    });
+    return res.json?.data;
+  }
+  mapPlaylists(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map((item) => {
+      const id = String(item?.dissid || item?.id || "").trim();
+      const name = String(item?.dissname || item?.title || item?.name || "").trim();
+      if (!id || !name) return null;
+      const cover = String(item?.imgurl || item?.cover || "").trim() || void 0;
+      const trackCount = Number(item?.song_count || item?.songnum || item?.song_cnt || 0) || void 0;
+      const creator = String(item?.creator?.name || item?.nickname || "").trim() || void 0;
+      return { id, name, cover, trackCount, creator, type: "qq" };
+    }).filter((item) => Boolean(item));
+  }
+  mapAlbums(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map((item) => {
+      const id = String(item?.albumMID || item?.albummid || item?.albumid || item?.id || "").trim();
+      const name = String(item?.albumName || item?.albumname || item?.name || "").trim();
+      if (!id || !name) return null;
+      const albummid = String(item?.albumMID || item?.albummid || id).trim();
+      const cover = albummid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albummid}.jpg` : String(item?.albumPic || "").trim() || void 0;
+      const artists = [];
+      if (Array.isArray(item?.singer)) {
+        for (const singer of item.singer) {
+          const singerName = String(singer?.name || singer?.title || "").trim();
+          if (singerName) artists.push(singerName);
+        }
+      }
+      const artist = artists.join(", ") || void 0;
+      return { id, name, cover, artist, type: "qq" };
+    }).filter((item) => Boolean(item));
+  }
+  mapArtists(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map((item) => {
+      const id = String(item?.singerMID || item?.singermid || item?.mid || item?.id || "").trim();
+      const name = String(item?.singerName || item?.singername || item?.name || "").trim();
+      if (!id || !name) return null;
+      const cover = String(item?.singerPic || item?.pic || "").trim() || void 0;
+      return { id, name, cover, type: "qq" };
+    }).filter((item) => Boolean(item));
+  }
+  async searchByCategory(query, page, category) {
+    if (category === "song") {
+      const result = await this.searchByName(query, page);
+      if (!result?.tracks.length) return null;
+      return { data: result.tracks, hasMore: result.hasMore, category: "song" };
+    }
+    if (category === "all") {
+      const previewLimit = 5;
+      const [songResult, playlistRaw, albumRaw, artistRaw] = await Promise.all([
+        this.searchByName(query, page),
+        this.qqSearchRaw(query, 3, 1, previewLimit),
+        this.qqSearchRaw(query, 2, 1, previewLimit),
+        this.qqSearchRaw(query, 8, 1, previewLimit)
+      ]);
+      const bundle = {
+        songs: songResult?.tracks || [],
+        playlists: this.mapPlaylists(playlistRaw?.songlist?.list || playlistRaw?.songlist),
+        albums: this.mapAlbums(albumRaw?.album?.list),
+        artists: this.mapArtists(artistRaw?.singer?.list)
+      };
+      if (!bundle.songs.length && !bundle.playlists.length && !bundle.albums.length && !bundle.artists.length) {
+        return null;
+      }
+      return {
+        data: bundle,
+        hasMore: Boolean(songResult?.hasMore),
+        category: "all"
+      };
+    }
+    const limit = 20;
+    if (category === "playlist") {
+      const raw3 = await this.qqSearchRaw(query, 3, page, limit);
+      const playlists = this.mapPlaylists(raw3?.songlist?.list || raw3?.songlist);
+      if (!playlists.length) return null;
+      return { data: playlists, hasMore: playlists.length >= limit, category };
+    }
+    if (category === "album") {
+      const raw3 = await this.qqSearchRaw(query, 2, page, limit);
+      const albums = this.mapAlbums(raw3?.album?.list);
+      if (!albums.length) return null;
+      return { data: albums, hasMore: albums.length >= limit, category };
+    }
+    const raw2 = await this.qqSearchRaw(query, 8, page, limit);
+    const artists = this.mapArtists(raw2?.singer?.list);
+    if (!artists.length) return null;
+    return { data: artists, hasMore: artists.length >= limit, category };
   }
   async searchByNameForMatch(query, page) {
     const sourcePage = nameSearchSourcePage(page);
@@ -6187,7 +7696,7 @@ function formatCacheStamp() {
   return `${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
-// src/app.ts
+// server/src/app.ts
 init_sign();
 init_util();
 init_crossPlay();
@@ -6203,7 +7712,7 @@ function isAllowedCoverUrl(url) {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
     const host = parsed.hostname.toLowerCase();
-    return host.endsWith("126.net") || host.endsWith("163.com") || host.endsWith("gtimg.cn") || host.endsWith("qq.com") || host.endsWith("myqcloud.com") || host.endsWith("music.126.net");
+    return host.endsWith("126.net") || host.endsWith("163.com") || host.endsWith("gtimg.cn") || host.endsWith("qlogo.cn") || host.endsWith("qq.com") || host.endsWith("myqcloud.com") || host.endsWith("music.126.net") || host.endsWith("kugou.com") || host.endsWith("kgimg.com");
   } catch {
     return false;
   }
@@ -6256,12 +7765,13 @@ function createApp(options) {
     }
   } catch {
   }
-  const secret = apiSecret(options.coreMarker || join6(options.webRoot, "core"));
+  const secret = apiSecret(options.coreMarker || join7(options.webRoot, "core"));
   const cache = new FileCache(options.cacheDir);
   const netease = new NeteaseService(cache, secret);
   const qq = new QqService(cache, secret);
   const neteaseAccount = new NeteaseAccount(cache, netease);
   const qqAccount = new QqAccount(cache, qq);
+  const kugouAccount = new KugouAccount(cache);
   const lyrics = new LyricsService(
     cache,
     netease,
@@ -6273,7 +7783,7 @@ function createApp(options) {
   if (privateBase) {
     void request("GET", `${privateBase}/`, { timeoutMs: 2e3 });
   }
-  const app2 = new Hono2();
+  const app = new Hono2();
   const mime = {
     ".js": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
@@ -6290,7 +7800,7 @@ function createApp(options) {
   };
   const sendFile = (rel) => {
     const safe = normalize(rel).replace(/^(\.\.(\/|\\|$))+/, "");
-    const file = join6(options.webRoot, safe);
+    const file = join7(options.webRoot, safe);
     if (!file.startsWith(options.webRoot) || !existsSync4(file) || !statSync2(file).isFile()) {
       return new Response("Not found", { status: 404 });
     }
@@ -6299,15 +7809,15 @@ function createApp(options) {
       headers: { "Content-Type": mime[extname(file).toLowerCase()] || "application/octet-stream" }
     });
   };
-  app2.get("/static/*", (c) => sendFile(c.req.path.slice(1)));
-  app2.get("/favicon.ico", () => sendFile("favicon.ico"));
-  app2.get("/help.php", (c) => c.redirect("/?doc=help", 302));
-  app2.get("/help", (c) => c.redirect("/?doc=help", 302));
-  app2.get("/disclaimer.php", (c) => c.redirect("/?doc=disclaimer", 302));
-  app2.get("/disclaimer", (c) => c.redirect("/?doc=disclaimer", 302));
-  app2.get("/privacy.php", (c) => c.redirect("/?doc=privacy", 302));
-  app2.get("/privacy", (c) => c.redirect("/?doc=privacy", 302));
-  app2.all("/api.php", async (c) => {
+  app.get("/static/*", (c) => sendFile(c.req.path.slice(1)));
+  app.get("/favicon.ico", () => sendFile("favicon.ico"));
+  app.get("/help.php", (c) => c.redirect("/?doc=help", 302));
+  app.get("/help", (c) => c.redirect("/?doc=help", 302));
+  app.get("/disclaimer.php", (c) => c.redirect("/?doc=disclaimer", 302));
+  app.get("/disclaimer", (c) => c.redirect("/?doc=disclaimer", 302));
+  app.get("/privacy.php", (c) => c.redirect("/?doc=privacy", 302));
+  app.get("/privacy", (c) => c.redirect("/?doc=privacy", 302));
+  app.all("/api.php", async (c) => {
     const get = (c.req.query("get") || "").trim();
     const typeRaw = (c.req.query("type") || "").trim();
     const id = (c.req.query("id") || "").trim();
@@ -6465,9 +7975,10 @@ function createApp(options) {
           const { loadSongComments: loadSongComments2 } = await Promise.resolve().then(() => (init_comments(), comments_exports));
           const result2 = await loadSongComments2(
             netease,
+            qq,
             cache,
             post,
-            neteaseAccount.sessionCookie() || ""
+            { netease: neteaseAccount.sessionCookie() || "" }
           );
           return jsonResponse(result2.data, result2.code, result2.error);
         }
@@ -6476,6 +7987,10 @@ function createApp(options) {
       }
       if (action.startsWith("qq_")) {
         const result = await qqAccount.handle(action, post);
+        return jsonResponse(result.data, result.code, result.error);
+      }
+      if (action.startsWith("kugou_")) {
+        const result = await kugouAccount.handle(action, post);
         return jsonResponse(result.data, result.code, result.error);
       }
       if (action === "lyrics_search") {
@@ -6560,26 +8075,27 @@ function createApp(options) {
       if (action === "cache_usage" || action === "clear_cache") {
         try {
           const bytesToMB = (bytes) => Math.round(bytes / (1024 * 1024) * 10) / 10;
+          const withMb = (usage2) => ({
+            ...usage2,
+            totalMB: bytesToMB(usage2.totalBytes),
+            rebuildableMB: bytesToMB(usage2.rebuildableBytes),
+            preservedMB: bytesToMB(usage2.preservedBytes),
+            categories: usage2.categories.map((item) => ({
+              ...item,
+              mb: bytesToMB(item.bytes)
+            }))
+          });
           if (action === "cache_usage") {
-            const usage2 = cache.usage();
-            return jsonResponse({
-              ...usage2,
-              totalMB: bytesToMB(usage2.totalBytes),
-              rebuildableMB: bytesToMB(usage2.rebuildableBytes),
-              preservedMB: bytesToMB(usage2.preservedBytes)
-            }, 200, "");
+            return jsonResponse(withMb(cache.usage()), 200, "");
           }
-          const result = cache.clearSafe();
+          const rawCategory2 = String(post.category || "all").trim();
+          const category2 = rawCategory2 === "lyrics" || rawCategory2 === "play" || rawCategory2 === "comments" || rawCategory2 === "other" || rawCategory2 === "all" ? rawCategory2 : "all";
+          const result = cache.clearSafe(category2);
           const usage = cache.usage();
           return jsonResponse({
             ...result,
             removedMB: bytesToMB(result.removedBytes),
-            usage: {
-              ...usage,
-              totalMB: bytesToMB(usage.totalBytes),
-              rebuildableMB: bytesToMB(usage.rebuildableBytes),
-              preservedMB: bytesToMB(usage.preservedBytes)
-            }
+            usage: withMb(usage)
           }, 200, "");
         } catch (err) {
           return jsonResponse("", 500, err instanceof Error ? err.message : "\u6E05\u7406\u5931\u8D25");
@@ -6589,6 +8105,8 @@ function createApp(options) {
       const filter = post.filter;
       const type = post.type;
       const page = Number(post.page || 1) || 1;
+      const rawCategory = String(post.category || "all").trim();
+      const category = rawCategory === "all" || rawCategory === "song" || rawCategory === "playlist" || rawCategory === "album" || rawCategory === "artist" ? rawCategory : "all";
       if (!input || !filter || !type) {
         return jsonResponse("", 403, "(\xB0\u30FC\xB0\u3003) \u4F20\u5165\u7684\u6570\u636E\u4E0D\u5BF9\u554A");
       }
@@ -6604,10 +8122,19 @@ function createApp(options) {
         return jsonResponse("", 403, "(\u30FB-\u30FB*) \u8BF7\u68C0\u67E5\u60A8\u7684\u8F93\u5165\u662F\u5426\u6B63\u786E");
       }
       try {
-        let result = null;
         if (filter === "name") {
-          result = type === "qq" ? await qq.searchByName(input, page) : await netease.searchByName(input, page);
-        } else if (filter === "id") {
+          const activeCategory = category === "all" ? "all" : category;
+          const result2 = type === "qq" ? await qq.searchByCategory(input, page, activeCategory) : await netease.searchByCategory(input, page, activeCategory);
+          if (!result2) {
+            return jsonResponse("", 404, "\u311F( \u2594, \u2594 )\u310F \u6CA1\u6709\u627E\u5230\u76F8\u5173\u4FE1\u606F");
+          }
+          return jsonResponse(result2.data, 200, "", {
+            has_more: Boolean(result2.hasMore),
+            category: result2.category
+          });
+        }
+        let result = null;
+        if (filter === "id") {
           const tracks = type === "qq" ? await qq.songsByIds([input]) : await netease.songsByIds([input]);
           result = { tracks, hasMore: false };
         } else {
@@ -6619,7 +8146,7 @@ function createApp(options) {
         if (!result || !result.tracks.length) {
           return jsonResponse("", 404, "\u311F( \u2594, \u2594 )\u310F \u6CA1\u6709\u627E\u5230\u76F8\u5173\u4FE1\u606F");
         }
-        return jsonResponse(result.tracks, 200, "", { has_more: Boolean(result.hasMore) });
+        return jsonResponse(result.tracks, 200, "", { has_more: Boolean(result.hasMore), category: "song" });
       } catch (err) {
         return jsonResponse("", 502, `(\xB0\u30FC\xB0\u3003) ${err instanceof Error ? err.message : "\u641C\u7D22\u5931\u8D25"}`);
       }
@@ -6633,84 +8160,14 @@ function createApp(options) {
     }
     return c.html(html);
   };
-  app2.get("/", handleIndex);
-  app2.post("/", handleIndex);
-  app2.get("/index.php", handleIndex);
-  app2.post("/index.php", handleIndex);
-  return app2;
+  app.get("/", handleIndex);
+  app.post("/", handleIndex);
+  app.get("/index.php", handleIndex);
+  app.post("/index.php", handleIndex);
+  return app;
 }
-
-// src/index.ts
-init_http();
-installDirectNetwork();
-function arg(name, fallback) {
-  const prefix = `--${name}=`;
-  const hit = process.argv.find((a) => a.startsWith(prefix));
-  if (hit) return hit.slice(prefix.length);
-  const idx = process.argv.indexOf(`--${name}`);
-  if (idx >= 0 && process.argv[idx + 1]) return process.argv[idx + 1];
-  return fallback;
-}
-var here = dirname2(fileURLToPath(import.meta.url));
-var defaultRoot = resolve(here, "../../web-root");
-var webRoot = resolve(arg("web-root", process.env.RYANMUSIC_WEB_ROOT || defaultRoot));
-var cacheDir = resolve(
-  arg("cache-dir", process.env.RYANMUSIC_CACHE_DIR || join7(webRoot, "core/cache"))
-);
-var listen = arg("listen", process.env.RYANMUSIC_LISTEN || "127.0.0.1");
-var port = Number(arg("port", process.env.PORT || process.env.RYANMUSIC_PORT || "18765"));
-var app = createApp({
-  webRoot,
-  cacheDir,
-  coreMarker: join7(webRoot, "core")
-});
-var server = createServer(async (req, res) => {
-  try {
-    const host = req.headers.host || `${listen}:${port}`;
-    const url = new URL(req.url || "/", `http://${host}`);
-    const headers = new Headers();
-    for (const [k, v] of Object.entries(req.headers)) {
-      if (v == null) continue;
-      if (Array.isArray(v)) headers.set(k, v.join(", "));
-      else headers.set(k, v);
-    }
-    const method = req.method || "GET";
-    const body = method === "GET" || method === "HEAD" ? void 0 : await new Promise((resolvePromise, reject) => {
-      const chunks = [];
-      req.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
-      req.on("end", () => resolvePromise(Buffer.concat(chunks)));
-      req.on("error", reject);
-    });
-    const request2 = new Request(url, { method, headers, body, duplex: "half" });
-    const response = await app.fetch(request2);
-    res.statusCode = response.status;
-    response.headers.forEach((value, key) => {
-      res.setHeader(key, value);
-    });
-    if (!response.body) {
-      res.end();
-      return;
-    }
-    const reader = response.body.getReader();
-    const pump = async () => {
-      for (; ; ) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) res.write(Buffer.from(value));
-      }
-      res.end();
-    };
-    pump().catch(() => {
-      try {
-        res.end();
-      } catch {
-      }
-    });
-  } catch (err) {
-    res.statusCode = 500;
-    res.end(err instanceof Error ? err.message : "internal error");
-  }
-});
-server.listen(port, listen, () => {
-  console.log(`RyanMusic server http://${listen}:${port}/  webRoot=${webRoot}`);
-});
+var app_default = createApp;
+export {
+  createApp,
+  app_default as default
+};
