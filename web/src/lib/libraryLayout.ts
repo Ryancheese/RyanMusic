@@ -2,17 +2,19 @@ import type { LibraryCardStyle, LibraryLayoutMode, LibraryListColumns } from '..
 
 export type { LibraryCardStyle, LibraryListColumns };
 
-/** 歌单 / 歌曲库布局（蜂窝 / 方形 / 列表） */
+/** 歌单 / 歌曲库布局（蜂窝 / 方形 / 列表 / 动态磁贴） */
 export const LIBRARY_LAYOUT_MODE_IDS: LibraryLayoutMode[] = [
   'honeycomb',
   'square',
   'list',
+  'tiles',
 ];
 
 export const LIBRARY_LAYOUT_MODE_LABELS: Record<LibraryLayoutMode, string> = {
   honeycomb: '蜂窝',
   square: '方形',
   list: '列表',
+  tiles: '磁贴',
 };
 
 export const LIBRARY_LIST_COLUMNS_IDS: LibraryListColumns[] = ['single', 'multi'];

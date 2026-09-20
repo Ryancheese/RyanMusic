@@ -31,7 +31,7 @@ async function postForm(body: URLSearchParams, timeoutMs = API_TIMEOUT_MS): Prom
 
 export function resolveMediaUrl(url?: string): string {
   if (!url) return '';
-  if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url;
+  if (/^https?:\/\//i.test(url) || url.startsWith('data:') || url.startsWith('applemusic:')) return url;
   return origin() + url.replace(/^\//, '');
 }
 
@@ -89,7 +89,9 @@ export async function fetchTrackById(type: MusicSource, songid: string): Promise
     category: 'song',
   });
   if (result.code !== 200 || !Array.isArray(result.data) || !result.data.length) return null;
-  return result.data[0];
+  const first = result.data[0];
+  if (!first || !('songid' in first)) return null;
+  return first;
 }
 
 export async function fetchSignedMedia(
@@ -181,6 +183,9 @@ export interface CloudPlaylist {
   id: string;
   name: string;
   cover?: string;
+  /** 用于磁贴翻转的封面组，通常是列表里前几首歌 */
+  covers?: string[];
+  coverItems?: { url: string; title?: string }[];
   trackCount?: number;
   specialType?: number;
   dirid?: number;
@@ -190,6 +195,8 @@ export interface CloudPlaylist {
   description?: string;
   /** 网易云 / QQ 推荐区虚拟条目 */
   recommendKind?: 'daily' | 'radar' | 'fm' | 'playlist';
+  /** Apple Music：资料库 / 目录 / 专辑 */
+  kind?: 'library' | 'catalog' | 'album' | string;
 }
 
 export interface NeteaseRecommendItem extends CloudPlaylist {

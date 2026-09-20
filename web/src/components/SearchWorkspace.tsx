@@ -12,6 +12,7 @@ import type {
   Track,
 } from '../types';
 import { useSearchHistoryStore } from '../store/searchHistoryStore';
+import { canUseAppleMusic } from '../lib/appleMusic';
 import { isWindowsApp } from '../lib/media';
 import CoverArt from './CoverArt';
 import DelistedCoverBadge from './DelistedCoverBadge';
@@ -51,6 +52,7 @@ interface SearchWorkspaceProps {
 const sources: { id: MusicSource; label: string }[] = [
   { id: 'netease', label: '网易云' },
   { id: 'qq', label: 'QQ 音乐' },
+  ...(canUseAppleMusic() ? [{ id: 'apple' as const, label: 'Apple Music' }] : []),
 ];
 
 const categories: { id: SearchCategory; label: string }[] = [
@@ -62,7 +64,9 @@ const categories: { id: SearchCategory; label: string }[] = [
 ];
 
 function sourceLabel(type: MusicSource) {
-  return type === 'qq' ? 'QQ' : '网易云';
+  if (type === 'qq') return 'QQ';
+  if (type === 'apple') return 'Apple';
+  return '网易云';
 }
 
 function hasSearchResults(
@@ -118,6 +122,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
   onOpenArtist,
 }) => {
   const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const history = useSearchHistoryStore((state) => state.items);
   const clearHistory = useSearchHistoryStore((state) => state.clear);
   const removeHistory = useSearchHistoryStore((state) => state.remove);
@@ -137,6 +142,12 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose, onQueryChange]);
+
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 40);
+    return () => window.clearTimeout(timer);
+  }, [open]);
 
   const cardClass = `group flex items-center gap-3 rounded-2xl border px-3 transition-colors ${
     isDaylight
@@ -323,7 +334,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
           initial={{ opacity: 0, y: 28 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 28 }}
-          className="fixed inset-0 z-50 flex flex-col overflow-hidden px-3 sm:px-6"
+          className="titlebar-no-drag fixed inset-0 z-[96] flex flex-col overflow-hidden px-3 sm:px-6"
           style={{
             color: theme.primaryColor,
             backgroundColor: isDaylight ? 'rgba(250,250,250,0.96)' : 'rgba(8,8,10,0.94)',
@@ -336,12 +347,17 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
           <header className="mx-auto flex w-full max-w-5xl shrink-0 flex-col gap-3">
             <div className="flex items-center gap-3">
               <form
-                className={`relative flex-1 rounded-2xl border ${
+                className={`titlebar-no-drag relative z-10 flex-1 rounded-2xl border ${
                   isDaylight ? 'border-black/10 bg-black/[0.04]' : 'border-white/10 bg-white/[0.05]'
                 }`}
                 onSubmit={(event) => {
                   event.preventDefault();
                   onSubmit();
+                }}
+                onMouseDown={(event) => {
+                  if ((event.target as HTMLElement).closest('input')) return;
+                  event.preventDefault();
+                  inputRef.current?.focus();
                 }}
               >
                 {isSearching ? (
@@ -352,10 +368,11 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                   <Search className="absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 opacity-45" />
                 )}
                 <input
+                  ref={inputRef}
                   value={query}
                   onChange={(event) => onQueryChange(event.target.value)}
                   placeholder="搜索歌曲、歌单、专辑、歌手"
-                  className="ryan-allow-select w-full bg-transparent py-3.5 pr-4 pl-11 text-base outline-none md:text-sm"
+                  className="titlebar-no-drag ryan-allow-select w-full bg-transparent py-3.5 pr-4 pl-11 text-base outline-none md:text-sm"
                   autoFocus
                 />
               </form>
@@ -458,7 +475,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                       >
                         <div className="truncate text-sm font-medium">{item.q}</div>
                         <div className="mt-0.5 text-[11px] opacity-40">
-                          {item.source === 'qq' ? 'QQ 音乐' : '网易云'}
+                          {item.source === 'qq' ? 'QQ 音乐' : item.source === 'apple' ? 'Apple Music' : '网易云'}
                         </div>
                       </button>
                       <button

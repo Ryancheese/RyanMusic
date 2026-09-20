@@ -44,6 +44,8 @@ function isAllowedCoverUrl(url: string): boolean {
       || host.endsWith('music.126.net')
       || host.endsWith('kugou.com')
       || host.endsWith('kgimg.com')
+      || host.endsWith('mzstatic.com')
+      || host.endsWith('apple.com')
     );
   } catch {
     return false;
@@ -153,6 +155,21 @@ export function createApp(options: AppOptions) {
 
   app.get('/static/*', (c) => sendFile(c.req.path.slice(1)));
   app.get('/favicon.ico', () => sendFile('favicon.ico'));
+  app.get('/apple-art/:id', (c) => {
+    const raw = (c.req.param('id') || '').replace(/\.(jpe?g|png|webp)$/i, '');
+    if (!/^[A-Za-z0-9._-]+(?:-cover)?$/.test(raw)) return c.text('Not found', 404);
+    const jpg = join(options.cacheDir, 'apple-art', `${raw}.jpg`);
+    const png = join(options.cacheDir, 'apple-art', `${raw}.png`);
+    const file = existsSync(jpg) ? jpg : existsSync(png) ? png : '';
+    if (!file) return c.text('Not found', 404);
+    const stream = Readable.toWeb(createReadStream(file)) as ReadableStream;
+    return new Response(stream, {
+      headers: {
+        'Content-Type': file.endsWith('.png') ? 'image/png' : 'image/jpeg',
+        'Cache-Control': 'public, max-age=86400',
+      },
+    });
+  });
 
   app.get('/help.php', (c) => c.redirect('/?doc=help', 302));
   app.get('/help', (c) => c.redirect('/?doc=help', 302));

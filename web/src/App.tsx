@@ -3,6 +3,18 @@ import { useMotionValue } from 'framer-motion';
 import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type SearchAlbumHit, type SearchArtistHit, type SearchBundle, type SearchCategory, type SearchPlaylistHit, type Track, type VisualizerMode } from './types';
 import { buildDownloadUrl, canNativeSave, coverImageUrl, coverRefreshUrl, fetchKugouStatus, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type CloudPlaylist, type LyricSearchCandidate, type PlayQuality } from './api';
 import { accentWashVars, contrastText, extractAccentFromImage } from './lib/color';
+import {
+  canUseAppleMusic,
+  fetchAppleArtistSongs,
+  isAppleTrack,
+  pauseAppleMusic,
+  playAppleMusic,
+  resumeAppleMusic,
+  searchAppleMusic,
+  seekAppleMusic,
+  stopAppleMusic,
+  subscribeAppleMusic,
+} from './lib/appleMusic';
 import { isMobileViewport, isNativeApp, isWindowsApp, prefersLightweightVisualizer, useIsMobile } from './lib/media';
 import { useWebFullscreen } from './lib/webFullscreen';
 import WindowControls from './components/WindowControls';
@@ -10,6 +22,7 @@ import TitlebarDragZone from './components/TitlebarDragZone';
 import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig, writeVisualizerMode } from './lib/visualizer';
 import { loadCustomBackgroundImage } from './lib/customBackgroundImage';
 import { useLibraryStore } from './store/libraryStore';
+import { useAppleMusicStore } from './store/appleMusicStore';
 import { useCloudStore } from './store/cloudStore';
 import { touchPlaylistRecent } from './store/playlistRecentStore';
 import { useSearchHistoryStore } from './store/searchHistoryStore';
@@ -69,7 +82,7 @@ function buildPlayMediaUrl(
     fresh?: number;
   },
 ): string {
-  if (!track?.url) return '';
+  if (!track?.url || isAppleTrack(track)) return '';
   const params = new URLSearchParams();
   if (options.authed) {
     params.set('auth', '1');
@@ -142,6 +155,17 @@ const App: React.FC = () => {
   const [netease, setNetease] = useState<AccountStatus | null>(null);
   const [qq, setQq] = useState<AccountStatus | null>(null);
   const [kugou, setKugou] = useState<AccountStatus | null>(null);
+  const appleAccount = useAppleMusicStore((state) => state.account);
+  const nativeClockRef = useRef({
+    active: false,
+    playing: false,
+    time: 0,
+    stamp: 0,
+    duration: 0,
+    songId: '',
+  });
+  const playbackIntentRef = useRef<'playing' | 'paused'>('paused');
+  const appleCommandGenRef = useRef(0);
   const lastQueryRef = useRef('');
   const returnToSearchRef = useRef(false);
 
@@ -205,6 +229,19 @@ const App: React.FC = () => {
   const playQqPersonalFm = useCloudStore((state) => state.playQqPersonalFm);
   const closeNeteasePlaylist = useCloudStore((state) => state.closeNeteasePlaylist);
   const closeQqPlaylist = useCloudStore((state) => state.closeQqPlaylist);
+  const syncAppleLibrary = useAppleMusicStore((state) => state.syncLibrary);
+  const syncAppleRecommend = useAppleMusicStore((state) => state.syncRecommend);
+  const openApplePlaylist = useAppleMusicStore((state) => state.openPlaylist);
+  const openAppleAlbum = useAppleMusicStore((state) => state.openAlbum);
+  const closeApplePlaylist = useAppleMusicStore((state) => state.closePlaylist);
+  const rememberAppleTracks = useAppleMusicStore((state) => state.rememberTracks);
+  const refreshAppleStatus = useAppleMusicStore((state) => state.refreshStatus);
+  const appleLoading = useAppleMusicStore((state) => state.loading);
+  const appleSyncing = useAppleMusicStore((state) => state.syncing);
+  const appleRecommendSyncing = useAppleMusicStore((state) => state.recommendSyncing);
+  const appleError = useAppleMusicStore((state) => state.error);
+  const appleRecommendError = useAppleMusicStore((state) => state.recommendError);
+  const appleOpen = useAppleMusicStore((state) => state.open);
 
   const [authFallback, setAuthFallback] = useState(false);
   const [streamFresh, setStreamFresh] = useState(0);
@@ -287,11 +324,14 @@ const App: React.FC = () => {
     root.style.backgroundColor = theme.backgroundColor;
     document.body.style.backgroundColor = theme.backgroundColor;
     try {
-      window.webkit?.messageHandlers?.ryanChrome?.postMessage({ daylight: isDaylight });
+      window.webkit?.messageHandlers?.ryanChrome?.postMessage({
+        daylight: isDaylight,
+        titlebarPassthrough: searchOpen,
+      });
     } catch {
       // non-mac / no bridge
     }
-  }, [bgWash, effectiveAccent, isDaylight, onAccent, theme.backgroundColor, theme.primaryColor, theme.secondaryColor, uiTint, washVars]);
+  }, [bgWash, effectiveAccent, isDaylight, onAccent, searchOpen, theme.backgroundColor, theme.primaryColor, theme.secondaryColor, uiTint, washVars]);
 
   const isMobile = useIsMobile();
   const { active: webFullscreen } = useWebFullscreen();
@@ -381,22 +421,78 @@ const App: React.FC = () => {
   }, []);
 
   const seek = useCallback((time: number) => {
+    const current = usePlayerStore.getState().queue[usePlayerStore.getState().index];
+    if (isAppleTrack(current)) {
+      nativeClockRef.current.time = time;
+      nativeClockRef.current.stamp = performance.now();
+      currentTime.set(time);
+      void seekAppleMusic(time);
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) return;
     audio.currentTime = time;
     currentTime.set(time);
   }, [currentTime]);
 
+  const startAppleQueue = useCallback((current: Track) => {
+    const gen = ++appleCommandGenRef.current;
+    const liveQueue = usePlayerStore.getState().queue.filter((item) => isAppleTrack(item));
+    const start = Math.max(0, liveQueue.findIndex((item) => String(item.songid) === String(current.songid)));
+    void playAppleMusic(liveQueue.length ? liveQueue : [current], start < 0 ? 0 : start)
+      .catch((error) => {
+        if (gen !== appleCommandGenRef.current) return;
+        if (playbackIntentRef.current !== 'playing') return;
+        setBuffering(false);
+        setStatus('paused');
+        playbackIntentRef.current = 'paused';
+        usePlayerStore.getState().setError(error instanceof Error ? error.message : 'Apple Music 播放失败');
+      });
+  }, [setStatus]);
+
   const togglePlay = useCallback(() => {
+    const current = usePlayerStore.getState().queue[usePlayerStore.getState().index];
+    if (!current) return;
+    const liveStatus = usePlayerStore.getState().status;
+    const shouldPause = playbackIntentRef.current === 'playing'
+      || liveStatus === 'playing'
+      || liveStatus === 'loading';
+    if (shouldPause) {
+      playbackIntentRef.current = 'paused';
+      appleCommandGenRef.current += 1;
+      setBuffering(false);
+      setStatus('paused');
+      nativeClockRef.current.playing = false;
+      nativeClockRef.current.stamp = performance.now();
+      if (isAppleTrack(current)) void pauseAppleMusic();
+      else audioRef.current?.pause();
+      return;
+    }
+    playbackIntentRef.current = 'playing';
+    setStatus('loading');
+    setBuffering(true);
+    if (isAppleTrack(current)) {
+      const canResume = nativeClockRef.current.active
+        && nativeClockRef.current.songId === String(current.songid);
+      if (canResume) {
+        void resumeAppleMusic().catch(() => {
+          if (playbackIntentRef.current !== 'playing') return;
+          startAppleQueue(current);
+        });
+        return;
+      }
+      startAppleQueue(current);
+      return;
+    }
     const audio = audioRef.current;
-    if (!audio || !track) return;
-    if (audio.paused) void audio.play();
-    else audio.pause();
-  }, [track]);
+    if (!audio) return;
+    void audio.play();
+  }, [setStatus, startAppleQueue]);
 
   const playIndex = useCallback(
-    (nextIndex: number) => {
+    (nextIndex: number, options?: { keepIntent?: boolean }) => {
       if (!queue.length) return;
+      if (!options?.keepIntent) playbackIntentRef.current = 'playing';
       playTracks(queue, nextIndex);
     },
     [playTracks, queue],
@@ -406,24 +502,25 @@ const App: React.FC = () => {
     (fromEnded = false) => {
       if (!queue.length) return;
       if (loopMode === 'one' && fromEnded) {
+        playbackIntentRef.current = 'playing';
         seek(0);
-        void audioRef.current?.play();
+        const current = usePlayerStore.getState().queue[usePlayerStore.getState().index];
+        if (isAppleTrack(current)) startAppleQueue(current);
+        else void audioRef.current?.play();
         return;
       }
-      if (index + 1 < queue.length) playIndex(index + 1);
-      else if (loopMode === 'all') playIndex(0);
+      if (fromEnded) playbackIntentRef.current = 'playing';
+      const keepIntent = !fromEnded;
+      if (index + 1 < queue.length) playIndex(index + 1, { keepIntent });
+      else if (loopMode === 'all') playIndex(0, { keepIntent });
     },
-    [index, loopMode, playIndex, queue.length, seek],
+    [index, loopMode, playIndex, queue.length, seek, startAppleQueue],
   );
 
   const playPrev = useCallback(() => {
-    if (currentTime.get() > 3) {
-      seek(0);
-      return;
-    }
-    if (index > 0) playIndex(index - 1);
-    else if (loopMode === 'all' && queue.length) playIndex(queue.length - 1);
-  }, [currentTime, index, loopMode, playIndex, queue.length, seek]);
+    if (index > 0) playIndex(index - 1, { keepIntent: true });
+    else if (loopMode === 'all' && queue.length > 1) playIndex(queue.length - 1, { keepIntent: true });
+  }, [index, loopMode, playIndex, queue.length]);
 
   const writeLegalQuery = useCallback((tab: LegalTab | null) => {
     const url = new URL(window.location.href);
@@ -577,6 +674,36 @@ const App: React.FC = () => {
         if (page === 1) clearResults();
       }
       try {
+        if (activeSource === 'apple') {
+          const bundle = await searchAppleMusic(input, activeCategory);
+          rememberAppleTracks(bundle.songs);
+          const empty = !bundle.songs.length && !bundle.playlists.length && !bundle.albums.length && !bundle.artists.length;
+          if (empty) {
+            if (!append) setSearchError('没有找到相关信息');
+            setHasMore(false);
+            return;
+          }
+          if (activeCategory === 'all') {
+            setSearchBundle((prev) => {
+              if (!append || !prev) return bundle;
+              return { ...prev, songs: [...prev.songs, ...bundle.songs] };
+            });
+            setResults((prev) => (append ? [...prev, ...bundle.songs] : bundle.songs));
+          } else if (activeCategory === 'song') {
+            setResults((prev) => (append ? [...prev, ...bundle.songs] : bundle.songs));
+          } else if (activeCategory === 'playlist') {
+            setSearchPlaylists((prev) => (append ? [...prev, ...bundle.playlists] : bundle.playlists));
+          } else if (activeCategory === 'album') {
+            setSearchAlbums((prev) => (append ? [...prev, ...bundle.albums] : bundle.albums));
+          } else if (activeCategory === 'artist') {
+            setSearchArtists((prev) => (append ? [...prev, ...bundle.artists] : bundle.artists));
+          }
+          setHasMore(false);
+          setSearchPage(page);
+          if (!append && page === 1) useSearchHistoryStore.getState().push(input, activeSource);
+          window.history.replaceState(null, '', `?name=${encodeURIComponent(input)}&type=apple&category=${activeCategory}`);
+          return;
+        }
         const filter = /^https?:\/\//i.test(input) ? 'url' as const : 'name' as const;
         const result = await searchMusic({
           input,
@@ -629,7 +756,7 @@ const App: React.FC = () => {
         setLoadingMore(false);
       }
     },
-    [searchCategory, searchSource],
+    [rememberAppleTracks, searchCategory, searchSource],
   );
 
   useEffect(() => {
@@ -656,9 +783,12 @@ const App: React.FC = () => {
 
     let frame = 0;
     const syncClock = () => {
-      const next = audio.currentTime;
-      currentTime.set(next);
-      pulseAudioBands(audioBands, analyser, !audio.paused);
+      const clock = nativeClockRef.current;
+      const next = clock.active
+        ? clock.time + (clock.playing ? (performance.now() - clock.stamp) / 1000 : 0)
+        : audio.currentTime;
+      currentTime.set(clock.duration > 0 ? Math.min(next, clock.duration) : next);
+      pulseAudioBands(audioBands, analyser, clock.active ? clock.playing : !audio.paused);
       audioPower.set((
         audioBands.bass.get()
         + audioBands.lowMid.get()
@@ -674,6 +804,7 @@ const App: React.FC = () => {
     frame = requestAnimationFrame(syncClock);
 
     const snapClock = () => {
+      if (nativeClockRef.current.active) return;
       currentTime.set(audio.currentTime);
     };
     audio.addEventListener('seeking', snapClock);
@@ -695,6 +826,17 @@ const App: React.FC = () => {
   }, [track?.songid, track?.type, netease?.loggedIn, netease?.vip, qq?.loggedIn, qq?.vip]);
 
   useEffect(() => {
+    if (isAppleTrack(track)) {
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.removeAttribute('data-src');
+        audio.removeAttribute('data-songid');
+      }
+      return;
+    }
+    nativeClockRef.current.active = false;
     const audio = audioRef.current;
     if (!audio || !mediaUrl || !track) return;
     const previous = audio.getAttribute('data-src') || '';
@@ -702,8 +844,6 @@ const App: React.FC = () => {
     if (previous !== mediaUrl) {
       const sameSong = audio.getAttribute('data-songid') === songKey;
       const keep = sameSong ? audio.currentTime : 0;
-      setBuffering(true);
-      setStatus('loading');
       audio.setAttribute('data-src', mediaUrl);
       audio.setAttribute('data-songid', songKey);
       audio.src = mediaUrl;
@@ -720,11 +860,106 @@ const App: React.FC = () => {
         setDuration(0);
       }
     }
+    if (playbackIntentRef.current === 'paused') {
+      audio.pause();
+      setBuffering(false);
+      setStatus('paused');
+      return;
+    }
+    setBuffering(true);
+    setStatus('loading');
     const playPromise = audio.play();
     if (playPromise) {
-      playPromise.then(() => setStatus('playing')).catch(() => setStatus('paused'));
+      playPromise.then(() => {
+        if (playbackIntentRef.current !== 'playing') {
+          audio.pause();
+          setStatus('paused');
+          return;
+        }
+        setStatus('playing');
+      }).catch(() => {
+        if (playbackIntentRef.current === 'paused') setStatus('paused');
+      });
     }
   }, [currentTime, mediaUrl, setDuration, setStatus, track?.songid, track?.type]);
+
+  useEffect(() => {
+    if (!isAppleTrack(track)) {
+      if (nativeClockRef.current.active) {
+        nativeClockRef.current.active = false;
+        nativeClockRef.current.playing = false;
+        void stopAppleMusic();
+      }
+      return;
+    }
+    const durationSec = (track.durationMs || 0) / 1000;
+    nativeClockRef.current = {
+      active: true,
+      playing: false,
+      time: 0,
+      stamp: performance.now(),
+      duration: durationSec,
+      songId: String(track.songid),
+    };
+    currentTime.set(0);
+    if (durationSec > 0) setDuration(durationSec);
+    if (playbackIntentRef.current === 'paused') {
+      appleCommandGenRef.current += 1;
+      setBuffering(false);
+      setStatus('paused');
+      void pauseAppleMusic();
+      return;
+    }
+    setBuffering(true);
+    setStatus('loading');
+    startAppleQueue(track);
+  }, [currentTime, setDuration, setStatus, startAppleQueue, track?.songid, track?.type]);
+
+  useEffect(() => {
+    return subscribeAppleMusic((event) => {
+      const type = String(event.type || '');
+      const songId = String(event.songId || '');
+      const time = Number(event.time) || 0;
+      const nextDuration = Number(event.duration) || 0;
+      const statusText = String(event.status || '');
+      const clock = nativeClockRef.current;
+      clock.time = time;
+      clock.stamp = performance.now();
+      clock.playing = statusText === 'playing';
+      if (nextDuration > 0) clock.duration = nextDuration;
+      if (songId) clock.songId = songId;
+      if (playbackIntentRef.current === 'paused') {
+        clock.playing = false;
+        if (type === 'ended') return;
+        if (statusText === 'playing' || statusText === 'loading') return;
+        currentTime.set(time);
+        setBuffering(false);
+        setStatus('paused');
+        return;
+      }
+      if (type === 'ended') {
+        clock.playing = false;
+        currentTime.set(time);
+        setBuffering(false);
+        playNext(true);
+        return;
+      }
+      if (nextDuration > 0 && Math.abs(nextDuration - durationRef.current) > 0.25) {
+        setDuration(nextDuration);
+      }
+      if (statusText === 'playing') {
+        setBuffering(false);
+        setStatus('playing');
+      } else if (statusText === 'paused') {
+        currentTime.set(time);
+        setBuffering(false);
+        setStatus('paused');
+      } else if (statusText === 'loading') {
+        setBuffering(true);
+        setStatus('loading');
+      }
+    });
+  }, [currentTime, playNext, setDuration, setStatus]);
 
   useEffect(() => {
     if (!queue.length) return;
@@ -771,6 +1006,7 @@ const App: React.FC = () => {
         fetchQqStatus(),
         fetchKugouStatus(),
       ]);
+      void refreshAppleStatus();
       if (!alive) return;
       setNetease(ne.code === 200 ? ne.data : { loggedIn: false });
       setQq(qqStatus.code === 200 ? qqStatus.data : { loggedIn: false });
@@ -783,12 +1019,12 @@ const App: React.FC = () => {
   }, []);
 
   const refreshAccounts = useCallback(() => {
-    void Promise.all([fetchNeteaseStatus(), fetchQqStatus(), fetchKugouStatus()]).then(([ne, qqStatus, kgStatus]) => {
+    void Promise.all([fetchNeteaseStatus(), fetchQqStatus(), fetchKugouStatus(), refreshAppleStatus()]).then(([ne, qqStatus, kgStatus]) => {
       setNetease(ne.code === 200 ? ne.data : { loggedIn: false });
       setQq(qqStatus.code === 200 ? qqStatus.data : { loggedIn: false });
       setKugou(kgStatus.code === 200 ? kgStatus.data : { loggedIn: false });
     });
-  }, []);
+  }, [refreshAppleStatus]);
 
   useEffect(() => {
     if (netease?.loggedIn) void syncNetease();
@@ -811,6 +1047,21 @@ const App: React.FC = () => {
   }, [qq?.loggedIn, syncQq]);
 
   useEffect(() => {
+    if (appleAccount.loggedIn) void syncAppleLibrary();
+  }, [appleAccount.loggedIn, syncAppleLibrary]);
+
+  useEffect(() => {
+    if (appleAccount.loggedIn && neteaseLibrarySection === 'recommend') {
+      void syncAppleRecommend();
+    }
+  }, [appleAccount.loggedIn, neteaseLibrarySection, syncAppleRecommend]);
+
+  useEffect(() => {
+    if (homeTab === 'apple' && !canUseAppleMusic()) {
+      setHomeTab('netease');
+      return;
+    }
+    if (homeTab === 'apple') return;
     const neIn = Boolean(netease?.loggedIn);
     const qqIn = Boolean(qq?.loggedIn);
     if (neIn && !qqIn && homeTab !== 'netease') setHomeTab('netease');
@@ -837,7 +1088,7 @@ const App: React.FC = () => {
 
     const applyLyrics = (
       lyrics: Pick<Track, 'lrc' | 'yrc' | 'tlyric' | 'lyricSource' | 'lyricProviderSongId'> | null,
-      fallbackSource?: typeof preferred | typeof type,
+      fallbackSource?: Track['lyricSource'],
       providerSongId?: string,
     ) => {
       if (!alive || gen !== lyricRequestGen.current || !lyrics || !hasUsableTrackLyrics(lyrics)) return false;
@@ -1116,14 +1367,28 @@ const App: React.FC = () => {
         : [],
     });
     navigator.mediaSession.playbackState = status === 'playing' ? 'playing' : 'paused';
-    navigator.mediaSession.setActionHandler('play', () => void audioRef.current?.play());
-    navigator.mediaSession.setActionHandler('pause', () => audioRef.current?.pause());
+    navigator.mediaSession.setActionHandler('play', () => {
+      playbackIntentRef.current = 'playing';
+      if (isAppleTrack(track)) {
+        void resumeAppleMusic().catch(() => startAppleQueue(track));
+      } else {
+        void audioRef.current?.play();
+      }
+    });
+    navigator.mediaSession.setActionHandler('pause', () => {
+      playbackIntentRef.current = 'paused';
+      appleCommandGenRef.current += 1;
+      setStatus('paused');
+      setBuffering(false);
+      if (isAppleTrack(track)) void pauseAppleMusic();
+      else audioRef.current?.pause();
+    });
     navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
     navigator.mediaSession.setActionHandler('nexttrack', () => playNext());
     navigator.mediaSession.setActionHandler('seekto', (details) => {
       if (details.seekTime != null) seek(details.seekTime);
     });
-  }, [playNext, playPrev, seek, status, track]);
+  }, [playNext, playPrev, seek, setStatus, startAppleQueue, status, track]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -1149,9 +1414,10 @@ const App: React.FC = () => {
           setPanelOpen(false);
           return;
         }
-        const playlistOpen = homeTab === 'qq' ? qqOpen : neteaseOpen;
+        const playlistOpen = homeTab === 'apple' ? appleOpen : homeTab === 'qq' ? qqOpen : neteaseOpen;
         if (view === 'home' && playlistOpen) {
-          if (homeTab === 'qq') closeQqPlaylist();
+          if (homeTab === 'apple') closeApplePlaylist();
+          else if (homeTab === 'qq') closeQqPlaylist();
           else closeNeteasePlaylist();
           return;
         }
@@ -1163,6 +1429,8 @@ const App: React.FC = () => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [
+    appleOpen,
+    closeApplePlaylist,
     closeNeteasePlaylist,
     closeQqPlaylist,
     currentTime,
@@ -1186,7 +1454,7 @@ const App: React.FC = () => {
     const type = params.get('type');
     const category = params.get('category');
     const doc = parseLegalTab(params.get('doc'));
-    if (type === 'qq' || type === 'netease') setSearchSource(type);
+    if (type === 'qq' || type === 'netease' || type === 'apple') setSearchSource(type);
     if (
       category === 'all'
       || category === 'song'
@@ -1200,7 +1468,7 @@ const App: React.FC = () => {
       const text = url || name || '';
       setQuery(text);
       setSearchOpen(true);
-      void runSearch(text, 1, false, type === 'qq' || type === 'netease' ? type : undefined);
+      void runSearch(text, 1, false, type === 'qq' || type === 'netease' || type === 'apple' ? type : undefined);
     }
     if (doc) {
       setLegalTab(doc);
@@ -1222,7 +1490,7 @@ const App: React.FC = () => {
   }, []);
 
   const downloadSong = () => {
-    if (!track) return;
+    if (!track || isAppleTrack(track)) return;
     const name = `${track.title}-${track.author}`;
     const url = buildDownloadUrl(track.url, name);
     if (canNativeSave()) nativeSave({ url, filename: `${name}.mp3` });
@@ -1247,17 +1515,19 @@ const App: React.FC = () => {
 
   return (
     <div className="app-shell fixed inset-0 flex h-full w-full flex-col overflow-hidden font-sans transition-colors duration-500" style={appStyle}>
-      <TitlebarDragZone />
+      <TitlebarDragZone disabled={searchOpen} />
       <WindowControls isDaylight={isDaylight} autoHide={view === 'player'} />
       <div className="ryan-accent-wash" aria-hidden />
       <audio
         ref={audioRef}
         preload="auto"
         onPlay={() => {
+          if (isAppleTrack(usePlayerStore.getState().queue[usePlayerStore.getState().index])) return;
           setBuffering(false);
           setStatus('playing');
         }}
         onPause={() => {
+          if (isAppleTrack(usePlayerStore.getState().queue[usePlayerStore.getState().index])) return;
           setBuffering(false);
           setStatus('paused');
         }}
@@ -1270,8 +1540,12 @@ const App: React.FC = () => {
         onPlaying={() => setBuffering(false)}
         onCanPlay={() => setBuffering(false)}
         onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
-        onEnded={() => playNext(true)}
+        onEnded={() => {
+          if (isAppleTrack(usePlayerStore.getState().queue[usePlayerStore.getState().index])) return;
+          playNext(true);
+        }}
         onError={() => {
+          if (isAppleTrack(usePlayerStore.getState().queue[usePlayerStore.getState().index])) return;
           setBuffering(false);
           if (authedPlay) setAuthFallback(true);
           if (streamFresh < 1) setStreamFresh(1);
@@ -1294,11 +1568,12 @@ const App: React.FC = () => {
           qqOpen={qqOpen}
           neteaseTracks={neteaseTracks}
           qqTracks={qqTracks}
-          cloudLoading={homeTab === 'netease' ? neteaseLoading : homeTab === 'qq' ? qqLoading : false}
-          cloudSyncing={homeTab === 'netease' ? neteaseSyncing : homeTab === 'qq' ? qqSyncing : false}
-          recommendSyncing={homeTab === 'netease' ? neteaseRecommendSyncing : homeTab === 'qq' ? qqRecommendSyncing : false}
-          cloudError={homeTab === 'netease' ? neteaseError : homeTab === 'qq' ? qqError : ''}
-          recommendError={homeTab === 'netease' ? neteaseRecommendError : homeTab === 'qq' ? qqRecommendError : ''}
+          cloudLoading={homeTab === 'apple' ? appleLoading : homeTab === 'netease' ? neteaseLoading : homeTab === 'qq' ? qqLoading : false}
+          cloudSyncing={homeTab === 'apple' ? appleSyncing : homeTab === 'netease' ? neteaseSyncing : homeTab === 'qq' ? qqSyncing : false}
+          recommendSyncing={homeTab === 'apple' ? appleRecommendSyncing : homeTab === 'netease' ? neteaseRecommendSyncing : homeTab === 'qq' ? qqRecommendSyncing : false}
+          cloudError={homeTab === 'apple' ? appleError : homeTab === 'netease' ? neteaseError : homeTab === 'qq' ? qqError : ''}
+          recommendError={homeTab === 'apple' ? appleRecommendError : homeTab === 'netease' ? neteaseRecommendError : homeTab === 'qq' ? qqRecommendError : ''}
+          apple={appleAccount}
           hasCurrentTrack={Boolean(track)}
           searchQuery={query}
           updateAvailable={Boolean(updateInfo?.hasUpdate)}
@@ -1311,6 +1586,7 @@ const App: React.FC = () => {
           onNeteaseLibrarySectionChange={(section) => {
             if (neteaseOpen) closeNeteasePlaylist();
             if (qqOpen) closeQqPlaylist();
+            if (appleOpen) closeApplePlaylist();
             setNeteaseLibrarySection(section);
           }}
           onLayoutModeChange={setLayoutMode}
@@ -1321,11 +1597,19 @@ const App: React.FC = () => {
               touchPlaylistRecent('qq', qqOpen.id);
             }
             returnToSearchRef.current = false;
+            playbackIntentRef.current = 'playing';
             void playLibraryEntry(entry, queueEntries);
             setView('player');
             setChromeHidden(false);
           }}
           onOpenPlaylist={(item) => {
+            if (homeTab === 'apple') {
+              const id = String(item.id || '');
+              const kind = item.kind
+                || (id.startsWith('pl.') || id.startsWith('apple-chart-') ? 'catalog' : undefined);
+              void openApplePlaylist(kind ? { ...item, kind } : item);
+              return;
+            }
             if (homeTab === 'qq') {
               if (item.recommendKind === 'daily' || item.id === '__qq_daily__') {
                 void openQqRecommend({ ...item, recommendKind: 'daily' });
@@ -1341,6 +1625,14 @@ const App: React.FC = () => {
             }
           }}
           onOpenRecommend={(item) => {
+            if (homeTab === 'apple') {
+              if (item.kind === 'album') {
+                void openAppleAlbum(item.id, item.name, item.cover);
+                return;
+              }
+              void openApplePlaylist({ ...item, kind: item.kind || 'catalog' });
+              return;
+            }
             if (homeTab === 'netease') {
               void openNeteaseRecommend(item);
             } else if (homeTab === 'qq') {
@@ -1354,11 +1646,17 @@ const App: React.FC = () => {
             }
           }}
           onPlayPersonalFm={() => {
+            if (homeTab === 'apple') {
+              const items = useAppleMusicStore.getState().recommendItems;
+              if (items[0]) void openApplePlaylist({ ...items[0], kind: items[0].kind || 'catalog' });
+              return;
+            }
             const fm = homeTab === 'qq' ? playQqPersonalFm : playNeteasePersonalFm;
             void fm()
               .then((entries) => {
                 if (!entries.length) return;
                 returnToSearchRef.current = false;
+                playbackIntentRef.current = 'playing';
                 void playLibraryEntry(entries[0], entries);
                 setView('player');
                 setChromeHidden(false);
@@ -1368,7 +1666,8 @@ const App: React.FC = () => {
               });
           }}
           onBackPlaylist={() => {
-            if (homeTab === 'qq') closeQqPlaylist();
+            if (homeTab === 'apple') closeApplePlaylist();
+            else if (homeTab === 'qq') closeQqPlaylist();
             else closeNeteasePlaylist();
           }}
           onToggleTheme={() => {
@@ -1377,7 +1676,7 @@ const App: React.FC = () => {
             localStorage.setItem(THEME_KEY, next ? 'daylight' : 'midnight');
           }}
           onOpenAccount={(provider) => {
-            setAccountIntent(provider || homeTab);
+            setAccountIntent((provider || homeTab) as AccountProviderId);
             setAccountOpen(true);
           }}
           onAccountsChanged={refreshAccounts}
@@ -1473,6 +1772,7 @@ const App: React.FC = () => {
         }}
         onPlay={(item, playAt) => {
           returnToSearchRef.current = true;
+          playbackIntentRef.current = 'playing';
           playTracks(results, playAt);
           setSearchOpen(false);
           setView('player');
@@ -1496,19 +1796,44 @@ const App: React.FC = () => {
             name: playlist.name,
             cover: playlist.cover,
             trackCount: playlist.trackCount,
+            kind: playlist.type === 'apple' ? 'catalog' : undefined,
           };
           returnToSearchRef.current = true;
           setSearchOpen(false);
           setView('home');
           setHomeTab(playlist.type);
-          if (playlist.type === 'qq') void openQqPlaylist(cloudPlaylist);
+          if (playlist.type === 'apple') void openApplePlaylist(cloudPlaylist);
+          else if (playlist.type === 'qq') void openQqPlaylist(cloudPlaylist);
           else void openNeteasePlaylist(cloudPlaylist);
         }}
         onOpenAlbum={(album) => {
+          if (album.type === 'apple') {
+            returnToSearchRef.current = true;
+            setSearchOpen(false);
+            setView('home');
+            setHomeTab('apple');
+            void openAppleAlbum(album.id, album.name, album.cover);
+            return;
+          }
           setSearchCategory('song');
           void runSearch([album.artist, album.name].filter(Boolean).join(' '), 1, false, album.type, 'song');
         }}
         onOpenArtist={(artist) => {
+          if (artist.type === 'apple') {
+            void fetchAppleArtistSongs(artist.id).then((detail) => {
+              rememberAppleTracks(detail.tracks);
+              setSearchCategory('song');
+              setResults(detail.tracks);
+              setSearchBundle(null);
+              setSearchPlaylists([]);
+              setSearchAlbums([]);
+              setSearchArtists([]);
+              setHasMore(false);
+            }).catch((error) => {
+              setSearchError(error instanceof Error ? error.message : '加载艺人歌曲失败');
+            });
+            return;
+          }
           setSearchCategory('song');
           void runSearch(artist.name, 1, false, artist.type, 'song');
         }}
@@ -1521,27 +1846,38 @@ const App: React.FC = () => {
         netease={netease}
         qq={qq}
         kugou={kugou}
+        apple={appleAccount}
         initialProvider={accountIntent}
         onClose={() => setAccountOpen(false)}
         onChanged={refreshAccounts}
         onLoggedIn={(provider) => {
-          if (provider === 'netease' || provider === 'qq') {
+          if (provider === 'netease' || provider === 'qq' || provider === 'apple') {
             setHomeTab(provider);
             if (provider === 'netease') {
               void syncNetease();
               if (neteaseLibrarySection === 'recommend') void syncNeteaseRecommend();
-            } else void syncQq();
+            } else if (provider === 'qq') {
+              void syncQq();
+            } else {
+              void syncAppleLibrary();
+              if (neteaseLibrarySection === 'recommend') void syncAppleRecommend();
+            }
           }
         }}
         onSync={async (provider) => {
-          if (provider !== 'netease' && provider !== 'qq') return;
+          if (provider !== 'netease' && provider !== 'qq' && provider !== 'apple') return;
           setHomeTab(provider);
           if (provider === 'netease') {
             await syncNetease();
             if (neteaseLibrarySection === 'recommend') await syncNeteaseRecommend();
-          } else await syncQq();
+          } else if (provider === 'qq') {
+            await syncQq();
+          } else {
+            await syncAppleLibrary();
+            if (neteaseLibrarySection === 'recommend') await syncAppleRecommend();
+          }
         }}
-        syncing={neteaseSyncing || qqSyncing || neteaseRecommendSyncing}
+        syncing={neteaseSyncing || qqSyncing || neteaseRecommendSyncing || appleSyncing || appleRecommendSyncing}
         syncMessage={
           neteaseSyncing || qqSyncing || neteaseRecommendSyncing
             ? '正在同步…'
@@ -1610,7 +1946,7 @@ const App: React.FC = () => {
         loopMode={loopMode}
         currentView={view}
         canTogglePlay={Boolean(track)}
-        canPrev={Boolean(track)}
+        canPrev={Boolean(track) && (index > 0 || (loopMode === 'all' && queue.length > 1))}
         canNext={Boolean(track) && (index + 1 < queue.length || loopMode === 'all')}
         isDaylight={isDaylight}
         buffering={(buffering || status === 'loading') && status !== 'paused'}
@@ -1676,7 +2012,7 @@ const App: React.FC = () => {
       </FloatingPlayerControls>
       <OnboardingTour
         isDaylight={isDaylight}
-        loggedIn={Boolean(netease?.loggedIn || qq?.loggedIn)}
+        loggedIn={Boolean(netease?.loggedIn || qq?.loggedIn || appleAccount.loggedIn)}
         hasTrack={Boolean(track)}
         onScene={onGuideScene}
         onOpenPanel={onGuideOpenPanel}

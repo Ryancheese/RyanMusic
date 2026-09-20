@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { canUseAppleMusic } from '../lib/appleMusic';
 import type {
   HomeTab,
   LibraryCardStyle,
@@ -13,6 +14,7 @@ export interface LibraryEntry {
   title: string;
   author: string;
   delisted?: boolean;
+  pic?: string;
 }
 
 const UI_KEY = 'ryanmusic-library-ui-v4';
@@ -49,7 +51,11 @@ function readPersistedUi(): {
       listColumns?: string;
       neteaseLibrarySection?: string;
     };
-    const homeTab: HomeTab = parsed.homeTab === 'qq' ? 'qq' : 'netease';
+    const homeTab: HomeTab = parsed.homeTab === 'qq'
+      ? 'qq'
+      : parsed.homeTab === 'apple' && canUseAppleMusic()
+        ? 'apple'
+        : 'netease';
     const neteaseLibrarySection: NeteaseLibrarySection = parsed.neteaseLibrarySection === 'recommend'
       ? 'recommend'
       : 'playlists';
@@ -64,6 +70,7 @@ function readPersistedUi(): {
       parsed.layoutMode === 'square'
       || parsed.layoutMode === 'list'
       || parsed.layoutMode === 'honeycomb'
+      || parsed.layoutMode === 'tiles'
     ) {
       layoutMode = parsed.layoutMode;
       if (parsed.cardStyle === 'cover' || parsed.cardStyle === 'plaque') {

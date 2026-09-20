@@ -25,6 +25,7 @@ type SortMode = 'created' | 'recent';
 function providerLabel(type: MusicSource): string {
   if (type === 'netease') return '网易云音乐';
   if (type === 'qq') return 'QQ 音乐';
+  if (type === 'apple') return 'Apple Music';
   return type;
 }
 
@@ -38,7 +39,7 @@ function sortOwnedPlaylists(
   mode: SortMode,
 ): CloudPlaylist[] {
   const owned = list.filter(isOwnedPlaylist);
-  if (mode === 'recent') {
+  if (mode === 'recent' && (provider === 'netease' || provider === 'qq')) {
     return [...owned].sort((a, b) => {
       const recentDiff = getPlaylistRecentAt(provider, b.id) - getPlaylistRecentAt(provider, a.id);
       if (recentDiff !== 0) return recentDiff;

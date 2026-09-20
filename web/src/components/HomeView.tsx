@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
-import { ArrowLeft, ChevronDown, CircleHelp, Hexagon, LayoutGrid, List, LogOut, Palette, RefreshCw, Search, Settings, SunMoon, UserRound } from 'lucide-react';
+import { ArrowLeft, ChevronDown, CircleHelp, Hexagon, LayoutDashboard, LayoutGrid, List, LogOut, Palette, RefreshCw, Search, Settings, SunMoon, UserRound } from 'lucide-react';
 import { AlbumWaterfall, type AlbumWaterfallItem } from './AlbumWaterfall';
 import GlassChromeButton from './GlassChromeButton';
 import type { HomeTab, LibraryCardStyle, LibraryLayoutMode, NeteaseLibrarySection, ThemeTokens } from '../types';
@@ -13,13 +13,14 @@ import { chromeButtonStyle } from '../lib/controlGlass';
 import { useControlAppearanceStore } from '../store/controlAppearanceStore';
 import { useCloudStore } from '../store/cloudStore';
 import {
-  ACCOUNT_PROVIDERS,
   accountOf,
   capsuleDisplayName,
   platformStatusLine,
   providerMeta,
+  visibleAccountProviders,
   type AccountProviderId,
 } from '../lib/accountProviders';
+import { useAppleMusicStore } from '../store/appleMusicStore';
 
 const LIBRARY_SLIDE = {
   enter: (direction: number) => ({
@@ -81,6 +82,7 @@ interface HomeViewProps {
   netease: AccountStatus | null;
   qq: AccountStatus | null;
   kugou?: AccountStatus | null;
+  apple?: AccountStatus | null;
 }
 
 const NETEASE_LIBRARY_SECTIONS: { id: NeteaseLibrarySection; label: string }[] = [
@@ -92,6 +94,7 @@ const LAYOUT_MODES: { id: LibraryLayoutMode; label: string; icon: React.ReactNod
   { id: 'honeycomb', label: '蜂窝', icon: <Hexagon size={13} /> },
   { id: 'square', label: '方形', icon: <LayoutGrid size={13} /> },
   { id: 'list', label: '列表', icon: <List size={13} /> },
+  { id: 'tiles', label: '磁贴', icon: <LayoutDashboard size={13} /> },
 ];
 
 const HomeView: React.FC<HomeViewProps> = ({
@@ -137,6 +140,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   netease,
   qq,
   kugou = null,
+  apple = null,
 }) => {
   const [tabDir, setTabDir] = useState(1);
   const [browseDir, setBrowseDir] = useState(1);
@@ -144,14 +148,22 @@ const HomeView: React.FC<HomeViewProps> = ({
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const glassOpacity = useControlAppearanceStore((state) => state.opacity);
   const glassBlur = useControlAppearanceStore((state) => state.blur);
-  const openPlaylist = homeTab === 'netease' ? neteaseOpen : qqOpen;
-  const cloudPlaylists = homeTab === 'netease' ? neteasePlaylists : qqPlaylists;
-  const cloudTracks = homeTab === 'netease' ? neteaseTracks : qqTracks;
-  const activeRecommendItems = homeTab === 'netease' ? neteaseRecommendItems : qqRecommendItems;
+  const applePlaylists = useAppleMusicStore((state) => state.playlists);
+  const appleRecommendItems = useAppleMusicStore((state) => state.recommendItems);
+  const appleOpen = useAppleMusicStore((state) => state.open);
+  const appleTracks = useAppleMusicStore((state) => state.tracks);
+  const openPlaylist = homeTab === 'apple' ? appleOpen : homeTab === 'netease' ? neteaseOpen : qqOpen;
+  const cloudPlaylists = homeTab === 'apple' ? applePlaylists : homeTab === 'netease' ? neteasePlaylists : qqPlaylists;
+  const cloudTracks = homeTab === 'apple' ? appleTracks : homeTab === 'netease' ? neteaseTracks : qqTracks;
+  const activeRecommendItems = homeTab === 'apple'
+    ? appleRecommendItems
+    : homeTab === 'netease' ? neteaseRecommendItems : qqRecommendItems;
   const librarySection = neteaseLibrarySection;
   const browsingRecommend = librarySection === 'recommend' && !openPlaylist;
-  const loggedIn = homeTab === 'netease' ? Boolean(netease?.loggedIn) : Boolean(qq?.loggedIn);
-  const activeAccount = homeTab === 'qq' ? qq : netease;
+  const loggedIn = homeTab === 'apple'
+    ? Boolean(apple?.loggedIn)
+    : homeTab === 'netease' ? Boolean(netease?.loggedIn) : Boolean(qq?.loggedIn);
+  const activeAccount = homeTab === 'apple' ? apple : homeTab === 'qq' ? qq : netease;
   const activeAvatar = activeAccount?.loggedIn && activeAccount.avatar
     ? (coverImageUrl(activeAccount.avatar, 72) || activeAccount.avatar)
     : '';
@@ -159,14 +171,16 @@ const HomeView: React.FC<HomeViewProps> = ({
     ? '登录'
     : homeTab === 'qq'
       ? 'QQ'
-      : '网易云';
+      : homeTab === 'apple'
+        ? 'Apple'
+        : '网易云';
   const ownerLabel = activeAccount?.nickname?.trim() || '';
   const capsuleLabel = capsuleDisplayName(activeAccount, platformLabel);
   const activeMeta = providerMeta(homeTab);
 
   const switchHomeTab = (next: HomeTab) => {
     if (next === homeTab) return;
-    const dir = next === 'qq' ? 1 : -1;
+    const dir = next === 'netease' ? -1 : 1;
     setTabDir(dir);
     setBrowseDir(dir);
     onHomeTabChange(next);
@@ -198,6 +212,11 @@ const HomeView: React.FC<HomeViewProps> = ({
 
   const logoutProvider = async (provider: AccountProviderId) => {
     const meta = providerMeta(provider);
+    if (provider === 'apple') {
+      useAppleMusicStore.getState().disconnect();
+      onAccountsChanged();
+      return;
+    }
     if (provider === 'netease' || provider === 'qq') {
       useCloudStore.getState().clearProvider(provider);
     }
@@ -216,6 +235,11 @@ const HomeView: React.FC<HomeViewProps> = ({
           : `${ownerLabel}${item.trackCount ? ` · ${item.trackCount} 首` : ''}`)
         : `${item.trackCount || 0} 首${item.subscribed ? ' · 收藏' : ''}`,
       coverUrl: coverImageUrl(item.cover, 400),
+      covers: (item.covers || []).map((url) => coverImageUrl(url, 400)).filter(Boolean),
+      coverItems: (item.coverItems || []).map((cover) => ({
+        url: coverImageUrl(cover.url, 400),
+        title: cover.title || item.name,
+      })).filter((cover) => cover.url),
     }))
   ), [cloudPlaylists, ownerLabel]);
 
@@ -232,6 +256,11 @@ const HomeView: React.FC<HomeViewProps> = ({
               ? '无限私人电台'
               : `${item.trackCount || 0} 首`),
       coverUrl: coverImageUrl(item.cover, 400),
+      covers: (item.covers || []).map((url) => coverImageUrl(url, 400)).filter(Boolean),
+      coverItems: (item.coverItems || []).map((cover) => ({
+        url: coverImageUrl(cover.url, 400),
+        title: cover.title || item.name,
+      })).filter((cover) => cover.url),
     }))
   ), [activeRecommendItems]);
 
@@ -240,7 +269,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       id: `${item.type}-${item.songid}`,
       name: item.title,
       description: item.author || '',
-      coverUrl: coverRefreshUrl(item.type, item.songid),
+      coverUrl: item.pic || coverRefreshUrl(item.type, item.songid),
       delisted: item.delisted,
     }))
   ), [cloudTracks]);
@@ -337,8 +366,8 @@ const HomeView: React.FC<HomeViewProps> = ({
                 isDaylight ? 'bg-white text-black' : 'bg-zinc-900 text-white'
               }`}
             >
-              {ACCOUNT_PROVIDERS.map((provider) => {
-                const account = accountOf(provider.id, netease, qq, kugou);
+              {visibleAccountProviders().map((provider) => {
+                const account = accountOf(provider.id, netease, qq, kugou, apple);
                 const active = provider.hasCloudLibrary && homeTab === provider.id;
                 const avatar = account?.loggedIn && account.avatar
                   ? (coverImageUrl(account.avatar, 72) || account.avatar)
@@ -358,7 +387,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                       role="menuitem"
                       onClick={() => {
                         setAccountMenuOpen(false);
-                        if (provider.hasCloudLibrary && (provider.id === 'netease' || provider.id === 'qq')) {
+                        if (provider.hasCloudLibrary && (provider.id === 'netease' || provider.id === 'qq' || provider.id === 'apple')) {
                           if (account?.loggedIn) {
                             switchHomeTab(provider.id);
                           } else {

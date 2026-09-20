@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>RyanMusic</string>
 	<key>CFBundleIdentifier</key>
-	<string>cn.ryanmusic.app</string>
+	<string>com.ryancheese.RyanMusic</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -19,13 +19,17 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.0.8</string>
+	<string>2.0.9</string>
 	<key>CFBundleVersion</key>
-	<string>2.0.8</string>
+	<string>2.0.9</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>12.0</string>
 	<key>LSUIElement</key>
 	<false/>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>RyanMusic 需要访问 Apple Music，以便搜索、播放你的资料库和歌单。</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>RyanMusic 需要控制音乐 App，以便播放你资料库和目录里的歌曲。</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>

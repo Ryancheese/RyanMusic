@@ -1,13 +1,13 @@
 export * from './visualizer-types';
 
-export type MusicSource = 'netease' | 'qq';
+export type MusicSource = 'netease' | 'qq' | 'apple';
 
-export type HomeTab = 'netease' | 'qq';
+export type HomeTab = 'netease' | 'qq' | 'apple';
 
 /** 网易云首页：账号歌单 vs 发现推荐（参考 Folia Grid3D） */
 export type NeteaseLibrarySection = 'playlists' | 'recommend';
 
-export type LibraryLayoutMode = 'honeycomb' | 'square' | 'list';
+export type LibraryLayoutMode = 'honeycomb' | 'square' | 'list' | 'tiles';
 export type LibraryCardStyle = 'cover' | 'plaque';
 /** 列表布局：单列横条 / 多列网格 */
 export type LibraryListColumns = 'single' | 'multi';
@@ -27,7 +27,7 @@ export interface Track {
   yrc?: string;
   tlyric?: string;
   /** 当前展示歌词实际来自哪个源 */
-  lyricSource?: 'netease' | 'qq' | 'kugou' | 'amll' | 'native';
+  lyricSource?: 'netease' | 'qq' | 'kugou' | 'amll' | 'native' | 'apple';
   /** 当前歌词在来源平台的曲目 ID（跨源匹配时与 songid 可能不同） */
   lyricProviderSongId?: string;
   url: string;

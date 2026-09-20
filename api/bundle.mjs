@@ -42,7 +42,7 @@ var VERSION, UA, NETEASE_UA, CN_IP_A;
 var init_config = __esm({
   "server/src/config.ts"() {
     "use strict";
-    VERSION = "2.0.8";
+    VERSION = "2.0.9";
     UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     NETEASE_UA = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.29.205117";
     CN_IP_A = [36, 58, 111, 112, 114, 117, 120, 123, 183, 218, 223];
@@ -7983,7 +7983,7 @@ function isAllowedCoverUrl(url) {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
     const host = parsed.hostname.toLowerCase();
-    return host.endsWith("126.net") || host.endsWith("163.com") || host.endsWith("gtimg.cn") || host.endsWith("qlogo.cn") || host.endsWith("qq.com") || host.endsWith("myqcloud.com") || host.endsWith("music.126.net") || host.endsWith("kugou.com") || host.endsWith("kgimg.com");
+    return host.endsWith("126.net") || host.endsWith("163.com") || host.endsWith("gtimg.cn") || host.endsWith("qlogo.cn") || host.endsWith("qq.com") || host.endsWith("myqcloud.com") || host.endsWith("music.126.net") || host.endsWith("kugou.com") || host.endsWith("kgimg.com") || host.endsWith("mzstatic.com") || host.endsWith("apple.com");
   } catch {
     return false;
   }
@@ -8082,6 +8082,21 @@ function createApp(options) {
   };
   app.get("/static/*", (c) => sendFile(c.req.path.slice(1)));
   app.get("/favicon.ico", () => sendFile("favicon.ico"));
+  app.get("/apple-art/:id", (c) => {
+    const raw2 = (c.req.param("id") || "").replace(/\.(jpe?g|png|webp)$/i, "");
+    if (!/^[A-Za-z0-9._-]+(?:-cover)?$/.test(raw2)) return c.text("Not found", 404);
+    const jpg = join7(options.cacheDir, "apple-art", `${raw2}.jpg`);
+    const png = join7(options.cacheDir, "apple-art", `${raw2}.png`);
+    const file = existsSync4(jpg) ? jpg : existsSync4(png) ? png : "";
+    if (!file) return c.text("Not found", 404);
+    const stream = Readable.toWeb(createReadStream(file));
+    return new Response(stream, {
+      headers: {
+        "Content-Type": file.endsWith(".png") ? "image/png" : "image/jpeg",
+        "Cache-Control": "public, max-age=86400"
+      }
+    });
+  });
   app.get("/help.php", (c) => c.redirect("/?doc=help", 302));
   app.get("/help", (c) => c.redirect("/?doc=help", 302));
   app.get("/disclaimer.php", (c) => c.redirect("/?doc=disclaimer", 302));

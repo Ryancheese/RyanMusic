@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ALargeSmall, ArrowDownUp, AudioLines, Clock3, Columns2, Flame, Gauge, HardDrive, Hexagon, Keyboard, LayoutGrid, Link2, List, MessageCircleHeart, Music, Palette, Rows2, SlidersHorizontal, Sparkles, SquareStack, Trash2, Users, X } from 'lucide-react';
+import { ALargeSmall, ArrowDownUp, AudioLines, Clock3, Columns2, Flame, Gauge, HardDrive, Hexagon, Keyboard, LayoutDashboard, LayoutGrid, Link2, List, MessageCircleHeart, Music, Palette, Rows2, SlidersHorizontal, Sparkles, SquareStack, Trash2, Users, X } from 'lucide-react';
 import {
   LYRIC_SOURCE_OPTIONS,
   useLyricSettingsStore,
@@ -160,6 +160,7 @@ const LAYOUT_MODE_OPTIONS: { id: LibraryLayoutMode; label: string; icon: React.R
   { id: 'honeycomb', label: LIBRARY_LAYOUT_MODE_LABELS.honeycomb, icon: <Hexagon size={13} /> },
   { id: 'square', label: LIBRARY_LAYOUT_MODE_LABELS.square, icon: <LayoutGrid size={13} /> },
   { id: 'list', label: LIBRARY_LAYOUT_MODE_LABELS.list, icon: <List size={13} /> },
+  { id: 'tiles', label: LIBRARY_LAYOUT_MODE_LABELS.tiles, icon: <LayoutDashboard size={13} /> },
 ];
 
 const LIST_COLUMNS_OPTIONS: { id: LibraryListColumns; label: string; icon: React.ReactNode }[] = [
@@ -803,7 +804,7 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                 <div>
                   <div className="text-sm font-semibold">布局方式</div>
                   <div className="mt-1 text-[11px] leading-relaxed opacity-50">
-                    铭牌卡片会叠在蜂窝或方形上；列表模式不受卡片样式影响。
+                    铭牌卡片会叠在蜂窝或方形上；列表和动态磁贴不受卡片样式影响。
                   </div>
                 </div>
                 <div className={`inline-flex w-full flex-wrap items-center gap-1 rounded-2xl p-1 ${card}`}>

@@ -3,10 +3,10 @@ import { isMacosApp, isWindowsApp } from '../lib/media';
 import { postWindowChrome } from '../lib/windowChrome';
 
 /** 顶部拖动条：macOS 走 app-region，Windows 把按下交给原生窗口。 */
-const TitlebarDragZone: React.FC = () => {
+const TitlebarDragZone: React.FC<{ disabled?: boolean }> = ({ disabled = false }) => {
   const windows = isWindowsApp();
   const macos = isMacosApp();
-  if (!windows && !macos) return null;
+  if (disabled || (!windows && !macos)) return null;
 
   return (
     <div

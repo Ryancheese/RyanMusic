@@ -15,10 +15,17 @@ import {
   type HexGridCoord,
 } from './folia-grid/hexViewport';
 
+export interface AlbumWaterfallCover {
+  url: string;
+  title?: string;
+}
+
 export interface AlbumWaterfallItem {
   id: string;
   name: string;
   coverUrl?: string;
+  covers?: string[];
+  coverItems?: AlbumWaterfallCover[];
   description?: string;
   delisted?: boolean;
 }
@@ -61,6 +68,296 @@ function libraryCardSurface(isDaylight: boolean, plaque = false) {
       : '0 14px 30px rgba(0,0,0,0.48)',
   };
 }
+
+type TileFace = { url: string; title: string };
+
+function uniqueFaces(item: AlbumWaterfallItem): TileFace[] {
+  const seen = new Set<string>();
+  const faces: TileFace[] = [];
+  const add = (url?: string, title?: string) => {
+    const next = (url || '').trim();
+    if (!next || seen.has(next)) return;
+    seen.add(next);
+    faces.push({ url: next, title: (title || '').trim() || item.name });
+  };
+  add(item.coverUrl, item.name);
+  for (const cover of item.coverItems || []) add(cover.url, cover.title);
+  for (const url of item.covers || []) add(url, item.name);
+  return faces;
+}
+
+function pickOtherFace(current: string, pool: TileFace[]): TileFace | null {
+  const choices = pool.filter((face) => face.url && face.url !== current);
+  if (!choices.length) return null;
+  return choices[Math.floor(Math.random() * choices.length)];
+}
+
+function TileCaption({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/72 via-black/18 to-transparent px-2 pt-8 pb-1.5">
+      <div className="truncate text-[11px] font-semibold text-white drop-shadow">{text}</div>
+    </div>
+  );
+}
+
+const TILE_FLIP_MS = 820;
+const TILE_FLIP_MIN_MS = 3400;
+const TILE_FLIP_SPREAD_MS = 4200;
+const TILE_RETURN_MS = 4200;
+
+type TileFlipper = {
+  flip: () => void;
+  hovered: () => boolean;
+};
+
+const LiveTile: React.FC<{
+  item: AlbumWaterfallItem;
+  pool: TileFace[];
+  register: (flipper: TileFlipper | null) => void;
+  onSelect: () => void;
+}> = ({ item, pool, register, onSelect }) => {
+  const own = useMemo(() => uniqueFaces(item), [item]);
+  const [front, setFront] = useState(own[0]?.url || '');
+  const [back, setBack] = useState(own[1]?.url || own[0]?.url || '');
+  const [frontTitle, setFrontTitle] = useState(own[0]?.title || item.name);
+  const [backTitle, setBackTitle] = useState(own[1]?.title || own[0]?.title || item.name);
+  const [flipped, setFlipped] = useState(false);
+  const [instant, setInstant] = useState(false);
+  const busyRef = useRef(false);
+  const hoveredRef = useRef(false);
+  const frontRef = useRef(front);
+  const ownRef = useRef(own);
+  const returnTimer = useRef(0);
+  frontRef.current = front;
+  ownRef.current = own;
+
+  useEffect(() => {
+    if (!own[0]) return;
+    setFront(own[0].url);
+    setFrontTitle(own[0].title);
+    setBack(own[1]?.url || own[0].url);
+    setBackTitle(own[1]?.title || own[0].title);
+    setFlipped(false);
+    busyRef.current = false;
+    return () => window.clearTimeout(returnTimer.current);
+  }, [item.id, own]);
+
+  const flipTo = useCallback((next: TileFace | null) => {
+    if (busyRef.current || !next?.url || next.url === frontRef.current) return false;
+    busyRef.current = true;
+    setBack(next.url);
+    setBackTitle(next.title);
+    setInstant(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setFlipped(true));
+    });
+    window.setTimeout(() => {
+      setInstant(true);
+      setFront(next.url);
+      setFrontTitle(next.title);
+      setFlipped(false);
+      requestAnimationFrame(() => {
+        setInstant(false);
+        busyRef.current = false;
+      });
+    }, TILE_FLIP_MS);
+    return true;
+  }, []);
+
+  const scheduleReturn = useCallback(() => {
+    window.clearTimeout(returnTimer.current);
+    if (!ownRef.current[0]) return;
+    returnTimer.current = window.setTimeout(() => {
+      if (hoveredRef.current) {
+        scheduleReturn();
+        return;
+      }
+      flipTo(ownRef.current[0]);
+    }, TILE_RETURN_MS);
+  }, [flipTo]);
+
+  const flip = useCallback(() => {
+    if (hoveredRef.current) return;
+    const current = frontRef.current;
+    const ownNext = pickOtherFace(current, ownRef.current);
+    const next = ownNext || pickOtherFace(current, pool);
+    if (!flipTo(next)) return;
+    window.clearTimeout(returnTimer.current);
+    if (!ownNext && ownRef.current[0]) scheduleReturn();
+  }, [flipTo, pool, scheduleReturn]);
+
+  useEffect(() => {
+    register({
+      flip,
+      hovered: () => hoveredRef.current,
+    });
+    return () => register(null);
+  }, [flip, register]);
+
+  const caption = flipped ? backTitle : frontTitle;
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      title={caption}
+      onPointerEnter={() => {
+        hoveredRef.current = true;
+      }}
+      onPointerLeave={() => {
+        hoveredRef.current = false;
+      }}
+      className="ryan-ss-tile group relative aspect-square overflow-hidden text-left outline-none ring-0"
+    >
+      <div
+        className={`ryan-ss-tile-card ${flipped ? 'is-flipped' : ''} ${instant ? 'is-instant' : ''}`}
+      >
+        <div className="ryan-ss-tile-face ryan-ss-tile-front">
+          <CoverArt src={front} lazy={false} flipOnLoad={false} />
+          <TileCaption text={frontTitle} />
+        </div>
+        <div className="ryan-ss-tile-face ryan-ss-tile-back">
+          <CoverArt src={back} lazy={false} flipOnLoad={false} />
+          <TileCaption text={backTitle} />
+        </div>
+      </div>
+      {item.delisted ? <DelistedCoverBadge /> : null}
+    </button>
+  );
+};
+
+const TilesWall: React.FC<{
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  items: AlbumWaterfallItem[];
+  isDaylight: boolean;
+  isLoading: boolean;
+  showSkeleton: boolean;
+  showRefreshOverlay: boolean;
+  emptyMessage: string;
+  hasFloatingPlayer: boolean;
+  onSelect: (item: AlbumWaterfallItem, index: number) => void;
+  onScroll: () => void;
+}> = ({
+  containerRef,
+  items,
+  isDaylight,
+  isLoading,
+  showSkeleton,
+  showRefreshOverlay,
+  emptyMessage,
+  hasFloatingPlayer,
+  onSelect,
+  onScroll,
+}) => {
+  const flippers = useRef<Array<TileFlipper | null>>([]);
+  const pool = useMemo(() => {
+    const seen = new Set<string>();
+    const faces: TileFace[] = [];
+    for (const item of items) {
+      for (const face of uniqueFaces(item)) {
+        if (seen.has(face.url)) continue;
+        seen.add(face.url);
+        faces.push(face);
+      }
+    }
+    return faces;
+  }, [items]);
+
+  useEffect(() => {
+    if (!items.length) return;
+    let cancelled = false;
+    let timer = 0;
+    const loop = () => {
+      if (cancelled) return;
+      const live = flippers.current
+        .map((entry, index) => (entry && !entry.hovered() ? index : -1))
+        .filter((index) => index >= 0);
+      if (live.length) {
+        const first = live[Math.floor(Math.random() * live.length)];
+        flippers.current[first]?.flip();
+        if (Math.random() < 0.1 && live.length > 1) {
+          const rest = live.filter((index) => index !== first);
+          const second = rest[Math.floor(Math.random() * rest.length)];
+          window.setTimeout(() => {
+            if (!cancelled) flippers.current[second]?.flip();
+          }, 420 + Math.random() * 640);
+        }
+      }
+      timer = window.setTimeout(loop, TILE_FLIP_MIN_MS + Math.random() * TILE_FLIP_SPREAD_MS);
+    };
+    timer = window.setTimeout(loop, 1800);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [items.length, pool.join('|')]);
+
+  return (
+    <div
+      key="library-tiles"
+      ref={containerRef}
+      className="app-scroll hide-scrollbar relative min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto"
+      style={{
+        paddingBottom: hasFloatingPlayer ? 'var(--player-dock-safe)' : '1.5rem',
+      }}
+      onScroll={onScroll}
+    >
+      <div className="mx-auto w-full max-w-6xl px-4 pt-2 pb-4 sm:px-6 md:px-8">
+        {showSkeleton ? (
+          <div className="overflow-hidden">
+            <div
+              className="grid"
+              style={{
+                gap: 3,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 132px), 1fr))',
+              }}
+            >
+              {Array.from({ length: 24 }, (_, index) => (
+                <div key={`sk-tile-${index}`} className="aspect-square">
+                  <div className="ryan-cover-shimmer h-full w-full" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+            {isLoading ? <RyanLoader size={56} label={emptyMessage} /> : (
+              <p className="text-sm opacity-40">{emptyMessage}</p>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-hidden">
+            <div
+              className="grid"
+              style={{
+                gap: 3,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 132px), 1fr))',
+              }}
+            >
+              {items.map((item, index) => (
+                <LiveTile
+                  key={`tile-${item.id}`}
+                  item={item}
+                  pool={pool}
+                  register={(fn) => {
+                    flippers.current[index] = fn;
+                  }}
+                  onSelect={() => onSelect(item, index)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      {showRefreshOverlay ? (
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/10 backdrop-blur-[1px]">
+          <RyanLoader size={52} label="同步中…" />
+        </div>
+      ) : null}
+    </div>
+  );
+};
 
 function layoutForWidth(width: number, mode: LibraryLayoutMode, zoom = 1) {
   const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
@@ -181,6 +478,8 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
 
   const isList = layoutMode === 'list';
   const isSquare = layoutMode === 'square';
+  const isTiles = layoutMode === 'tiles';
+  const isFlowLayout = isList || isSquare || isTiles;
   const isPlaque = layoutMode === 'honeycomb' && cardStyle === 'plaque';
   const plaqueNameLineHeight = isWindowsApp() ? '1.5' : undefined;
   const listColumns = useLibraryStore((state) => state.listColumns);
@@ -330,7 +629,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   const persistScroll = useCallback(() => {
     const key = scrollKeyRef.current;
     if (!key) return;
-    if (isList || isSquare) {
+    if (isFlowLayout) {
       const top = containerRef.current?.scrollTop || 0;
       saveLibraryScroll(key, { kind: 'scroll', top });
       return;
@@ -341,7 +640,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       y: offsetRef.current.y,
       zoom,
     });
-  }, [isList, isSquare, zoom]);
+  }, [isFlowLayout, zoom]);
 
   const bounceToBounds = useCallback(() => {
     cancelBounce();
@@ -376,7 +675,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   }, [cancelBounce, persistScroll, scheduleFrame]);
 
   useEffect(() => {
-    if (isList || isSquare) return;
+    if (isFlowLayout) return;
     // 尺寸尚未就绪时不要清零，避免从播放器返回时丢位置
     if (size.width < 8 || size.height < 8) return;
 
@@ -425,8 +724,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
     layoutMode,
     paint,
     refreshVisible,
-    isList,
-    isSquare,
+    isFlowLayout,
     isPlaque,
     zoom,
     size.width,
@@ -435,13 +733,13 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   ]);
 
   useEffect(() => {
-    if (isList || isSquare) return;
+    if (isFlowLayout) return;
     paint(offsetRef.current.x, offsetRef.current.y);
-  }, [paint, visible, isList, isSquare]);
+  }, [paint, visible, isFlowLayout]);
 
   // 列表/方形：挂载或曲目就绪后恢复 scrollTop（多帧重试，避开进场动画）
   useEffect(() => {
-    if (!(isList || isSquare) || !scrollKey) return;
+    if (!isFlowLayout || !scrollKey) return;
     if (isLoading && items.length === 0) return;
     const el = containerRef.current;
     if (!el) return;
@@ -467,7 +765,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       cancelAnimationFrame(raf);
       window.clearTimeout(timer);
     };
-  }, [isList, isSquare, scrollKey, items.length, isLoading]);
+  }, [isFlowLayout, scrollKey, items.length, isLoading]);
 
   // 卸载前落盘当前位置
   useEffect(() => () => {
@@ -484,7 +782,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   }, [scrollKey]);
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (isList || isSquare || event.button !== 0) return;
+    if (isFlowLayout || event.button !== 0) return;
     cancelBounce();
     dragRef.current = {
       active: true,
@@ -498,7 +796,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (isList || isSquare || !dragRef.current.active) return;
+    if (isFlowLayout || !dragRef.current.active) return;
     const dist = Math.hypot(event.clientX - dragRef.current.startX, event.clientY - dragRef.current.startY);
     dragRef.current.distance = dist;
     if (dist >= 8 && !dragRef.current.captured) {
@@ -513,7 +811,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (isList || isSquare) return;
+    if (isFlowLayout) return;
     const dragged = dragRef.current.distance >= 8;
     const captured = dragRef.current.captured;
     dragRef.current.active = false;
@@ -544,7 +842,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
   };
 
   useEffect(() => {
-    if (isList || isSquare) return;
+    if (isFlowLayout) return;
     const element = containerRef.current;
     if (!element) return;
     let wheelBounceTimer = 0;
@@ -576,9 +874,9 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       window.clearTimeout(wheelBounceTimer);
       element.removeEventListener('wheel', onWheel);
     };
-  }, [applyPanOffset, bounceToBounds, cancelBounce, isList, isSquare, persistScroll]);
+  }, [applyPanOffset, bounceToBounds, cancelBounce, isFlowLayout, persistScroll]);
 
-  // åæ¢èçª/æ¹å½¢æ¶éç½®ç¼©æ¾ï¼é¿åé´è·éä¹±æ®ç
+  // 切换蜂窝/方形时重置缩放，避免间距错乱残留
   useEffect(() => {
     setZoom(1);
   }, [layoutMode]);
@@ -676,7 +974,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
         </div>
         {showRefreshOverlay ? (
           <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/10 backdrop-blur-[1px]">
-            <RyanLoader size={52} label="åæ­¥ä¸­â¦" />
+            <RyanLoader size={52} label="同步中…" />
           </div>
         ) : null}
       </div>
@@ -764,6 +1062,23 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
           </div>
         ) : null}
       </div>
+    );
+  }
+
+  if (isTiles) {
+    return (
+      <TilesWall
+        containerRef={containerRef}
+        items={items}
+        isDaylight={isDaylight}
+        isLoading={isLoading}
+        showSkeleton={showSkeleton}
+        showRefreshOverlay={showRefreshOverlay}
+        emptyMessage={emptyMessage}
+        hasFloatingPlayer={hasFloatingPlayer}
+        onSelect={onSelect}
+        onScroll={persistScroll}
+      />
     );
   }
 
@@ -872,7 +1187,7 @@ export const AlbumWaterfall: React.FC<AlbumWaterfallProps> = ({
       </div>
       {showRefreshOverlay ? (
         <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/10 backdrop-blur-[1px]">
-          <RyanLoader size={52} label="åæ­¥ä¸­â¦" />
+          <RyanLoader size={52} label="同步中…" />
         </div>
       ) : null}
     </div>

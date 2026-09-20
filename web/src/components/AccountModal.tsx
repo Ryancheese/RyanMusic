@@ -6,15 +6,16 @@ import { coverImageUrl, postAction, type AccountStatus } from '../api';
 import { useCloudStore } from '../store/cloudStore';
 import RyanLoader from './RyanLoader';
 import {
-  ACCOUNT_PROVIDERS,
   accountOf,
   capsuleDisplayName,
   membershipHeadline,
   membershipHint,
   platformStatusLine,
   providerMeta,
+  visibleAccountProviders,
   type AccountProviderId,
 } from '../lib/accountProviders';
+import { useAppleMusicStore } from '../store/appleMusicStore';
 
 interface AccountModalProps {
   open: boolean;
@@ -23,6 +24,7 @@ interface AccountModalProps {
   netease: AccountStatus | null;
   qq: AccountStatus | null;
   kugou?: AccountStatus | null;
+  apple?: AccountStatus | null;
   /** 打开时优先选中的平台 */
   initialProvider?: AccountProviderId;
   onClose: () => void;
@@ -40,6 +42,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
   netease,
   qq,
   kugou = null,
+  apple = null,
   initialProvider = 'netease',
   onClose,
   onChanged,
@@ -71,8 +74,8 @@ const AccountModal: React.FC<AccountModalProps> = ({
 
   useEffect(() => {
     if (!open) return;
-    const current = accountOf(tab, netease, qq, kugou);
-    if (current?.loggedIn) {
+    const current = accountOf(tab, netease, qq, kugou, apple);
+    if (current?.loggedIn || tab === 'apple') {
       setQr('');
       return;
     }
@@ -162,7 +165,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
       stop = true;
       if (timer) window.clearInterval(timer);
     };
-  }, [open, tab, netease?.loggedIn, qq?.loggedIn, kugou?.loggedIn, onChanged, onLoggedIn]);
+  }, [apple, open, tab, netease?.loggedIn, qq?.loggedIn, kugou?.loggedIn, onChanged, onLoggedIn]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -182,7 +185,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
 
   if (!open) return null;
 
-  const current = accountOf(tab, netease, qq, kugou);
+  const current = accountOf(tab, netease, qq, kugou, apple);
   const loggedIn = Boolean(current?.loggedIn);
   const activeMeta = providerMeta(tab);
   const capsuleAvatar = loggedIn && current?.avatar
@@ -206,6 +209,11 @@ const AccountModal: React.FC<AccountModalProps> = ({
 
   const logout = async (provider: AccountProviderId) => {
     const meta = providerMeta(provider);
+    if (provider === 'apple') {
+      useAppleMusicStore.getState().disconnect();
+      onChanged();
+      return;
+    }
     if (provider === 'netease' || provider === 'qq') {
       useCloudStore.getState().clearProvider(provider);
     }
@@ -293,8 +301,8 @@ const AccountModal: React.FC<AccountModalProps> = ({
                   isDaylight ? 'bg-white text-black' : 'bg-zinc-900 text-white'
                 }`}
               >
-                {ACCOUNT_PROVIDERS.map((provider) => {
-                  const account = accountOf(provider.id, netease, qq, kugou);
+                {visibleAccountProviders().map((provider) => {
+                  const account = accountOf(provider.id, netease, qq, kugou, apple);
                   const active = tab === provider.id;
                   const avatar = account?.loggedIn && account.avatar
                     ? (coverImageUrl(account.avatar, 72) || account.avatar)
@@ -361,7 +369,41 @@ const AccountModal: React.FC<AccountModalProps> = ({
           </AnimatePresence>
         </div>
 
-        {loggedIn ? (
+        {tab === 'apple' && !loggedIn ? (
+          <div className="space-y-3 text-sm">
+            <p className="text-xs leading-relaxed opacity-60">
+              授权后可用本机 Apple ID 搜索、播放 Apple Music，并同步资料库歌单。完整播放需要 Apple Music 会员。
+            </p>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                setStatus('正在请求系统授权…');
+                void useAppleMusicStore.getState().authorize()
+                  .then(() => {
+                    const next = useAppleMusicStore.getState();
+                    if (next.account.loggedIn) {
+                      setStatus('已授权 Apple Music');
+                      onChanged();
+                      onLoggedIn?.('apple');
+                    } else {
+                      setStatus(next.error || '授权未完成');
+                    }
+                  })
+                  .catch((error) => {
+                    setStatus(error instanceof Error ? error.message : '授权失败');
+                  })
+                  .finally(() => setBusy(false));
+              }}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-white/10 px-4 py-2.5 text-sm"
+            >
+              {busy ? <RyanLoader size={16} /> : null}
+              授权 Apple Music
+            </button>
+            {status ? <p className="text-xs opacity-70">{status}</p> : null}
+          </div>
+        ) : loggedIn ? (
           <div className="space-y-3 text-sm">
             <div
               className={`flex h-14 items-center gap-3 rounded-full px-3 transition-[background-color,color] duration-500 ${soft}`}

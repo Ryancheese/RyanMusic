@@ -568,6 +568,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   closeNeteasePlaylist: () => set({ neteaseOpen: null, neteaseError: '', neteaseLoading: false }),
   closeQqPlaylist: () => set({ qqOpen: null, qqError: '', qqLoading: false }),
   clearProvider: (provider) => {
+    if (provider === 'apple') return;
     if (provider === 'netease') {
       localStorage.removeItem(NETEASE_KEY);
       const cache = readTrackCache();

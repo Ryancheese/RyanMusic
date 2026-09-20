@@ -17,6 +17,7 @@ final class TitlebarDragOverlay: NSView {
     var bandHeight: CGFloat = 52
     var passthroughLeading: CGFloat = 88
     var passthroughTrailing: CGFloat = 420
+    var passthroughAll = false
 
     override var isOpaque: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -37,6 +38,7 @@ final class TitlebarDragOverlay: NSView {
         guard let superview else { return nil }
         let local = convert(point, from: superview)
         guard bounds.contains(local) else { return nil }
+        if passthroughAll { return nil }
         if local.x <= passthroughLeading { return nil }
         if local.x >= bounds.width - passthroughTrailing { return nil }
         return self
@@ -71,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var healthTimer: Timer?
     private var activeDownloads: [ObjectIdentifier: URL] = [:]
     private var chromeObservers: [NSObjectProtocol] = []
+    private let appleMusic = AppleMusicBridge()
 
     /// 禁用系统/VPN HTTP 代理的会话（健康检查、另存为下载）
     private lazy var directSession: URLSession = {
@@ -172,6 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             NotificationCenter.default.removeObserver(token)
         }
         chromeObservers.removeAll()
+        appleMusic.stop()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         MPNowPlayingInfoCenter.default().playbackState = .stopped
         stopServer()
@@ -201,6 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         config.userContentController.add(self, name: "ryanWindowDrag")
         config.userContentController.add(self, name: "ryanWindowZoom")
         config.userContentController.add(self, name: "ryanChrome")
+        config.userContentController.add(self, name: "ryanAppleMusic")
         // 标记桌面壳 + 空白处拖拽 / 双击缩放
         // 媒体控制走网页 Media Session，避免与原生 Now Playing 叠成两条
         let platformJS = """
@@ -210,7 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             return !!(el && el.closest && el.closest(
               'a,button,input,textarea,select,label,option,audio,video,' +
               '.aplayer,.search-bar,.local-library,.site-chrome,.site-footer,' +
-              '.am-form,.result-player,.ambient-controls,.music-main,' +
+              '.am-form,.result-player,.ambient-controls,.music-main,.titlebar-no-drag,' +
               '[role="button"],[role="tablist"],[contenteditable="true"]'
             ));
           }
@@ -238,6 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
+        appleMusic.webView = webView
 
         let container = FullBleedView(frame: rect)
         container.wantsLayer = true
@@ -366,10 +372,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     // MARK: - JS → Native 另存为
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "ryanAppleMusic" {
+            appleMusic.handle(message.body)
+            return
+        }
+
         if message.name == "ryanChrome" {
-            let daylight = (message.body as? [String: Any])?["daylight"] as? Bool ?? false
+            let body = message.body as? [String: Any] ?? [:]
             DispatchQueue.main.async { [weak self] in
-                self?.applyThemeChrome(daylight: daylight)
+                if let daylight = body["daylight"] as? Bool {
+                    self?.applyThemeChrome(daylight: daylight)
+                }
+                if let passthrough = body["titlebarPassthrough"] as? Bool {
+                    self?.titlebarDragOverlay?.passthroughAll = passthrough
+                }
             }
             return
         }
@@ -1014,9 +1030,3 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         NSLog("[RyanMusic] %@", message)
     }
 }
-
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-app.setActivationPolicy(.regular)
-app.run()

@@ -20,8 +20,8 @@ interface PlayerState {
   playTracks: (tracks: Track[], index?: number) => void;
   addToQueue: (track: Track) => void;
   playLibraryEntry: (
-    entry: { type: MusicSource; songid: string; title?: string; author?: string; delisted?: boolean },
-    queue?: { type: MusicSource; songid: string; title?: string; author?: string; delisted?: boolean }[],
+    entry: { type: MusicSource; songid: string; title?: string; author?: string; delisted?: boolean; pic?: string },
+    queue?: { type: MusicSource; songid: string; title?: string; author?: string; delisted?: boolean; pic?: string }[],
   ) => Promise<void>;
   patchCurrentLyrics: (
     lyrics: Pick<Track, 'lrc' | 'yrc' | 'tlyric' | 'lyricSource' | 'lyricProviderSongId'>,
@@ -40,8 +40,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   loopMode: 'all',
   error: '',
   setSource: (source) => set({ source }),
-  setDuration: (duration) => set({ duration }),
-  setStatus: (status) => set({ status }),
+  setDuration: (duration) => {
+    if (get().duration === duration) return;
+    set({ duration });
+  },
+  setStatus: (status) => {
+    if (get().status === status) return;
+    set({ status });
+  },
   setError: (error) => set({ error }),
   toggleLoop: () => {
     const current = get().loopMode;
@@ -164,6 +170,38 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const prev = state.queue.find(
       (row) => row.type === entry.type && String(row.songid) === String(entry.songid),
     );
+    if (entry.type === 'apple') {
+      const remembered = (queueEntries || [entry]).map((item) => {
+        const existing = get().queue.find(
+          (row) => row.type === item.type && String(row.songid) === String(item.songid),
+        );
+        return {
+          type: 'apple' as const,
+          songid: String(item.songid),
+          title: item.title || existing?.title || '未知曲目',
+          author: item.author || existing?.author || '',
+          lrc: existing?.lrc || '',
+          yrc: existing?.yrc || '',
+          tlyric: existing?.tlyric || '',
+          lyricSource: existing?.lyricSource,
+          url: existing?.url || `applemusic://${item.songid}`,
+          pic: existing?.pic || item.pic || '',
+          durationMs: existing?.durationMs,
+        } satisfies Track;
+      });
+      const index = Math.max(0, remembered.findIndex((item) => item.songid === String(entry.songid)));
+      get().playTracks(remembered.length ? remembered : [{
+        type: 'apple',
+        songid: String(entry.songid),
+        title: entry.title || '未知曲目',
+        author: entry.author || '',
+        lrc: '',
+        url: `applemusic://${entry.songid}`,
+        pic: entry.pic || '',
+      }], index < 0 ? 0 : index);
+      return;
+    }
+
     const optimistic: Track = {
       type: entry.type,
       songid: String(entry.songid),

@@ -1,7 +1,8 @@
 import type { AccountStatus } from '../api';
+import { canUseAppleMusic } from './appleMusic';
 
 /** 账号平台（后续可继续往数组里加） */
-export type AccountProviderId = 'netease' | 'qq' | 'kugou';
+export type AccountProviderId = 'netease' | 'qq' | 'kugou' | 'apple';
 
 export interface AccountProviderMeta {
   id: AccountProviderId;
@@ -43,7 +44,20 @@ export const ACCOUNT_PROVIDERS: AccountProviderMeta[] = [
     logoutAction: 'kugou_logout',
     hasCloudLibrary: false,
   },
+  {
+    id: 'apple',
+    label: 'Apple Music',
+    shortLabel: 'Apple',
+    mark: '',
+    markClass: 'bg-black text-white',
+    logoutAction: '',
+    hasCloudLibrary: true,
+  },
 ];
+
+export function visibleAccountProviders(): AccountProviderMeta[] {
+  return ACCOUNT_PROVIDERS.filter((item) => item.id !== 'apple' || canUseAppleMusic());
+}
 
 export function providerMeta(id: AccountProviderId): AccountProviderMeta {
   return ACCOUNT_PROVIDERS.find((item) => item.id === id) || ACCOUNT_PROVIDERS[0];
@@ -54,9 +68,11 @@ export function accountOf(
   netease: AccountStatus | null,
   qq: AccountStatus | null,
   kugou: AccountStatus | null = null,
+  apple: AccountStatus | null = null,
 ): AccountStatus | null {
   if (id === 'qq') return qq;
   if (id === 'kugou') return kugou;
+  if (id === 'apple') return apple;
   return netease;
 }
 
@@ -71,7 +87,7 @@ export function membershipHeadline(account: AccountStatus | null | undefined): s
 /** 已登录账号的会员说明（副句） */
 export function membershipHint(account: AccountStatus | null | undefined): string {
   if (!account?.loggedIn) {
-    return '登录后会员可走官方音源；非会员将使用外部音源，加载可能会稍慢。';
+    return '登录后会员可走官方音源；非会员将使用外部音源，加载可能会稍慢。Mac 桌面版还可授权 Apple Music。';
   }
   if (Number(account.vip) > 0) {
     return '当前为会员账号，优先使用官方音源与逐字歌词。';

@@ -1,12 +1,12 @@
 /** 当前应用版本（与 Info.plist / Windows Version / server package 保持一致） */
-export const APP_VERSION = '2.0.8';
+export const APP_VERSION = '2.0.9';
 
 const SEEN_KEY = 'ryanmusic-whats-new-seen';
 
 /** 本版启动后弹窗展示的更新说明 */
-export const WHATS_NEW_NOTES = `• 搜索支持综合、单曲、歌单、专辑、歌手五类分类
-• 歌单搜索结果可直接打开
-• 专辑、歌手点击可快速查看相关单曲`;
+export const WHATS_NEW_NOTES = `• Mac 桌面版支持 Apple Music 资料库、推荐与官方播放
+• 资料库新增动态磁贴，翻转时标题跟着封面走
+• 播放、暂停、上一首下一首按按下时的意图执行`;
 
 export function shouldShowWhatsNew(currentVersion = APP_VERSION): boolean {
   try {

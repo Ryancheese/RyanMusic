@@ -367,6 +367,44 @@ html.platform-windows-app .theme-glass-panel {
   }
 }
 
+.ryan-ss-tile {
+  perspective: 920px;
+  background: transparent;
+}
+
+.ryan-ss-tile-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.82s cubic-bezier(0.2, 0.7, 0.15, 1);
+  will-change: transform;
+}
+
+.ryan-ss-tile-card.is-flipped {
+  transform: rotateY(180deg);
+}
+
+.ryan-ss-tile-card.is-instant {
+  transition: none;
+}
+
+.ryan-ss-tile-face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.ryan-ss-tile-front {
+  transform: rotateY(0deg);
+}
+
+.ryan-ss-tile-back {
+  transform: rotateY(180deg);
+}
+
 .ryan-cover-flip-scene {
   perspective: 980px;
   overflow: hidden;
