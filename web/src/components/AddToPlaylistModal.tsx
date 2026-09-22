@@ -26,6 +26,7 @@ function providerLabel(type: MusicSource): string {
   if (type === 'netease') return '网易云音乐';
   if (type === 'qq') return 'QQ 音乐';
   if (type === 'apple') return 'Apple Music';
+  if (type === 'qishui') return '汽水音乐';
   return type;
 }
 

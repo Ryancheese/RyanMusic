@@ -43,7 +43,7 @@ interface SearchWorkspaceProps {
   onPrefetch?: (track: Track) => void;
   onAddQueue: (track: Track) => void;
   onLoadMore: () => void;
-  onHistorySelect: (query: string, source: MusicSource) => void;
+  onHistorySelect: (query: string) => void;
   onOpenPlaylist: (playlist: SearchPlaylistHit) => void;
   onOpenAlbum: (album: SearchAlbumHit) => void;
   onOpenArtist: (artist: SearchArtistHit) => void;
@@ -52,6 +52,7 @@ interface SearchWorkspaceProps {
 const sources: { id: MusicSource; label: string }[] = [
   { id: 'netease', label: '网易云' },
   { id: 'qq', label: 'QQ 音乐' },
+  { id: 'qishui', label: '汽水' },
   ...(canUseAppleMusic() ? [{ id: 'apple' as const, label: 'Apple Music' }] : []),
 ];
 
@@ -66,6 +67,7 @@ const categories: { id: SearchCategory; label: string }[] = [
 function sourceLabel(type: MusicSource) {
   if (type === 'qq') return 'QQ';
   if (type === 'apple') return 'Apple';
+  if (type === 'qishui') return '汽水';
   return '网易云';
 }
 
@@ -463,25 +465,22 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                 <div className="flex flex-col gap-1">
                   {history.map((item) => (
                     <div
-                      key={`${item.source}-${item.q}-${item.at}`}
+                      key={`${item.q}-${item.at}`}
                       className={`group flex items-center gap-2 rounded-2xl px-3 py-2.5 transition ${
                         isDaylight ? 'hover:bg-black/[0.05]' : 'hover:bg-white/[0.07]'
                       }`}
                     >
                       <button
                         type="button"
-                        onClick={() => onHistorySelect(item.q, item.source)}
+                        onClick={() => onHistorySelect(item.q)}
                         className="min-w-0 flex-1 text-left"
                       >
                         <div className="truncate text-sm font-medium">{item.q}</div>
-                        <div className="mt-0.5 text-[11px] opacity-40">
-                          {item.source === 'qq' ? 'QQ 音乐' : item.source === 'apple' ? 'Apple Music' : '网易云'}
-                        </div>
                       </button>
                       <button
                         type="button"
                         aria-label="删除这条记录"
-                        onClick={() => removeHistory(item.q, item.source)}
+                        onClick={() => removeHistory(item.q)}
                         className={`rounded-full p-1.5 opacity-0 transition group-hover:opacity-60 hover:!opacity-100 ${
                           isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/12'
                         }`}

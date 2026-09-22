@@ -16,6 +16,7 @@ import {
   type AccountProviderId,
 } from '../lib/accountProviders';
 import { useAppleMusicStore } from '../store/appleMusicStore';
+import { canUseQishuiNativeQr, qishuiNativeLogout, qishuiNativeQrCheck, qishuiNativeQrKey } from '../lib/qishuiNative';
 
 interface AccountModalProps {
   open: boolean;
@@ -25,6 +26,7 @@ interface AccountModalProps {
   qq: AccountStatus | null;
   kugou?: AccountStatus | null;
   apple?: AccountStatus | null;
+  qishui?: AccountStatus | null;
   /** 打开时优先选中的平台 */
   initialProvider?: AccountProviderId;
   onClose: () => void;
@@ -43,6 +45,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
   qq,
   kugou = null,
   apple = null,
+  qishui = null,
   initialProvider = 'netease',
   onClose,
   onChanged,
@@ -57,7 +60,12 @@ const AccountModal: React.FC<AccountModalProps> = ({
   const [qr, setQr] = useState('');
   const [cookie, setCookie] = useState('');
   const [busy, setBusy] = useState(false);
+  const [cookieOpen, setCookieOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const onChangedRef = useRef(onChanged);
+  const onLoggedInRef = useRef(onLoggedIn);
+  onChangedRef.current = onChanged;
+  onLoggedInRef.current = onLoggedIn;
   const panel = isDaylight ? 'bg-white/90 text-black' : 'bg-zinc-900/95 text-white';
   const idle = isDaylight ? 'bg-black/6' : 'bg-white/8';
   const soft = isDaylight ? 'bg-black/4' : 'bg-white/6';
@@ -70,11 +78,12 @@ const AccountModal: React.FC<AccountModalProps> = ({
     setTab(initialProvider);
     setCookie('');
     setStatus('');
+    setCookieOpen(false);
   }, [open, initialProvider]);
 
   useEffect(() => {
     if (!open) return;
-    const current = accountOf(tab, netease, qq, kugou, apple);
+    const current = accountOf(tab, netease, qq, kugou, apple, qishui);
     if (current?.loggedIn || tab === 'apple') {
       setQr('');
       return;
@@ -84,9 +93,36 @@ const AccountModal: React.FC<AccountModalProps> = ({
     const start = async () => {
       setBusy(true);
       setStatus('正在生成二维码…');
-      const keyAction = tab === 'netease' ? 'netease_qr_key' : tab === 'kugou' ? 'kugou_qr_key' : 'qq_qr_key';
-      const checkAction = tab === 'netease' ? 'netease_qr_check' : tab === 'kugou' ? 'kugou_qr_check' : 'qq_qr_check';
-      const res = await postAction<Record<string, string>>(keyAction);
+      const keyAction = tab === 'netease'
+        ? 'netease_qr_key'
+        : tab === 'kugou'
+          ? 'kugou_qr_key'
+          : tab === 'qishui'
+            ? 'qishui_qr_key'
+            : 'qq_qr_key';
+      const checkAction = tab === 'netease'
+        ? 'netease_qr_check'
+        : tab === 'kugou'
+          ? 'kugou_qr_check'
+          : tab === 'qishui'
+            ? 'qishui_qr_check'
+            : 'qq_qr_check';
+      const useNativeQishui = tab === 'qishui' && canUseQishuiNativeQr();
+      let res: { code: number; error: string; data?: Record<string, string> };
+      try {
+        if (useNativeQishui) {
+          const native = await qishuiNativeQrKey();
+          res = { code: 200, error: '', data: native };
+        } else {
+          res = await postAction<Record<string, string>>(keyAction);
+        }
+      } catch (error) {
+        setBusy(false);
+        if (stop) return;
+        setStatus(error instanceof Error ? error.message : '无法生成二维码，请改用 Cookie');
+        setCookieOpen(tab === 'qishui');
+        return;
+      }
       setBusy(false);
       if (stop) return;
       if (res.code !== 200 || !res.data) {
@@ -103,13 +139,40 @@ const AccountModal: React.FC<AccountModalProps> = ({
           ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrurl)}`
           : ''));
         setStatus('请使用酷狗 App 扫码');
+      } else if (tab === 'qishui') {
+        const qrurl = res.data.qrurl || '';
+        setQr(qrurl
+          ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&ecc=M&data=${encodeURIComponent(qrurl)}`
+          : '');
+        setStatus('请使用汽水 App 扫码');
       } else {
         setQr(res.data.qrimg || '');
         setStatus('请使用 QQ / 微信扫码');
       }
       const key = res.data.key || '';
       timer = window.setInterval(async () => {
-        const check = await postAction<Record<string, unknown>>(checkAction, key ? { key } : {});
+        let check: { code: number; error: string; data?: Record<string, unknown> };
+        try {
+          if (useNativeQishui) {
+            const native = await qishuiNativeQrCheck(key);
+            if (native.cookie && native.loggedIn) {
+              const saved = await postAction('qishui_cookie_save', { cookie: native.cookie });
+              if (saved.code !== 200) {
+                check = { code: saved.code, error: saved.error || 'Cookie 保存失败', data: native };
+              } else {
+                check = { code: 200, error: '', data: native };
+              }
+            } else {
+              check = { code: 200, error: '', data: native };
+            }
+          } else {
+            check = await postAction<Record<string, unknown>>(checkAction, key ? { key } : {});
+          }
+        } catch (error) {
+          if (stop) return;
+          setStatus(error instanceof Error ? error.message : '扫码状态查询失败');
+          return;
+        }
         if (stop) return;
         const data = (check.data || {}) as Record<string, unknown>;
         const st = Number(data.status);
@@ -142,6 +205,28 @@ const AccountModal: React.FC<AccountModalProps> = ({
             setStatus(check.error);
             window.clearInterval(timer);
           }
+        } else if (tab === 'qishui') {
+          if (st === 801) setStatus(String(data.message || '等待扫码…'));
+          else if (st === 802) setStatus(String(data.message || '已扫码，请在手机上确认'));
+          else if (st === 800) {
+            setStatus(String(data.message || '二维码已过期，请关闭后重开'));
+            window.clearInterval(timer);
+          } else if (st === 803 && data.loggedIn) {
+            setStatus('登录成功');
+            window.clearInterval(timer);
+            onChangedRef.current();
+            onLoggedInRef.current?.(tab);
+          } else if (st === 804) {
+            setStatus(String(data.message || '手机已确认，请改用 Cookie'));
+            setCookieOpen(true);
+            window.clearInterval(timer);
+          } else if (check.code !== 200 && check.error) {
+            setStatus(check.error);
+            if (/Cookie|二次验证/.test(check.error)) {
+              setCookieOpen(true);
+              window.clearInterval(timer);
+            }
+          }
         } else if (st === 66) {
           setStatus(String(data.message || '等待扫码…'));
         } else if (st === 67) {
@@ -165,7 +250,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
       stop = true;
       if (timer) window.clearInterval(timer);
     };
-  }, [apple, open, tab, netease?.loggedIn, qq?.loggedIn, kugou?.loggedIn, onChanged, onLoggedIn]);
+  }, [apple, open, tab, netease?.loggedIn, qq?.loggedIn, kugou?.loggedIn, qishui?.loggedIn]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -185,7 +270,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
 
   if (!open) return null;
 
-  const current = accountOf(tab, netease, qq, kugou, apple);
+  const current = accountOf(tab, netease, qq, kugou, apple, qishui);
   const loggedIn = Boolean(current?.loggedIn);
   const activeMeta = providerMeta(tab);
   const capsuleAvatar = loggedIn && current?.avatar
@@ -194,7 +279,13 @@ const AccountModal: React.FC<AccountModalProps> = ({
 
   const saveCookie = async () => {
     setBusy(true);
-    const action = tab === 'netease' ? 'netease_cookie_save' : tab === 'kugou' ? 'kugou_cookie_save' : 'qq_cookie_save';
+    const action = tab === 'netease'
+      ? 'netease_cookie_save'
+      : tab === 'kugou'
+        ? 'kugou_cookie_save'
+        : tab === 'qishui'
+          ? 'qishui_cookie_save'
+          : 'qq_cookie_save';
     const res = await postAction(action, { cookie: cookie.trim() });
     setBusy(false);
     if (res.code !== 200) {
@@ -214,10 +305,12 @@ const AccountModal: React.FC<AccountModalProps> = ({
       onChanged();
       return;
     }
-    if (provider === 'netease' || provider === 'qq') {
+    if (provider === 'qishui') {
+      await qishuiNativeLogout();
+    }
+    if (provider === 'netease' || provider === 'qq' || provider === 'qishui') {
       useCloudStore.getState().clearProvider(provider);
     }
-    onChanged();
     await postAction(meta.logoutAction);
     onChanged();
   };
@@ -302,7 +395,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
                 }`}
               >
                 {visibleAccountProviders().map((provider) => {
-                  const account = accountOf(provider.id, netease, qq, kugou, apple);
+                  const account = accountOf(provider.id, netease, qq, kugou, apple, qishui);
                   const active = tab === provider.id;
                   const avatar = account?.loggedIn && account.avatar
                     ? (coverImageUrl(account.avatar, 72) || account.avatar)
@@ -466,14 +559,20 @@ const AccountModal: React.FC<AccountModalProps> = ({
               )}
               <p className="text-xs opacity-70">{status}</p>
             </div>
-            <details className="rounded-2xl bg-white/5 p-3">
+            <details
+              className="rounded-2xl bg-white/5 p-3"
+              open={cookieOpen}
+              onToggle={(event) => setCookieOpen(event.currentTarget.open)}
+            >
               <summary className="cursor-pointer text-xs opacity-70">扫码不行？改用 Cookie</summary>
               <p className="mt-2 text-[11px] opacity-50">
                 {tab === 'netease'
                   ? '浏览器登录 music.163.com，复制请求头 Cookie（需含 MUSIC_U）。仅存本机。'
                   : tab === 'kugou'
                     ? '浏览器登录 kugou.com，复制请求头 Cookie（需含 userid 与 token，或 KuGoo）。仅存本机。'
-                    : '浏览器登录 y.qq.com，复制请求头 Cookie（需含 uin 与 qm_keyst）。仅存本机。'}
+                    : tab === 'qishui'
+                      ? '打开汽水电脑版并登录，从开发者工具或请求头复制完整 Cookie（需含 sessionid）。仅存本机。'
+                      : '浏览器登录 y.qq.com，复制请求头 Cookie（需含 uin 与 qm_keyst）。仅存本机。'}
               </p>
               <textarea
                 value={cookie}

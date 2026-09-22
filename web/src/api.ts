@@ -179,6 +179,30 @@ export function fetchKugouStatus() {
   return postAction<AccountStatus>('kugou_status');
 }
 
+export function fetchQishuiStatus() {
+  return postAction<AccountStatus>('qishui_status');
+}
+
+export function fetchQishuiPlaylists() {
+  return postAction<{ playlists: CloudPlaylist[] }>('qishui_playlists');
+}
+
+export function fetchQishuiRecommendFeed() {
+  return postAction<{ items: NeteaseRecommendItem[] }>('qishui_recommend_feed');
+}
+
+export function fetchQishuiRecentSongs() {
+  return postAction<CloudPlaylistDetail>('qishui_recent_songs');
+}
+
+export function fetchQishuiPlaylistDetail(id: string, offset = 0, limit = 80) {
+  return postAction<CloudPlaylistDetail>('qishui_playlist_detail', {
+    id,
+    offset: String(offset),
+    limit: String(limit),
+  });
+}
+
 export interface CloudPlaylist {
   id: string;
   name: string;

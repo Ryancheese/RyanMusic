@@ -1,8 +1,8 @@
 export * from './visualizer-types';
 
-export type MusicSource = 'netease' | 'qq' | 'apple';
+export type MusicSource = 'netease' | 'qq' | 'apple' | 'qishui';
 
-export type HomeTab = 'netease' | 'qq' | 'apple';
+export type HomeTab = 'netease' | 'qq' | 'apple' | 'qishui';
 
 /** 网易云首页：账号歌单 vs 发现推荐（参考 Folia Grid3D） */
 export type NeteaseLibrarySection = 'playlists' | 'recommend';

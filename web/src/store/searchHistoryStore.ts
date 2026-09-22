@@ -1,12 +1,11 @@
 import { create } from 'zustand';
-import type { MusicSource } from '../types';
 
-const KEY = 'ryanmusic-search-history-v1';
+const KEY = 'ryanmusic-search-history-v2';
+const LEGACY_KEY = 'ryanmusic-search-history-v1';
 const MAX_ITEMS = 24;
 
 export interface SearchHistoryItem {
   q: string;
-  source: MusicSource;
   at: number;
 }
 
@@ -16,16 +15,19 @@ function normalizeQuery(value: string): string {
 
 function readItems(): SearchHistoryItem[] {
   try {
-    const parsed = JSON.parse(localStorage.getItem(KEY) || '[]') as SearchHistoryItem[];
+    const raw = localStorage.getItem(KEY) || localStorage.getItem(LEGACY_KEY) || '[]';
+    const parsed = JSON.parse(raw) as Array<{ q?: string; at?: number }>;
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item) => item && typeof item.q === 'string' && item.q.trim())
-      .map((item) => ({
-        q: item.q.trim(),
-        source: item.source === 'qq' ? 'qq' as const : 'netease' as const,
-        at: Number(item.at) || 0,
-      }))
-      .slice(0, MAX_ITEMS);
+    const seen = new Set<string>();
+    const items: SearchHistoryItem[] = [];
+    for (const item of parsed) {
+      const q = normalizeQuery(item?.q || '');
+      if (!q || seen.has(q)) continue;
+      seen.add(q);
+      items.push({ q, at: Number(item.at) || 0 });
+      if (items.length >= MAX_ITEMS) break;
+    }
+    return items;
   } catch {
     return [];
   }
@@ -33,31 +35,32 @@ function readItems(): SearchHistoryItem[] {
 
 interface SearchHistoryState {
   items: SearchHistoryItem[];
-  push: (q: string, source: MusicSource) => void;
-  remove: (q: string, source: MusicSource) => void;
+  push: (q: string) => void;
+  remove: (q: string) => void;
   clear: () => void;
 }
 
 export const useSearchHistoryStore = create<SearchHistoryState>((set, get) => ({
   items: readItems(),
-  push: (q, source) => {
+  push: (q) => {
     const query = normalizeQuery(q);
     if (!query || /^https?:\/\//i.test(query)) return;
     const next: SearchHistoryItem[] = [
-      { q: query, source, at: Date.now() },
-      ...get().items.filter((item) => !(item.q === query && item.source === source)),
+      { q: query, at: Date.now() },
+      ...get().items.filter((item) => item.q !== query),
     ].slice(0, MAX_ITEMS);
     set({ items: next });
     localStorage.setItem(KEY, JSON.stringify(next));
   },
-  remove: (q, source) => {
+  remove: (q) => {
     const query = normalizeQuery(q);
-    const next = get().items.filter((item) => !(item.q === query && item.source === source));
+    const next = get().items.filter((item) => item.q !== query);
     set({ items: next });
     localStorage.setItem(KEY, JSON.stringify(next));
   },
   clear: () => {
     set({ items: [] });
     localStorage.removeItem(KEY);
+    localStorage.removeItem(LEGACY_KEY);
   },
 }));

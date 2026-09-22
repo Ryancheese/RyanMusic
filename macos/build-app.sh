@@ -16,6 +16,7 @@ SRC_WEB_ROOT="$ROOT/web-root"
 SRC_SWIFT="$ROOT/macos/AppMain.swift"
 SRC_APPLE_MUSIC="$ROOT/macos/AppleMusicKit.swift"
 SRC_APPLE_LIBRARY="$ROOT/macos/AppleMusicLibrary.swift"
+SRC_QISHUI_AUTH="$ROOT/macos/QishuiAuth.swift"
 SRC_MAIN="$ROOT/macos/main.swift"
 
 BUNDLE_NODE=1
@@ -333,8 +334,8 @@ if ! command -v swiftc >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ ! -f "$SRC_SWIFT" || ! -f "$SRC_APPLE_MUSIC" || ! -f "$SRC_APPLE_LIBRARY" || ! -f "$SRC_MAIN" ]]; then
-  echo "Missing $SRC_SWIFT, $SRC_APPLE_MUSIC, $SRC_APPLE_LIBRARY or $SRC_MAIN" >&2
+if [[ ! -f "$SRC_SWIFT" || ! -f "$SRC_APPLE_MUSIC" || ! -f "$SRC_APPLE_LIBRARY" || ! -f "$SRC_QISHUI_AUTH" || ! -f "$SRC_MAIN" ]]; then
+  echo "Missing $SRC_SWIFT, $SRC_APPLE_MUSIC, $SRC_APPLE_LIBRARY, $SRC_QISHUI_AUTH or $SRC_MAIN" >&2
   exit 1
 fi
 
@@ -354,7 +355,7 @@ echo "==> compile WKWebView app [${ARCH_LABEL}] target=${SWIFT_TARGET}"
 export MACOSX_DEPLOYMENT_TARGET="$DEPLOY_TARGET"
 swiftc -O -target "$SWIFT_TARGET" \
   -framework Cocoa -framework WebKit -framework MediaPlayer -framework MusicKit -framework iTunesLibrary -framework AVFoundation \
-  -o "$MACOS_DIR/RyanMusic" "$SRC_MAIN" "$SRC_SWIFT" "$SRC_APPLE_MUSIC" "$SRC_APPLE_LIBRARY"
+  -o "$MACOS_DIR/RyanMusic" "$SRC_MAIN" "$SRC_SWIFT" "$SRC_APPLE_MUSIC" "$SRC_APPLE_LIBRARY" "$SRC_QISHUI_AUTH"
 chmod +x "$MACOS_DIR/RyanMusic"
 
 echo "==> Info.plist"

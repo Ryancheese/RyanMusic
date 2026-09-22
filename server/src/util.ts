@@ -283,6 +283,9 @@ export function mediaReferer(url: string): string {
       return 'https://www.kuwo.cn/';
     }
     if (host.endsWith('myhkw.cn')) return 'https://s.myhkw.cn/';
+    if (host.includes('qishui') || host.includes('byteimg') || host.includes('douyin') || host.includes('volcengine') || host.includes('toutiao')) {
+      return 'https://www.qishui.com/';
+    }
   } catch {
     // ignore invalid url
   }

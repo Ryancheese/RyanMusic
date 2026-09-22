@@ -1,10 +1,11 @@
 const KEY = 'ryanmusic-playlist-recent-v1';
 
-type Provider = 'netease' | 'qq';
+type Provider = 'netease' | 'qq' | 'qishui';
 
 interface RecentStore {
   netease: Record<string, number>;
   qq: Record<string, number>;
+  qishui: Record<string, number>;
 }
 
 function readStore(): RecentStore {
@@ -13,9 +14,10 @@ function readStore(): RecentStore {
     return {
       netease: parsed?.netease && typeof parsed.netease === 'object' ? parsed.netease : {},
       qq: parsed?.qq && typeof parsed.qq === 'object' ? parsed.qq : {},
+      qishui: parsed?.qishui && typeof parsed.qishui === 'object' ? parsed.qishui : {},
     };
   } catch {
-    return { netease: {}, qq: {} };
+    return { netease: {}, qq: {}, qishui: {} };
   }
 }
 

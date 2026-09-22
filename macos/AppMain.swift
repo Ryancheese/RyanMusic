@@ -74,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var activeDownloads: [ObjectIdentifier: URL] = [:]
     private var chromeObservers: [NSObjectProtocol] = []
     private let appleMusic = AppleMusicBridge()
+    private let qishuiAuth = QishuiAuthBridge()
 
     /// 禁用系统/VPN HTTP 代理的会话（健康检查、另存为下载）
     private lazy var directSession: URLSession = {
@@ -206,6 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         config.userContentController.add(self, name: "ryanWindowZoom")
         config.userContentController.add(self, name: "ryanChrome")
         config.userContentController.add(self, name: "ryanAppleMusic")
+        config.userContentController.add(self, name: "ryanQishui")
         // 标记桌面壳 + 空白处拖拽 / 双击缩放
         // 媒体控制走网页 Media Session，避免与原生 Now Playing 叠成两条
         let platformJS = """
@@ -244,6 +246,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         webView.uiDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
         appleMusic.webView = webView
+        qishuiAuth.uiWebView = webView
 
         let container = FullBleedView(frame: rect)
         container.wantsLayer = true
@@ -374,6 +377,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         if message.name == "ryanAppleMusic" {
             appleMusic.handle(message.body)
+            return
+        }
+
+        if message.name == "ryanQishui" {
+            qishuiAuth.handle(message.body)
             return
         }
 

@@ -10,6 +10,7 @@ interface Window {
   __ryanUpdateProgress?: (payload: import('./lib/update').AppUpdateProgress) => void;
   __ryanAppleMusicReply?: (payload: Record<string, unknown>) => void;
   __ryanAppleMusicEvent?: (payload: Record<string, unknown>) => void;
+  __ryanQishuiReply?: (payload: Record<string, unknown>) => void;
   webkit?: {
     messageHandlers?: {
       ryanSave?: {
@@ -22,6 +23,9 @@ interface Window {
         postMessage: (payload: { daylight?: boolean; titlebarPassthrough?: boolean }) => void;
       };
       ryanAppleMusic?: {
+        postMessage: (payload: Record<string, unknown>) => void;
+      };
+      ryanQishui?: {
         postMessage: (payload: Record<string, unknown>) => void;
       };
     };

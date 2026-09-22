@@ -2,7 +2,7 @@ import type { AccountStatus } from '../api';
 import { canUseAppleMusic } from './appleMusic';
 
 /** 账号平台（后续可继续往数组里加） */
-export type AccountProviderId = 'netease' | 'qq' | 'kugou' | 'apple';
+export type AccountProviderId = 'netease' | 'qq' | 'kugou' | 'apple' | 'qishui';
 
 export interface AccountProviderMeta {
   id: AccountProviderId;
@@ -53,6 +53,15 @@ export const ACCOUNT_PROVIDERS: AccountProviderMeta[] = [
     logoutAction: '',
     hasCloudLibrary: true,
   },
+  {
+    id: 'qishui',
+    label: '汽水音乐',
+    shortLabel: '汽水',
+    mark: '汽',
+    markClass: 'bg-[#2b6cff] text-white',
+    logoutAction: 'qishui_logout',
+    hasCloudLibrary: true,
+  },
 ];
 
 export function visibleAccountProviders(): AccountProviderMeta[] {
@@ -69,10 +78,12 @@ export function accountOf(
   qq: AccountStatus | null,
   kugou: AccountStatus | null = null,
   apple: AccountStatus | null = null,
+  qishui: AccountStatus | null = null,
 ): AccountStatus | null {
   if (id === 'qq') return qq;
   if (id === 'kugou') return kugou;
   if (id === 'apple') return apple;
+  if (id === 'qishui') return qishui;
   return netease;
 }
 
@@ -87,7 +98,7 @@ export function membershipHeadline(account: AccountStatus | null | undefined): s
 /** 已登录账号的会员说明（副句） */
 export function membershipHint(account: AccountStatus | null | undefined): string {
   if (!account?.loggedIn) {
-    return '登录后会员可走官方音源；非会员将使用外部音源，加载可能会稍慢。Mac 桌面版还可授权 Apple Music。';
+    return '登录后会员可走官方音源；非会员将使用外部音源，加载可能会稍慢。Mac 还可授权 Apple Music，汽水可粘贴电脑版 Cookie。';
   }
   if (Number(account.vip) > 0) {
     return '当前为会员账号，优先使用官方音源与逐字歌词。';

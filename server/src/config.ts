@@ -24,7 +24,7 @@ export function withOsPcCookie(cookie: string): string {
   return `${cookie}; os=pc; appver=3.1.29.205117`;
 }
 
-export type MusicSource = 'netease' | 'qq';
+export type MusicSource = 'netease' | 'qq' | 'qishui';
 
 export interface Track {
   type: MusicSource;

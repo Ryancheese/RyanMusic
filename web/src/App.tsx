@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type SearchAlbumHit, type SearchArtistHit, type SearchBundle, type SearchCategory, type SearchPlaylistHit, type Track, type VisualizerMode } from './types';
-import { buildDownloadUrl, canNativeSave, coverImageUrl, coverRefreshUrl, fetchKugouStatus, fetchNeteaseQualities, fetchNeteaseStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type CloudPlaylist, type LyricSearchCandidate, type PlayQuality } from './api';
+import { buildDownloadUrl, canNativeSave, coverImageUrl, coverRefreshUrl, fetchKugouStatus, fetchNeteaseQualities, fetchNeteaseStatus, fetchQishuiStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type CloudPlaylist, type LyricSearchCandidate, type PlayQuality } from './api';
 import { accentWashVars, contrastText, extractAccentFromImage } from './lib/color';
 import {
   canUseAppleMusic,
@@ -126,6 +126,7 @@ const App: React.FC = () => {
   const [searchAlbums, setSearchAlbums] = useState<SearchAlbumHit[]>([]);
   const [searchArtists, setSearchArtists] = useState<SearchArtistHit[]>([]);
   const [searchCategory, setSearchCategory] = useState<SearchCategory>('all');
+  const [searchSource, setSearchSource] = useState<MusicSource>('netease');
   const [searchPage, setSearchPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -155,6 +156,7 @@ const App: React.FC = () => {
   const [netease, setNetease] = useState<AccountStatus | null>(null);
   const [qq, setQq] = useState<AccountStatus | null>(null);
   const [kugou, setKugou] = useState<AccountStatus | null>(null);
+  const [qishui, setQishui] = useState<AccountStatus | null>(null);
   const appleAccount = useAppleMusicStore((state) => state.account);
   const nativeClockRef = useRef({
     active: false,
@@ -169,7 +171,6 @@ const App: React.FC = () => {
   const lastQueryRef = useRef('');
   const returnToSearchRef = useRef(false);
 
-  const [searchSource, setSearchSource] = useState<MusicSource>('netease');
   const queue = usePlayerStore((state) => state.queue);
   const index = usePlayerStore((state) => state.index);
   const status = usePlayerStore((state) => state.status);
@@ -200,26 +201,37 @@ const App: React.FC = () => {
 
   const neteasePlaylists = useCloudStore((state) => state.neteasePlaylists);
   const qqPlaylists = useCloudStore((state) => state.qqPlaylists);
+  const qishuiPlaylists = useCloudStore((state) => state.qishuiPlaylists);
   const neteaseRecommendItems = useCloudStore((state) => state.neteaseRecommendItems);
   const qqRecommendItems = useCloudStore((state) => state.qqRecommendItems);
+  const qishuiRecommendItems = useCloudStore((state) => state.qishuiRecommendItems);
   const neteaseOpen = useCloudStore((state) => state.neteaseOpen);
   const qqOpen = useCloudStore((state) => state.qqOpen);
+  const qishuiOpen = useCloudStore((state) => state.qishuiOpen);
   const neteaseTracks = useCloudStore((state) => state.neteaseTracks);
   const qqTracks = useCloudStore((state) => state.qqTracks);
+  const qishuiTracks = useCloudStore((state) => state.qishuiTracks);
   const neteaseSyncing = useCloudStore((state) => state.neteaseSyncing);
   const qqSyncing = useCloudStore((state) => state.qqSyncing);
+  const qishuiSyncing = useCloudStore((state) => state.qishuiSyncing);
   const neteaseRecommendSyncing = useCloudStore((state) => state.neteaseRecommendSyncing);
   const qqRecommendSyncing = useCloudStore((state) => state.qqRecommendSyncing);
+  const qishuiRecommendSyncing = useCloudStore((state) => state.qishuiRecommendSyncing);
   const neteaseLoading = useCloudStore((state) => state.neteaseLoading);
   const qqLoading = useCloudStore((state) => state.qqLoading);
+  const qishuiLoading = useCloudStore((state) => state.qishuiLoading);
   const neteaseError = useCloudStore((state) => state.neteaseError);
   const qqError = useCloudStore((state) => state.qqError);
+  const qishuiError = useCloudStore((state) => state.qishuiError);
   const neteaseRecommendError = useCloudStore((state) => state.neteaseRecommendError);
   const qqRecommendError = useCloudStore((state) => state.qqRecommendError);
+  const qishuiRecommendError = useCloudStore((state) => state.qishuiRecommendError);
   const syncNetease = useCloudStore((state) => state.syncNetease);
   const syncNeteaseRecommend = useCloudStore((state) => state.syncNeteaseRecommend);
   const syncQqRecommend = useCloudStore((state) => state.syncQqRecommend);
   const syncQq = useCloudStore((state) => state.syncQq);
+  const syncQishui = useCloudStore((state) => state.syncQishui);
+  const syncQishuiRecommend = useCloudStore((state) => state.syncQishuiRecommend);
   const openNeteasePlaylist = useCloudStore((state) => state.openNeteasePlaylist);
   const openNeteaseRecommend = useCloudStore((state) => state.openNeteaseRecommend);
   const playNeteasePersonalFm = useCloudStore((state) => state.playNeteasePersonalFm);
@@ -227,8 +239,12 @@ const App: React.FC = () => {
   const openQqRecommend = useCloudStore((state) => state.openQqRecommend);
   const openQqRadar = useCloudStore((state) => state.openQqRadar);
   const playQqPersonalFm = useCloudStore((state) => state.playQqPersonalFm);
+  const openQishuiPlaylist = useCloudStore((state) => state.openQishuiPlaylist);
+  const openQishuiRecommend = useCloudStore((state) => state.openQishuiRecommend);
+  const playQishuiRecent = useCloudStore((state) => state.playQishuiRecent);
   const closeNeteasePlaylist = useCloudStore((state) => state.closeNeteasePlaylist);
   const closeQqPlaylist = useCloudStore((state) => state.closeQqPlaylist);
+  const closeQishuiPlaylist = useCloudStore((state) => state.closeQishuiPlaylist);
   const syncAppleLibrary = useAppleMusicStore((state) => state.syncLibrary);
   const syncAppleRecommend = useAppleMusicStore((state) => state.syncRecommend);
   const openApplePlaylist = useAppleMusicStore((state) => state.openPlaylist);
@@ -700,7 +716,7 @@ const App: React.FC = () => {
           }
           setHasMore(false);
           setSearchPage(page);
-          if (!append && page === 1) useSearchHistoryStore.getState().push(input, activeSource);
+          if (!append && page === 1) useSearchHistoryStore.getState().push(input);
           window.history.replaceState(null, '', `?name=${encodeURIComponent(input)}&type=apple&category=${activeCategory}`);
           return;
         }
@@ -743,7 +759,7 @@ const App: React.FC = () => {
         setHasMore(Boolean(result.has_more) && filter === 'name');
         setSearchPage(page);
         if (!append && page === 1 && filter === 'name') {
-          useSearchHistoryStore.getState().push(input, activeSource);
+          useSearchHistoryStore.getState().push(input);
         }
         const url = filter === 'url'
           ? `?url=${encodeURIComponent(input)}`
@@ -975,7 +991,7 @@ const App: React.FC = () => {
   }, [index, loopMode, prefetchTrackMedia, queue, track]);
 
   useEffect(() => {
-    const list = homeTab === 'qq' ? qqTracks : neteaseTracks;
+    const list = homeTab === 'qq' ? qqTracks : homeTab === 'qishui' ? qishuiTracks : neteaseTracks;
     if (!list.length) return;
     let cancelled = false;
     void (async () => {
@@ -996,21 +1012,23 @@ const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [homeTab, neteaseTracks, qqTracks]);
+  }, [homeTab, neteaseTracks, qishuiTracks, qqTracks]);
 
   useEffect(() => {
     let alive = true;
     const load = async () => {
-      const [ne, qqStatus, kgStatus] = await Promise.all([
+      const [ne, qqStatus, kgStatus, qsStatus] = await Promise.all([
         fetchNeteaseStatus(),
         fetchQqStatus(),
         fetchKugouStatus(),
+        fetchQishuiStatus(),
       ]);
       void refreshAppleStatus();
       if (!alive) return;
       setNetease(ne.code === 200 ? ne.data : { loggedIn: false });
       setQq(qqStatus.code === 200 ? qqStatus.data : { loggedIn: false });
       setKugou(kgStatus.code === 200 ? kgStatus.data : { loggedIn: false });
+      setQishui(qsStatus.code === 200 ? qsStatus.data : { loggedIn: false });
     };
     void load();
     return () => {
@@ -1019,10 +1037,17 @@ const App: React.FC = () => {
   }, []);
 
   const refreshAccounts = useCallback(() => {
-    void Promise.all([fetchNeteaseStatus(), fetchQqStatus(), fetchKugouStatus(), refreshAppleStatus()]).then(([ne, qqStatus, kgStatus]) => {
+    void Promise.all([
+      fetchNeteaseStatus(),
+      fetchQqStatus(),
+      fetchKugouStatus(),
+      fetchQishuiStatus(),
+      refreshAppleStatus(),
+    ]).then(([ne, qqStatus, kgStatus, qsStatus]) => {
       setNetease(ne.code === 200 ? ne.data : { loggedIn: false });
       setQq(qqStatus.code === 200 ? qqStatus.data : { loggedIn: false });
       setKugou(kgStatus.code === 200 ? kgStatus.data : { loggedIn: false });
+      setQishui(qsStatus.code === 200 ? qsStatus.data : { loggedIn: false });
     });
   }, [refreshAppleStatus]);
 
@@ -1047,6 +1072,16 @@ const App: React.FC = () => {
   }, [qq?.loggedIn, syncQq]);
 
   useEffect(() => {
+    if (qishui?.loggedIn) void syncQishui();
+  }, [qishui?.loggedIn, syncQishui]);
+
+  useEffect(() => {
+    if (qishui?.loggedIn && neteaseLibrarySection === 'recommend') {
+      void syncQishuiRecommend();
+    }
+  }, [qishui?.loggedIn, neteaseLibrarySection, syncQishuiRecommend]);
+
+  useEffect(() => {
     if (appleAccount.loggedIn) void syncAppleLibrary();
   }, [appleAccount.loggedIn, syncAppleLibrary]);
 
@@ -1061,7 +1096,7 @@ const App: React.FC = () => {
       setHomeTab('netease');
       return;
     }
-    if (homeTab === 'apple') return;
+    if (homeTab === 'apple' || homeTab === 'qishui') return;
     const neIn = Boolean(netease?.loggedIn);
     const qqIn = Boolean(qq?.loggedIn);
     if (neIn && !qqIn && homeTab !== 'netease') setHomeTab('netease');
@@ -1193,7 +1228,7 @@ const App: React.FC = () => {
       });
       if (applyLyrics(preferredFirst, preferred)) return true;
 
-      if (preferred !== type) {
+      if (preferred !== type && type !== 'qishui') {
         const nativeFirst = await fetchTrackLyrics({
           type,
           songid: id,
@@ -1414,10 +1449,17 @@ const App: React.FC = () => {
           setPanelOpen(false);
           return;
         }
-        const playlistOpen = homeTab === 'apple' ? appleOpen : homeTab === 'qq' ? qqOpen : neteaseOpen;
+        const playlistOpen = homeTab === 'apple'
+          ? appleOpen
+          : homeTab === 'qq'
+            ? qqOpen
+            : homeTab === 'qishui'
+              ? qishuiOpen
+              : neteaseOpen;
         if (view === 'home' && playlistOpen) {
           if (homeTab === 'apple') closeApplePlaylist();
           else if (homeTab === 'qq') closeQqPlaylist();
+          else if (homeTab === 'qishui') closeQishuiPlaylist();
           else closeNeteasePlaylist();
           return;
         }
@@ -1432,6 +1474,7 @@ const App: React.FC = () => {
     appleOpen,
     closeApplePlaylist,
     closeNeteasePlaylist,
+    closeQishuiPlaylist,
     closeQqPlaylist,
     currentTime,
     duration,
@@ -1439,6 +1482,7 @@ const App: React.FC = () => {
     homeTab,
     neteaseOpen,
     panelOpen,
+    qishuiOpen,
     qqOpen,
     searchOpen,
     seek,
@@ -1454,7 +1498,10 @@ const App: React.FC = () => {
     const type = params.get('type');
     const category = params.get('category');
     const doc = parseLegalTab(params.get('doc'));
-    if (type === 'qq' || type === 'netease' || type === 'apple') setSearchSource(type);
+    if (type === 'qq' || type === 'netease' || type === 'qishui' || (type === 'apple' && canUseAppleMusic())) {
+      setHomeTab(type);
+      setSearchSource(type);
+    }
     if (
       category === 'all'
       || category === 'song'
@@ -1468,7 +1515,12 @@ const App: React.FC = () => {
       const text = url || name || '';
       setQuery(text);
       setSearchOpen(true);
-      void runSearch(text, 1, false, type === 'qq' || type === 'netease' || type === 'apple' ? type : undefined);
+      void runSearch(
+        text,
+        1,
+        false,
+        type === 'qq' || type === 'netease' || type === 'qishui' || type === 'apple' ? type : undefined,
+      );
     }
     if (doc) {
       setLegalTab(doc);
@@ -1562,30 +1614,37 @@ const App: React.FC = () => {
           cardStyle={cardStyle}
           neteasePlaylists={neteasePlaylists}
           qqPlaylists={qqPlaylists}
+          qishuiPlaylists={qishuiPlaylists}
           neteaseRecommendItems={neteaseRecommendItems}
           qqRecommendItems={qqRecommendItems}
+          qishuiRecommendItems={qishuiRecommendItems}
           neteaseOpen={neteaseOpen}
           qqOpen={qqOpen}
+          qishuiOpen={qishuiOpen}
           neteaseTracks={neteaseTracks}
           qqTracks={qqTracks}
-          cloudLoading={homeTab === 'apple' ? appleLoading : homeTab === 'netease' ? neteaseLoading : homeTab === 'qq' ? qqLoading : false}
-          cloudSyncing={homeTab === 'apple' ? appleSyncing : homeTab === 'netease' ? neteaseSyncing : homeTab === 'qq' ? qqSyncing : false}
-          recommendSyncing={homeTab === 'apple' ? appleRecommendSyncing : homeTab === 'netease' ? neteaseRecommendSyncing : homeTab === 'qq' ? qqRecommendSyncing : false}
-          cloudError={homeTab === 'apple' ? appleError : homeTab === 'netease' ? neteaseError : homeTab === 'qq' ? qqError : ''}
-          recommendError={homeTab === 'apple' ? appleRecommendError : homeTab === 'netease' ? neteaseRecommendError : homeTab === 'qq' ? qqRecommendError : ''}
+          qishuiTracks={qishuiTracks}
+          cloudLoading={homeTab === 'apple' ? appleLoading : homeTab === 'netease' ? neteaseLoading : homeTab === 'qq' ? qqLoading : homeTab === 'qishui' ? qishuiLoading : false}
+          cloudSyncing={homeTab === 'apple' ? appleSyncing : homeTab === 'netease' ? neteaseSyncing : homeTab === 'qq' ? qqSyncing : homeTab === 'qishui' ? qishuiSyncing : false}
+          recommendSyncing={homeTab === 'apple' ? appleRecommendSyncing : homeTab === 'netease' ? neteaseRecommendSyncing : homeTab === 'qq' ? qqRecommendSyncing : homeTab === 'qishui' ? qishuiRecommendSyncing : false}
+          cloudError={homeTab === 'apple' ? appleError : homeTab === 'netease' ? neteaseError : homeTab === 'qq' ? qqError : homeTab === 'qishui' ? qishuiError : ''}
+          recommendError={homeTab === 'apple' ? appleRecommendError : homeTab === 'netease' ? neteaseRecommendError : homeTab === 'qq' ? qqRecommendError : homeTab === 'qishui' ? qishuiRecommendError : ''}
           apple={appleAccount}
+          qishui={qishui}
           hasCurrentTrack={Boolean(track)}
           searchQuery={query}
           updateAvailable={Boolean(updateInfo?.hasUpdate)}
           onSearchQueryChange={setQuery}
           onOpenSearch={(submit) => {
+            setSearchSource(homeTab);
             setSearchOpen(true);
-            if (submit && query.trim()) void runSearch(query);
+            if (submit && query.trim()) void runSearch(query, 1, false, homeTab);
           }}
           onHomeTabChange={setHomeTab}
           onNeteaseLibrarySectionChange={(section) => {
             if (neteaseOpen) closeNeteasePlaylist();
             if (qqOpen) closeQqPlaylist();
+            if (qishuiOpen) closeQishuiPlaylist();
             if (appleOpen) closeApplePlaylist();
             setNeteaseLibrarySection(section);
           }}
@@ -1595,6 +1654,8 @@ const App: React.FC = () => {
               touchPlaylistRecent('netease', neteaseOpen.id);
             } else if (homeTab === 'qq' && qqOpen) {
               touchPlaylistRecent('qq', qqOpen.id);
+            } else if (homeTab === 'qishui' && qishuiOpen) {
+              touchPlaylistRecent('qishui', qishuiOpen.id);
             }
             returnToSearchRef.current = false;
             playbackIntentRef.current = 'playing';
@@ -1620,6 +1681,8 @@ const App: React.FC = () => {
                 return;
               }
               void openQqPlaylist(item);
+            } else if (homeTab === 'qishui') {
+              void openQishuiPlaylist(item);
             } else {
               void openNeteasePlaylist(item);
             }
@@ -1643,6 +1706,8 @@ const App: React.FC = () => {
               } else if (item.recommendKind === 'playlist') {
                 void openQqPlaylist(item);
               }
+            } else if (homeTab === 'qishui') {
+              void openQishuiRecommend(item);
             }
           }}
           onPlayPersonalFm={() => {
@@ -1651,7 +1716,11 @@ const App: React.FC = () => {
               if (items[0]) void openApplePlaylist({ ...items[0], kind: items[0].kind || 'catalog' });
               return;
             }
-            const fm = homeTab === 'qq' ? playQqPersonalFm : playNeteasePersonalFm;
+            const fm = homeTab === 'qq'
+              ? playQqPersonalFm
+              : homeTab === 'qishui'
+                ? playQishuiRecent
+                : playNeteasePersonalFm;
             void fm()
               .then((entries) => {
                 if (!entries.length) return;
@@ -1668,6 +1737,7 @@ const App: React.FC = () => {
           onBackPlaylist={() => {
             if (homeTab === 'apple') closeApplePlaylist();
             else if (homeTab === 'qq') closeQqPlaylist();
+            else if (homeTab === 'qishui') closeQishuiPlaylist();
             else closeNeteasePlaylist();
           }}
           onToggleTheme={() => {
@@ -1750,7 +1820,7 @@ const App: React.FC = () => {
         artists={searchArtists}
         hasMore={hasMore}
         onQueryChange={setQuery}
-        onSourceChange={(next: MusicSource) => {
+        onSourceChange={(next) => {
           setSearchSource(next);
           if (query.trim()) void runSearch(query, 1, false, next);
         }}
@@ -1785,10 +1855,9 @@ const App: React.FC = () => {
         onLoadMore={() => {
           if (hasMore && !loadingMore) void runSearch(lastQueryRef.current, searchPage + 1, true);
         }}
-        onHistorySelect={(text, nextSource) => {
+        onHistorySelect={(text) => {
           setQuery(text);
-          setSearchSource(nextSource);
-          void runSearch(text, 1, false, nextSource);
+          void runSearch(text);
         }}
         onOpenPlaylist={(playlist) => {
           const cloudPlaylist: CloudPlaylist = {
@@ -1847,41 +1916,48 @@ const App: React.FC = () => {
         qq={qq}
         kugou={kugou}
         apple={appleAccount}
+        qishui={qishui}
         initialProvider={accountIntent}
         onClose={() => setAccountOpen(false)}
         onChanged={refreshAccounts}
         onLoggedIn={(provider) => {
-          if (provider === 'netease' || provider === 'qq' || provider === 'apple') {
+          if (provider === 'netease' || provider === 'qq' || provider === 'apple' || provider === 'qishui') {
             setHomeTab(provider);
             if (provider === 'netease') {
               void syncNetease();
               if (neteaseLibrarySection === 'recommend') void syncNeteaseRecommend();
             } else if (provider === 'qq') {
               void syncQq();
-            } else {
+            } else if (provider === 'qishui') {
+              void syncQishui();
+              if (neteaseLibrarySection === 'recommend') void syncQishuiRecommend();
+            } else if (provider === 'apple') {
               void syncAppleLibrary();
               if (neteaseLibrarySection === 'recommend') void syncAppleRecommend();
             }
           }
         }}
         onSync={async (provider) => {
-          if (provider !== 'netease' && provider !== 'qq' && provider !== 'apple') return;
+          if (provider !== 'netease' && provider !== 'qq' && provider !== 'apple' && provider !== 'qishui') return;
           setHomeTab(provider);
           if (provider === 'netease') {
             await syncNetease();
             if (neteaseLibrarySection === 'recommend') await syncNeteaseRecommend();
           } else if (provider === 'qq') {
             await syncQq();
+          } else if (provider === 'qishui') {
+            await syncQishui();
+            if (neteaseLibrarySection === 'recommend') await syncQishuiRecommend();
           } else {
             await syncAppleLibrary();
             if (neteaseLibrarySection === 'recommend') await syncAppleRecommend();
           }
         }}
-        syncing={neteaseSyncing || qqSyncing || neteaseRecommendSyncing || appleSyncing || appleRecommendSyncing}
+        syncing={neteaseSyncing || qqSyncing || qishuiSyncing || neteaseRecommendSyncing || appleSyncing || appleRecommendSyncing || qishuiRecommendSyncing}
         syncMessage={
-          neteaseSyncing || qqSyncing || neteaseRecommendSyncing
+          neteaseSyncing || qqSyncing || qishuiSyncing || neteaseRecommendSyncing || qishuiRecommendSyncing
             ? '正在同步…'
-            : [neteaseError, qqError, neteaseRecommendError].filter(Boolean).join(' ')
+            : [neteaseError, qqError, qishuiError, neteaseRecommendError, qishuiRecommendError].filter(Boolean).join(' ')
         }
       />
 

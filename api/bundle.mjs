@@ -343,12 +343,12 @@ async function request(method, url, options = {}) {
       redirect: options.redirect || "manual",
       signal: AbortSignal.timeout(options.timeoutMs || thirdPartyTimeout(url))
     });
-    const text = await res.text();
+    const text2 = await res.text();
     let json = null;
     try {
-      json = JSON.parse(text);
+      json = JSON.parse(text2);
     } catch {
-      const m = text.trim().match(/^\w+\((.*)\);?\s*$/s);
+      const m = text2.trim().match(/^\w+\((.*)\);?\s*$/s);
       if (m) {
         try {
           json = JSON.parse(m[1]);
@@ -360,7 +360,7 @@ async function request(method, url, options = {}) {
     return {
       ok: res.status >= 200 && res.status < 400,
       status: res.status,
-      body: text,
+      body: text2,
       json,
       cookies: parseSetCookies(res.headers),
       headers: res.headers,
@@ -405,8 +405,8 @@ async function followLocation(url, referer, timeoutMs = REDIRECT_TIMEOUT_MS) {
       void res.body?.cancel();
       return new URL(loc, url).toString();
     }
-    const text = await res.text();
-    const code = text.match(/[?&]code=([^&\s'"]+)/);
+    const text2 = await res.text();
+    const code = text2.match(/[?&]code=([^&\s'"]+)/);
     if (code) return `${url}${url.includes("?") ? "&" : "?"}code=${code[1]}`;
     return null;
   } catch {
@@ -457,22 +457,22 @@ var init_http = __esm({
 function decodeEntities(str) {
   return str.replace(/&#13;/g, "").replace(/&#10;/g, "\n").replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))).replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&nbsp;/g, " ").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
-function timedLyricScore(text) {
-  const raw2 = text || "";
+function timedLyricScore(text2) {
+  const raw2 = text2 || "";
   if (!raw2.trim()) return 0;
   const word = (raw2.match(/\[\d+,\d+\]/g) || []).length;
   const lrc = (raw2.match(/\[\d{2}:\d{2}/g) || []).length;
   return word * 10 + lrc;
 }
-function isPureMusicLyricText(text) {
-  const raw2 = String(text || "").replace(/\[[^\]]+\]/g, "").replace(/\(\d+,\d+(?:,\d+)?\)/g, "").replace(/<\d+,\d+[^>]*>/g, "").replace(/\s+/g, " ").trim();
+function isPureMusicLyricText(text2) {
+  const raw2 = String(text2 || "").replace(/\[[^\]]+\]/g, "").replace(/\(\d+,\d+(?:,\d+)?\)/g, "").replace(/<\d+,\d+[^>]*>/g, "").replace(/\s+/g, " ").trim();
   if (!raw2) return false;
   return raw2.includes(PURE_MUSIC_NOTICE) || raw2.includes("\u7EAF\u97F3\u4E50,\u8BF7\u6B23\u8D4F");
 }
-function isPlaceholderLyricText(text) {
-  const raw2 = String(text || "").replace(/\[[^\]]+\]/g, "").replace(/\(\d+,\d+(?:,\d+)?\)/g, "").replace(/<\d+,\d+[^>]*>/g, "").replace(/\s+/g, " ").trim();
+function isPlaceholderLyricText(text2) {
+  const raw2 = String(text2 || "").replace(/\[[^\]]+\]/g, "").replace(/\(\d+,\d+(?:,\d+)?\)/g, "").replace(/<\d+,\d+[^>]*>/g, "").replace(/\s+/g, " ").trim();
   if (!raw2) return true;
-  if (isPureMusicLyricText(text)) return true;
+  if (isPureMusicLyricText(text2)) return true;
   return PLACEHOLDER_LYRIC_RE.test(raw2);
 }
 function hasNeteasePureMusicFlag(source) {
@@ -481,9 +481,9 @@ function hasNeteasePureMusicFlag(source) {
     source.pureMusic || source.lrc?.pureMusic || source.yrc?.pureMusic || source.ytlrc?.pureMusic || source.tlyric?.pureMusic
   );
 }
-function effectiveTimedLyricScore(text) {
-  if (isPlaceholderLyricText(text)) return 0;
-  return timedLyricScore(text);
+function effectiveTimedLyricScore(text2) {
+  if (isPlaceholderLyricText(text2)) return 0;
+  return timedLyricScore(text2);
 }
 function pickRicherLyric(primary, fallback) {
   return timedLyricScore(primary) >= timedLyricScore(fallback) ? primary || fallback : fallback;
@@ -494,19 +494,19 @@ function convertNeteaseJsonLyricLine(line) {
   try {
     const obj = JSON.parse(trimmed);
     if (typeof obj.t !== "number" || !Array.isArray(obj.c)) return null;
-    const text = obj.c.map((part) => part?.tx || "").join("");
+    const text2 = obj.c.map((part) => part?.tx || "").join("");
     const ms = Math.max(0, obj.t);
     const m = Math.floor(ms / 6e4);
     const s = Math.floor(ms % 6e4 / 1e3);
     const cs = ms % 1e3;
-    return `[${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(cs).padStart(3, "0")}]${text}`;
+    return `[${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(cs).padStart(3, "0")}]${text2}`;
   } catch {
     return null;
   }
 }
-function normalizeNeteaseLyric(text) {
-  if (!text) return "";
-  return text.split(/\r?\n/).map((line) => convertNeteaseJsonLyricLine(line) ?? line).join("\n");
+function normalizeNeteaseLyric(text2) {
+  if (!text2) return "";
+  return text2.split(/\r?\n/).map((line) => convertNeteaseJsonLyricLine(line) ?? line).join("\n");
 }
 function neteaseLyricText(payload, field) {
   if (!payload || typeof payload !== "object") return "";
@@ -563,20 +563,20 @@ function firstTruthy(tasks) {
   });
 }
 function jsonpToJson(raw2) {
-  const text = raw2.trim();
-  if (!text) return null;
-  if (text[0] === "[" || text[0] === "{") {
+  const text2 = raw2.trim();
+  if (!text2) return null;
+  if (text2[0] === "[" || text2[0] === "{") {
     try {
-      return JSON.parse(text);
+      return JSON.parse(text2);
     } catch {
       return null;
     }
   }
-  const start = text.indexOf("(");
-  const end = text.lastIndexOf(")");
+  const start = text2.indexOf("(");
+  const end = text2.lastIndexOf(")");
   if (start >= 0 && end > start) {
     try {
-      return JSON.parse(text.slice(start + 1, end));
+      return JSON.parse(text2.slice(start + 1, end));
     } catch {
       return null;
     }
@@ -657,6 +657,9 @@ function mediaReferer(url) {
       return "https://www.kuwo.cn/";
     }
     if (host.endsWith("myhkw.cn")) return "https://s.myhkw.cn/";
+    if (host.includes("qishui") || host.includes("byteimg") || host.includes("douyin") || host.includes("volcengine") || host.includes("toutiao")) {
+      return "https://www.qishui.com/";
+    }
   } catch {
   }
   return "https://y.qq.com/";
@@ -688,8 +691,8 @@ function md5(value) {
 function hasKrcHeader(bytes) {
   return bytes.length >= 4 && bytes[0] === 107 && bytes[1] === 114 && bytes[2] === 99 && bytes[3] === 49;
 }
-function looksLikeTimedLyric(text) {
-  return /\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/.test(text) || /<\d{1,2}:\d{2}(?:[.:]\d{1,3})?>/.test(text) || text.trimStart().startsWith("WEBVTT") || /\[\d+,\d+\]/.test(text);
+function looksLikeTimedLyric(text2) {
+  return /\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/.test(text2) || /<\d{1,2}:\d{2}(?:[.:]\d{1,3})?>/.test(text2) || text2.trimStart().startsWith("WEBVTT") || /\[\d+,\d+\]/.test(text2);
 }
 function krcDecrypt(encrypted) {
   if (encrypted.length <= 4) throw new Error("Invalid KRC data");
@@ -714,8 +717,8 @@ function krcDecrypt(encrypted) {
 function decodeDownloadedLyric(bytes, contentType) {
   const isPlainText = String(contentType) === "2";
   if (isPlainText || !hasKrcHeader(bytes)) {
-    const text = bytes.toString("utf8").replace(/^\uFEFF/, "");
-    if (looksLikeTimedLyric(text)) return text;
+    const text2 = bytes.toString("utf8").replace(/^\uFEFF/, "");
+    if (looksLikeTimedLyric(text2)) return text2;
     throw new Error("Unexpected plain lyric payload");
   }
   try {
@@ -919,9 +922,9 @@ function aesEcb(key, data) {
   const input = typeof data === "string" ? Buffer.from(data) : data;
   return Buffer.concat([cipher.update(input), cipher.final()]);
 }
-function aesCbc(text, key) {
+function aesCbc(text2, key) {
   const cipher = createCipheriv("aes-128-cbc", Buffer.from(key), WEAPI_IV);
-  return Buffer.concat([cipher.update(text, "utf8"), cipher.final()]);
+  return Buffer.concat([cipher.update(text2, "utf8"), cipher.final()]);
 }
 function encodeLinuxData(data) {
   const json = JSON.stringify(data);
@@ -938,14 +941,14 @@ function rsaEncrypt(secretKey) {
 function weapiEncode(object) {
   let secretKey = "";
   for (let i = 0; i < 16; i++) secretKey += BASE62[randomInt(0, 62)];
-  const text = JSON.stringify(object);
-  const params = aesCbc(aesCbc(text, WEAPI_PRESET).toString("base64"), secretKey).toString("base64");
+  const text2 = JSON.stringify(object);
+  const params = aesCbc(aesCbc(text2, WEAPI_PRESET).toString("base64"), secretKey).toString("base64");
   return { params, encSecKey: rsaEncrypt(secretKey) };
 }
 function eapiEncode(apiPath, object) {
-  const text = JSON.stringify(object);
-  const digest = createHash4("md5").update(`nobody${apiPath}use${text}md5forencrypt`).digest("hex");
-  const payload = `${apiPath}-36cd479b6b5-${text}-36cd479b6b5-${digest}`;
+  const text2 = JSON.stringify(object);
+  const digest = createHash4("md5").update(`nobody${apiPath}use${text2}md5forencrypt`).digest("hex");
+  const payload = `${apiPath}-36cd479b6b5-${text2}-36cd479b6b5-${digest}`;
   return { params: aesEcb(EAPI_KEY, payload).toString("hex").toUpperCase() };
 }
 function cookieCsrf(cookie) {
@@ -1214,21 +1217,21 @@ __export(comments_exports, {
   mapQqComment: () => mapQqComment
 });
 import { createHash as createHash6 } from "node:crypto";
-function ok4(data) {
+function ok5(data) {
   return { code: 200, error: "", data };
 }
-function fail4(code, error) {
+function fail5(code, error) {
   return { code, error, data: "" };
 }
 function isPlaceholderCommentContent(content) {
-  const text = String(content || "").trim();
-  if (!text) return true;
-  if (DELETED_COMMENT_RE.test(text)) return true;
-  if (MOBILE_ONLY_COMMENT_RE.test(text)) {
-    const withoutTags = text.replace(/\[[^\]]+\]/g, "").replace(/\s+/g, "").trim();
+  const text2 = String(content || "").trim();
+  if (!text2) return true;
+  if (DELETED_COMMENT_RE.test(text2)) return true;
+  if (MOBILE_ONLY_COMMENT_RE.test(text2)) {
+    const withoutTags = text2.replace(/\[[^\]]+\]/g, "").replace(/\s+/g, "").trim();
     if (!withoutTags || withoutTags.length <= 24) return true;
   }
-  if (/^\[(?:发布了(?:语音|图片|视频|动态)[^\]]+|(?:语音|图片|视频))\]$/u.test(text)) {
+  if (/^\[(?:发布了(?:语音|图片|视频|动态)[^\]]+|(?:语音|图片|视频))\]$/u.test(text2)) {
     return true;
   }
   return false;
@@ -1388,7 +1391,7 @@ async function resolveQqSong(qq, cache, post) {
   if (!songmid) {
     const title = String(post.title || "").trim();
     const artist = String(post.artist || "").trim();
-    if (!title) return { error: fail4(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D QQ \u97F3\u4E50\u8BC4\u8BBA") };
+    if (!title) return { error: fail5(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D QQ \u97F3\u4E50\u8BC4\u8BBA") };
     const matchKey = hashKey(`qq:${title}|${artist}`);
     const cachedMatch = cache.read(
       "qq_comment_match_v1",
@@ -1401,7 +1404,7 @@ async function resolveQqSong(qq, cache, post) {
       const query = [title, artist].filter(Boolean).join(" ");
       const found = await qq.searchByName(query, 1).catch(() => null);
       const best = pickBestCrossPlayTrack({ title, artist }, found?.tracks || []);
-      if (!best?.songid) return { error: fail4(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684 QQ \u97F3\u4E50\u8BC4\u8BBA") };
+      if (!best?.songid) return { error: fail5(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684 QQ \u97F3\u4E50\u8BC4\u8BBA") };
       songmid = String(best.songid);
       matched = { type: "qq", songid: songmid, title: best.title, author: best.author };
       cache.write("qq_comment_match_v1", matchKey, {
@@ -1413,7 +1416,7 @@ async function resolveQqSong(qq, cache, post) {
     }
   }
   const numeric = await qq.songNumericId(songmid).catch(() => 0);
-  if (!numeric) return { error: fail4(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684 QQ \u97F3\u4E50\u8BC4\u8BBA") };
+  if (!numeric) return { error: fail5(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684 QQ \u97F3\u4E50\u8BC4\u8BBA") };
   return { songmid, songid: String(numeric), matched };
 }
 async function fetchQqCommentPage(songid, offset, limit) {
@@ -1443,7 +1446,7 @@ async function fetchQqCommentPage(songid, offset, limit) {
 async function resolveKugouSong(cache, post) {
   const title = String(post.title || "").trim();
   const artist = String(post.artist || "").trim();
-  if (!title) return { error: fail4(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D\u9177\u72D7\u8BC4\u8BBA") };
+  if (!title) return { error: fail5(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D\u9177\u72D7\u8BC4\u8BBA") };
   const matchKey = hashKey(`kugou:${title}|${artist}`);
   const cachedMatch = cache.read(
     "kugou_comment_match_v1",
@@ -1463,7 +1466,7 @@ async function resolveKugouSong(cache, post) {
     toMatchTracks(found.map((item) => ({ songid: item.kgHash, title: item.name, author: item.artists })))
   );
   const hit = found.find((item) => item.kgHash === best?.songid) || found[0];
-  if (!hit?.kgHash || !best) return { error: fail4(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684\u9177\u72D7\u8BC4\u8BBA") };
+  if (!hit?.kgHash || !best) return { error: fail5(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684\u9177\u72D7\u8BC4\u8BBA") };
   cache.write("kugou_comment_match_v1", matchKey, {
     expires: Math.floor(Date.now() / 1e3) + 6 * 3600,
     hash: hit.kgHash,
@@ -1499,12 +1502,12 @@ async function resolveNeteaseSong(netease, cache, post) {
   const type = (post.type || "netease").trim();
   const id = String(post.id || "").trim();
   if (type === "netease" || !type && /^\d+$/.test(id)) {
-    if (!/^\d+$/.test(id)) return { error: fail4(400, "\u6B4C\u66F2 ID \u65E0\u6548") };
+    if (!/^\d+$/.test(id)) return { error: fail5(400, "\u6B4C\u66F2 ID \u65E0\u6548") };
     return { songid: id, matched: null };
   }
   const title = String(post.title || "").trim();
   const artist = String(post.artist || "").trim();
-  if (!title) return { error: fail4(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D\u7F51\u6613\u4E91\u8BC4\u8BBA") };
+  if (!title) return { error: fail5(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D\u7F51\u6613\u4E91\u8BC4\u8BBA") };
   const matchKey = hashKey(`${type}:${title}|${artist}`);
   const cachedMatch = cache.read(
     "netease_comment_match_v1",
@@ -1520,7 +1523,7 @@ async function resolveNeteaseSong(netease, cache, post) {
   const found = await netease.searchByName(query, 1).catch(() => null);
   const best = pickBestCrossPlayTrack({ title, artist }, found?.tracks || []);
   if (!best?.songid || !/^\d+$/.test(String(best.songid))) {
-    return { error: fail4(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684\u7F51\u6613\u4E91\u6B4C\u66F2\u8BC4\u8BBA") };
+    return { error: fail5(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684\u7F51\u6613\u4E91\u6B4C\u66F2\u8BC4\u8BBA") };
   }
   cache.write("netease_comment_match_v1", matchKey, {
     expires: Math.floor(Date.now() / 1e3) + 6 * 3600,
@@ -1540,10 +1543,10 @@ async function loadNeteaseComments(netease, cache, post, offset, limit, cookie) 
   const cacheKey = pageCacheKey(`netease:${songid}`, offset, limit);
   const cached = cache.read("song_comments_v1", cacheKey);
   if (cached?.payload && cached.expires > Date.now() / 1e3) {
-    return ok4({ ...cached.payload, matched: cached.payload.matched || matched });
+    return ok5({ ...cached.payload, matched: cached.payload.matched || matched });
   }
   const page = await fetchNeteaseCommentPage(songid, offset, limit, cookie);
-  if (!page) return fail4(502, "\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+  if (!page) return fail5(502, "\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
   const payload = {
     total: Number(page.json.total || 0) || 0,
     more: Boolean(page.json.more),
@@ -1561,7 +1564,7 @@ async function loadNeteaseComments(netease, cache, post, offset, limit, cookie) 
     expires: Math.floor(Date.now() / 1e3) + 90,
     payload
   });
-  return ok4(payload);
+  return ok5(payload);
 }
 async function loadQqComments(qq, cache, post, offset, limit) {
   const resolved = await resolveQqSong(qq, cache, post);
@@ -1569,10 +1572,10 @@ async function loadQqComments(qq, cache, post, offset, limit) {
   const cacheKey = pageCacheKey(`qq:${resolved.songid}`, offset, limit);
   const cached = cache.read("song_comments_v1", cacheKey);
   if (cached?.payload && cached.expires > Date.now() / 1e3) {
-    return ok4({ ...cached.payload, matched: cached.payload.matched || resolved.matched });
+    return ok5({ ...cached.payload, matched: cached.payload.matched || resolved.matched });
   }
   const page = await fetchQqCommentPage(resolved.songid, offset, limit);
-  if (!page) return fail4(502, "QQ \u97F3\u4E50\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+  if (!page) return fail5(502, "QQ \u97F3\u4E50\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
   const comments = mapQqList(page.json.comment?.commentlist || page.json.comment?.commentList);
   const hotComments = offset === 0 ? mapQqList(page.json.hot_comment?.commentlist || page.json.hot_comment?.commentList) : [];
   const total = Number(page.json.comment?.commenttotal || page.json.comment?.commentTotal || comments.length) || 0;
@@ -1593,7 +1596,7 @@ async function loadQqComments(qq, cache, post, offset, limit) {
     expires: Math.floor(Date.now() / 1e3) + 90,
     payload
   });
-  return ok4(payload);
+  return ok5(payload);
 }
 async function loadKugouComments(cache, post, offset, limit) {
   const resolved = await resolveKugouSong(cache, post);
@@ -1601,10 +1604,10 @@ async function loadKugouComments(cache, post, offset, limit) {
   const cacheKey = pageCacheKey(`kugou:${resolved.hash}`, offset, limit);
   const cached = cache.read("song_comments_v1", cacheKey);
   if (cached?.payload && cached.expires > Date.now() / 1e3) {
-    return ok4({ ...cached.payload, matched: cached.payload.matched || resolved.matched });
+    return ok5({ ...cached.payload, matched: cached.payload.matched || resolved.matched });
   }
   const page = await fetchKugouCommentPage(resolved.hash, resolved.mixsongid, offset, limit);
-  if (!page) return fail4(502, "\u9177\u72D7\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+  if (!page) return fail5(502, "\u9177\u72D7\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
   const json = page.json;
   const comments = mapKugouList(json.list || json.data?.list || json.comments || json.data?.comments);
   const hotComments = offset === 0 ? mapKugouList(json.weightList || json.data?.weightList || json.hotList || json.data?.hotList) : [];
@@ -1626,14 +1629,14 @@ async function loadKugouComments(cache, post, offset, limit) {
     expires: Math.floor(Date.now() / 1e3) + 90,
     payload
   });
-  return ok4(payload);
+  return ok5(payload);
 }
 async function loadSongComments(netease, qq, cache, post, cookies = {}) {
   const id = String(post.id || post.songid || "").trim();
   const title = String(post.title || "").trim();
   const artist = String(post.artist || post.author || "").trim();
   const type = String(post.type || "").trim();
-  if (!id && !title) return fail4(400, "\u7F3A\u5C11\u6B4C\u66F2\u4FE1\u606F");
+  if (!id && !title) return fail5(400, "\u7F3A\u5C11\u6B4C\u66F2\u4FE1\u606F");
   let offset = Math.max(0, Number(post.offset || 0) || 0);
   let limit = Number(post.limit || 20) || 20;
   if (limit < 1) limit = 20;
@@ -1664,10 +1667,10 @@ async function loadSongComments(netease, qq, cache, post, cookies = {}) {
       } else if (result.code !== 200) {
         lastError2 = result;
       } else {
-        lastError2 = fail4(404, "\u6682\u65E0\u8BC4\u8BBA");
+        lastError2 = fail5(404, "\u6682\u65E0\u8BC4\u8BBA");
       }
     }
-    return best || lastError2 || fail4(404, "\u6682\u65E0\u8BC4\u8BBA");
+    return best || lastError2 || fail5(404, "\u6682\u65E0\u8BC4\u8BBA");
   }
   const order = commentSourceOrder(preferred);
   let lastError = null;
@@ -1675,9 +1678,9 @@ async function loadSongComments(netease, qq, cache, post, cookies = {}) {
     const result = await loadOne(source);
     if (result.code === 400 && source === order[0] && !title) return result;
     if (result.code === 200 && result.data && hasUsableComments(result.data)) return result;
-    lastError = result.code === 200 ? fail4(404, "\u6682\u65E0\u8BC4\u8BBA") : result;
+    lastError = result.code === 200 ? fail5(404, "\u6682\u65E0\u8BC4\u8BBA") : result;
   }
-  return lastError || fail4(404, "\u6682\u65E0\u8BC4\u8BBA");
+  return lastError || fail5(404, "\u6682\u65E0\u8BC4\u8BBA");
 }
 var MOBILE_ONLY_COMMENT_RE, DELETED_COMMENT_RE, COMMENT_SOURCE_FALLBACK;
 var init_comments = __esm({
@@ -1696,7 +1699,7 @@ var init_comments = __esm({
 
 // server/src/app.ts
 import { createReadStream, existsSync as existsSync4, statSync as statSync2 } from "node:fs";
-import { join as join7, normalize, extname } from "node:path";
+import { join as join8, normalize, extname } from "node:path";
 import { Readable } from "node:stream";
 
 // server/node_modules/hono/dist/compose.js
@@ -2155,7 +2158,7 @@ var HonoRequest = class {
    * ```
    */
   json() {
-    return this.#cachedBody("text").then((text) => JSON.parse(text));
+    return this.#cachedBody("text").then((text2) => JSON.parse(text2));
   }
   /**
    * `.text()` can parse Request body of type `text/plain`
@@ -2717,9 +2720,9 @@ var Context = class {
    * })
    * ```
    */
-  text = (text, arg, headers) => {
-    return !this.#preparedHeaders && !this.#status && !arg && !headers && !this.finalized ? new Response(text) : this.#newResponse(
-      text,
+  text = (text2, arg, headers) => {
+    return !this.#preparedHeaders && !this.#status && !arg && !headers && !this.finalized ? new Response(text2) : this.#newResponse(
+      text2,
       arg,
       setDefaultContentType(TEXT_PLAIN, headers)
     );
@@ -3857,10 +3860,10 @@ function mergeCookies(existing, incoming) {
 function normalizeCookie(raw2) {
   return raw2.replace(/\r?\n/g, ";").replace(/;;+/g, ";").trim();
 }
-function hash33(text) {
+function hash33(text2) {
   let e = 0;
-  for (let n = 0; n < text.length; n++) {
-    e += (e << 5) + text.charCodeAt(n);
+  for (let n = 0; n < text2.length; n++) {
+    e += (e << 5) + text2.charCodeAt(n);
   }
   return e & 2147483647;
 }
@@ -3926,8 +3929,8 @@ function extractCredentials(cookie) {
 function isVipValue(value) {
   const n = Number(value);
   if (Number.isFinite(n) && n > 0) return true;
-  const text = String(value || "").toLowerCase();
-  return text === "1" || text === "true" || text === "vip";
+  const text2 = String(value || "").toLowerCase();
+  return text2 === "1" || text2 === "true" || text2 === "vip";
 }
 var KugouAccount = class {
   authFile;
@@ -4587,15 +4590,96 @@ function fail2(code, error, data = "") {
   return { code, error, data };
 }
 
+// server/src/accounts/qishui.ts
+init_http();
+import { join as join4 } from "node:path";
+function ok3(data) {
+  return { code: 200, error: "", data };
+}
+function fail3(code, error, data = "") {
+  return { code, error, data };
+}
+function hasLoginCookie(cookie) {
+  return /(?:^|;\s*)(?:sessionid|sessionid_ss|sid_guard|sid_tt)=[^;\s]+/i.test(cookie);
+}
+var QishuiAccount = class {
+  constructor(cache) {
+    this.cache = cache;
+    this.authFile = join4(cache.dir("qishui_auth"), "session.json");
+  }
+  authFile;
+  sessionCookie() {
+    const auth = this.read();
+    return auth?.cookie && hasLoginCookie(auth.cookie) ? auth.cookie : null;
+  }
+  async handle(action, post) {
+    switch (action) {
+      case "qishui_status":
+        return ok3(this.status());
+      case "qishui_logout":
+        removeFile(this.authFile);
+        return ok3({ ok: true });
+      case "qishui_cookie_save":
+        return this.cookieSave(post.cookie || "");
+      default:
+        return fail3(400, "\u672A\u77E5\u64CD\u4F5C");
+    }
+  }
+  read() {
+    return readJson(this.authFile);
+  }
+  status() {
+    const auth = this.read();
+    if (!auth?.cookie || !hasLoginCookie(auth.cookie)) return { loggedIn: false };
+    return {
+      loggedIn: true,
+      nickname: auth.nickname || "\u6C7D\u6C34\u97F3\u4E50",
+      avatar: auth.avatar || "",
+      vip: auth.vip || 0
+    };
+  }
+  async cookieSave(raw2) {
+    const cookie = normalizeCookie(raw2);
+    if (!hasLoginCookie(cookie)) {
+      return fail3(400, "Cookie \u91CC\u6CA1\u6709\u6C7D\u6C34\u767B\u5F55\u6001\uFF0C\u8BF7\u4ECE\u6C7D\u6C34\u7535\u8111\u7248\u590D\u5236\u5B8C\u6574 Cookie");
+    }
+    let nickname = "\u6C7D\u6C34\u97F3\u4E50";
+    let avatar = "";
+    try {
+      const res = await request("GET", "https://api.qishui.com/luna/pc/user/me", {
+        headers: {
+          Accept: "application/json",
+          Cookie: cookie,
+          "User-Agent": "LunaPC/3.3.0(359450208)",
+          Referer: "https://www.qishui.com/"
+        },
+        timeoutMs: 6e3
+      });
+      const user = res.json?.data?.user || res.json?.data || {};
+      nickname = String(user.nickname || user.name || nickname);
+      avatar = String(user.avatar_url || user.avatar || user.avatar_thumb || "");
+    } catch {
+    }
+    writeJson(this.authFile, {
+      cookie,
+      nickname,
+      avatar,
+      vip: 0,
+      updatedAt: Date.now()
+    });
+    return ok3(this.status());
+  }
+};
+
 // server/src/accounts/qq.ts
 init_http();
 import { createHash as createHash5 } from "node:crypto";
-import { join as join4 } from "node:path";
+import { join as join5 } from "node:path";
 var QqAccount = class {
   constructor(cache, qq) {
     this.qq = qq;
-    this.authFile = join4(cache.dir("qq_auth"), "session.json");
-    this.qrFile = join4(cache.dir("qq_auth"), "qr_session.json");
+    this.authFile = join5(cache.dir("qq_auth"), "session.json");
+    this.qrFile = join5(cache.dir("qq_auth"), "qr_session.json");
   }
   authFile;
   qrFile;
@@ -4623,11 +4707,11 @@ var QqAccount = class {
   async handle(action, post) {
     switch (action) {
       case "qq_status":
-        return ok3(await this.statusFresh());
+        return ok4(await this.statusFresh());
       case "qq_logout":
         removeFile(this.authFile);
         removeFile(this.qrFile);
-        return ok3({ ok: true });
+        return ok4({ ok: true });
       case "qq_cookie_save":
         return this.cookieSave(post.cookie || "");
       case "qq_qr_key":
@@ -4655,7 +4739,7 @@ var QqAccount = class {
       case "qq_playlist_add":
         return this.playlistAdd(post);
       default:
-        return fail3(400, "\u672A\u77E5\u64CD\u4F5C");
+        return fail4(400, "\u672A\u77E5\u64CD\u4F5C");
     }
   }
   extractUin(cookie) {
@@ -4861,15 +4945,15 @@ var QqAccount = class {
   }
   async cookieSave(raw2) {
     let cookie = normalizeCookie(raw2);
-    if (!cookie) return fail3(400, "\u8BF7\u7C98\u8D34 Cookie");
+    if (!cookie) return fail4(400, "\u8BF7\u7C98\u8D34 Cookie");
     const map = cookieToMap(cookie);
     if (Number(map.login_type) === 2 && map.wxuin) {
       cookie = mergeCookies(cookie, `uin=${map.wxuin}`);
     }
     const account = await this.profileValidate(cookie);
-    if (!account) return fail3(401, "Cookie \u65E0\u6548\uFF1A\u9700\u542B uin \u4E0E qm_keyst/qqmusic_key\uFF0C\u8BF7\u4ECE y.qq.com \u590D\u5236");
+    if (!account) return fail4(401, "Cookie \u65E0\u6548\uFF1A\u9700\u542B uin \u4E0E qm_keyst/qqmusic_key\uFF0C\u8BF7\u4ECE y.qq.com \u590D\u5236");
     this.write(await this.withVip(account));
-    return ok3(this.status());
+    return ok4(this.status());
   }
   async qqGet(url, cookie = "", extra = {}) {
     const headers = {
@@ -4911,11 +4995,11 @@ var QqAccount = class {
       headers: { Referer: "https://xui.ptlogin2.qq.com/" }
     });
     const qrsig = cookieGet(buf?.cookies || "", "qrsig");
-    if (!buf || buf.status >= 400 || !qrsig) return fail3(502, "\u65E0\u6CD5\u83B7\u53D6 QQ \u4E8C\u7EF4\u7801\uFF0C\u8BF7\u6539\u7528 Cookie");
+    if (!buf || buf.status >= 400 || !qrsig) return fail4(502, "\u65E0\u6CD5\u83B7\u53D6 QQ \u4E8C\u7EF4\u7801\uFF0C\u8BF7\u6539\u7528 Cookie");
     const img = buf.body.toString("base64");
     const ptqrtoken = hash33(qrsig);
     writeJson(this.qrFile, { qrsig, ptqrtoken, createdAt: Date.now() / 1e3 });
-    return ok3({
+    return ok4({
       qrimg: `data:image/png;base64,${img}`,
       token: createHash5("sha256").update(qrsig).digest("hex").slice(0, 16)
     });
@@ -5083,7 +5167,7 @@ ${body}`;
   }
   async qrCheck() {
     const sess = readJson(this.qrFile);
-    if (!sess?.qrsig) return fail3(400, "\u4E8C\u7EF4\u7801\u5DF2\u5931\u6548\uFF0C\u8BF7\u5237\u65B0");
+    if (!sess?.qrsig) return fail4(400, "\u4E8C\u7EF4\u7801\u5DF2\u5931\u6548\uFF0C\u8BF7\u5237\u65B0");
     if (sess.finishFailed) {
       return {
         code: 502,
@@ -5091,7 +5175,7 @@ ${body}`;
         data: { status: 0, loggedIn: false, message: "\u626B\u7801\u6210\u529F\u4F46\u6362\u53D6\u97F3\u4E50\u51ED\u8BC1\u5931\u8D25\uFF0C\u8BF7\u5237\u65B0\u4E8C\u7EF4\u7801\u6216\u6539\u7528 Cookie" }
       };
     }
-    if (sess.finishing) return ok3({ status: 67, message: "\u6B63\u5728\u5B8C\u6210\u767B\u5F55\u2026" });
+    if (sess.finishing) return ok4({ status: 67, message: "\u6B63\u5728\u5B8C\u6210\u767B\u5F55\u2026" });
     const url = `https://ssl.ptlogin2.qq.com/ptqrlogin?${new URLSearchParams({
       u1: "https://graph.qq.com/oauth2.0/login_jump",
       ptqrtoken: String(sess.ptqrtoken || hash33(sess.qrsig)),
@@ -5113,7 +5197,7 @@ ${body}`;
     })}`;
     const res = await this.qqGet(url, `qrsig=${sess.qrsig}`, { Referer: "https://xui.ptlogin2.qq.com/" });
     const parsed = this.parsePtui(res.body);
-    if (!parsed) return ok3({ status: -1, message: "\u8F6E\u8BE2\u5F02\u5E38" });
+    if (!parsed) return ok4({ status: -1, message: "\u8F6E\u8BE2\u5F02\u5E38" });
     const payload = { status: parsed.code, message: "" };
     if (parsed.code === 66) payload.message = "\u7B49\u5F85\u626B\u7801\u2026";
     else if (parsed.code === 67) payload.message = "\u5DF2\u626B\u7801\uFF0C\u8BF7\u5728\u624B\u673A\u4E0A\u786E\u8BA4";
@@ -5142,7 +5226,7 @@ ${body}`;
       payload.nickname = account.nickname;
       payload.message = "\u767B\u5F55\u6210\u529F";
     }
-    return ok3(payload);
+    return ok4(payload);
   }
   async fetchPlaylists(uin, cookie) {
     const out = [];
@@ -5227,14 +5311,14 @@ ${body}`;
   }
   async playlists() {
     const auth = this.read();
-    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
-    return ok3({ playlists: await this.fetchPlaylists(auth.uin, auth.cookie) });
+    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    return ok4({ playlists: await this.fetchPlaylists(auth.uin, auth.cookie) });
   }
   async likeSong(post) {
     const auth = this.read();
-    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const songId = Number(String(post.id || "").replace(/\D/g, ""));
-    if (!songId) return fail3(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    if (!songId) return fail4(400, "\u6B4C\u66F2 ID \u65E0\u6548");
     const like = post.like !== "0" && post.like !== "false";
     const map = cookieToMap(auth.cookie);
     const pSkey = map.p_skey || map.pskey || map.skey || "";
@@ -5293,39 +5377,39 @@ ${body}`;
         );
         const legacyCode = Number(legacy.json?.code ?? -1);
         if (legacyCode === 0 || legacyCode === 1e3) {
-          return ok3({ liked: true, id: String(songId) });
+          return ok4({ liked: true, id: String(songId) });
         }
-        return fail3(502, String(legacy.json?.msg || data?.msg || "\u6DFB\u52A0\u5230\u6211\u559C\u6B22\u5931\u8D25"));
+        return fail4(502, String(legacy.json?.msg || data?.msg || "\u6DFB\u52A0\u5230\u6211\u559C\u6B22\u5931\u8D25"));
       }
-      return fail3(502, String(data?.msg || res.error || "\u53D6\u6D88\u559C\u6B22\u5931\u8D25"));
+      return fail4(502, String(data?.msg || res.error || "\u53D6\u6D88\u559C\u6B22\u5931\u8D25"));
     }
-    return ok3({ liked: like, id: String(songId) });
+    return ok4({ liked: like, id: String(songId) });
   }
   async likeCheck(post) {
     const auth = this.read();
-    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const songId = String(post.id || "").replace(/\D/g, "");
-    if (!songId) return fail3(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    if (!songId) return fail4(400, "\u6B4C\u66F2 ID \u65E0\u6548");
     const list = await this.fetchPlaylists(auth.uin, auth.cookie);
     const liked = list.find((pl) => Number(pl.dirid) === 201);
-    if (!liked) return ok3({ liked: false, id: songId });
+    if (!liked) return ok4({ liked: false, id: songId });
     const tracks = await this.playlistTracks(liked.id, auth.cookie);
-    return ok3({ liked: tracks.some((t) => String(t.songid) === songId), id: songId });
+    return ok4({ liked: tracks.some((t) => String(t.songid) === songId), id: songId });
   }
   async likelist() {
     const auth = this.read();
-    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const list = await this.fetchPlaylists(auth.uin, auth.cookie);
     const liked = list.find((pl) => Number(pl.dirid) === 201);
-    if (!liked) return ok3({ playlistId: "", tracks: [], name: "\u6211\u559C\u6B22", total: 0 });
+    if (!liked) return ok4({ playlistId: "", tracks: [], name: "\u6211\u559C\u6B22", total: 0 });
     const tracks = await this.playlistTracks(liked.id, auth.cookie);
-    return ok3({ playlistId: liked.id, name: "\u6211\u559C\u6B22", tracks, total: tracks.length });
+    return ok4({ playlistId: liked.id, name: "\u6211\u559C\u6B22", tracks, total: tracks.length });
   }
   async playlistAdd(post) {
     const auth = this.read();
-    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const songId = Number(String(post.songid || "").replace(/\D/g, ""));
-    if (!songId) return fail3(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    if (!songId) return fail4(400, "\u6B4C\u66F2 ID \u65E0\u6548");
     let dirId = Number(String(post.dirid || "").replace(/\D/g, ""));
     const playlistId = String(post.playlistId || post.id || "").replace(/\D/g, "");
     if (!dirId && playlistId) {
@@ -5367,14 +5451,14 @@ ${body}`;
     const data = res.json?.req_1;
     const code = Number(data?.code ?? res.json?.code ?? -1);
     if (!res.ok || code !== 0) {
-      return fail3(502, String(data?.data?.Msg || data?.data?.msg || "\u6DFB\u52A0\u5230\u6B4C\u5355\u5931\u8D25"), {
+      return fail4(502, String(data?.data?.Msg || data?.data?.msg || "\u6DFB\u52A0\u5230\u6B4C\u5355\u5931\u8D25"), {
         playlistId,
         dirId,
         songid: String(songId),
         code
       });
     }
-    return ok3({ playlistId, dirId, songid: String(songId), added: true });
+    return ok4({ playlistId, dirId, songid: String(songId), added: true });
   }
   musiculPayload(auth, reqs) {
     const map = cookieToMap(auth.cookie);
@@ -5445,8 +5529,8 @@ ${body}`;
     return ["\u6BCF\u65E530", "\u6BCF\u65E5 30", "\u4ECA\u65E5\u79C1\u4EAB", "daily mix", "daily30"];
   }
   isDailyMixText(...parts) {
-    const text = parts.map((part) => String(part || "")).join(" ").toLowerCase();
-    return this.dailyMixTitleHints().some((hint) => text.includes(hint.toLowerCase()));
+    const text2 = parts.map((part) => String(part || "")).join(" ").toLowerCase();
+    return this.dailyMixTitleHints().some((hint) => text2.includes(hint.toLowerCase()));
   }
   playlistIdFromValue(value) {
     if (value == null) return "";
@@ -5636,7 +5720,7 @@ ${body}`;
   }
   async recommendFeed(post) {
     const auth = this.read();
-    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     let limit = Number(post.limit || 24);
     if (limit <= 0) limit = 24;
     if (limit > 35) limit = 35;
@@ -5687,15 +5771,15 @@ ${body}`;
     });
     items.push(...playlists);
     if (!dailyMix?.id && !radarPreview.length && !radioSongs.length && !playlists.length) {
-      return fail3(502, "\u62C9\u53D6 QQ \u97F3\u4E50\u63A8\u8350\u5931\u8D25");
+      return fail4(502, "\u62C9\u53D6 QQ \u97F3\u4E50\u63A8\u8350\u5931\u8D25");
     }
-    return ok3({ items });
+    return ok4({ items });
   }
   async dailySongs() {
     const auth = this.read();
-    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const mix = await this.resolveDailyMix(auth);
-    if (!mix?.id) return fail3(502, "\u62C9\u53D6\u6BCF\u65E530\u9996\u5931\u8D25");
+    if (!mix?.id) return fail4(502, "\u62C9\u53D6\u6BCF\u65E530\u9996\u5931\u8D25");
     const tracks = await this.playlistTracks(mix.id, auth.cookie);
     const meta = await this.qqGet(
       `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?${new URLSearchParams({
@@ -5707,7 +5791,7 @@ ${body}`;
       auth.cookie
     );
     const cover = mix.cover?.trim() || this.albumCoverFromTrack(meta.json?.cdlist?.[0]?.songlist?.[0]) || "";
-    return ok3({
+    return ok4({
       id: "__qq_daily__",
       name: String(meta.json?.cdlist?.[0]?.dissname || mix.name || "\u6BCF\u65E530\u9996"),
       cover,
@@ -5717,11 +5801,11 @@ ${body}`;
   }
   async radarSongs() {
     const auth = this.read();
-    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const rawList = await this.fetchRadarRawList(auth, 30);
-    if (!rawList.length) return fail3(502, "\u62C9\u53D6\u79C1\u4EBA\u96F7\u8FBE\u5931\u8D25");
+    if (!rawList.length) return fail4(502, "\u62C9\u53D6\u79C1\u4EBA\u96F7\u8FBE\u5931\u8D25");
     const tracks = rawList.map((item) => this.qq.trackFromSong(item)).filter(Boolean);
-    return ok3({
+    return ok4({
       id: "__qq_radar__",
       name: "\u79C1\u4EBA\u96F7\u8FBE",
       cover: this.albumCoverFromTrack(rawList[0]),
@@ -5731,19 +5815,19 @@ ${body}`;
   }
   async personalFm() {
     const auth = this.read();
-    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const rawList = await this.fetchRadioRawList(auth, 20);
-    if (!rawList.length) return fail3(502, "\u62C9\u53D6\u731C\u4F60\u559C\u6B22\u5931\u8D25");
+    if (!rawList.length) return fail4(502, "\u62C9\u53D6\u731C\u4F60\u559C\u6B22\u5931\u8D25");
     const tracks = rawList.map((item) => this.qq.trackFromSong(item)).filter(Boolean);
-    return ok3({ tracks });
+    return ok4({ tracks });
   }
   async playlistDetail(id) {
     const trimmed = id.trim();
     if (trimmed === "__qq_radar__") return this.radarSongs();
     if (trimmed === "__qq_daily__") return this.dailySongs();
     const auth = this.read();
-    if (!auth) return fail3(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
-    if (!/^\d+$/.test(trimmed)) return fail3(400, "\u6B4C\u5355 ID \u65E0\u6548");
+    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!/^\d+$/.test(trimmed)) return fail4(400, "\u6B4C\u5355 ID \u65E0\u6548");
     const tracks = await this.playlistTracks(id.trim(), auth.cookie);
     const meta = await this.qqGet(
       `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?${new URLSearchParams({
@@ -5754,7 +5838,7 @@ ${body}`;
       })}`,
       auth.cookie
     );
-    return ok3({
+    return ok4({
       id: id.trim(),
       name: String(meta.json?.cdlist?.[0]?.dissname || ""),
       tracks,
@@ -5765,17 +5849,17 @@ ${body}`;
 function unescapeRedirect(url) {
   return url.replace(/\\\//g, "/").replace(/&amp;/g, "&");
 }
-function ok3(data) {
+function ok4(data) {
   return { code: 200, error: "", data };
 }
-function fail3(code, error, data = "") {
+function fail4(code, error, data = "") {
   return { code, error, data };
 }
 
 // server/src/cache.ts
 import { mkdirSync as mkdirSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2, existsSync as existsSync2, readdirSync, rmSync, statSync } from "node:fs";
-import { join as join5 } from "node:path";
-var PRESERVE_DIRS = /* @__PURE__ */ new Set(["netease_auth", "qq_auth", "kugou_auth"]);
+import { join as join6 } from "node:path";
+var PRESERVE_DIRS = /* @__PURE__ */ new Set(["netease_auth", "qq_auth", "kugou_auth", "qishui_auth"]);
 var CACHE_CATEGORY_IDS = ["lyrics", "play", "comments", "other"];
 function classifyDir(name) {
   const lower = name.toLowerCase();
@@ -5792,13 +5876,13 @@ var FileCache = class {
     mkdirSync2(root, { recursive: true });
   }
   dir(subdir) {
-    const path = join5(this.root, subdir);
+    const path = join6(this.root, subdir);
     mkdirSync2(path, { recursive: true });
     return path;
   }
   file(subdir, key) {
     const safe = key.replace(/[^a-zA-Z0-9]/g, "_");
-    return join5(this.dir(subdir), `${safe}.json`);
+    return join6(this.dir(subdir), `${safe}.json`);
   }
   read(subdir, key) {
     const path = this.file(subdir, key);
@@ -5830,7 +5914,7 @@ var FileCache = class {
       return { removedBytes: 0, removedEntries: 0, preserved, category: target };
     }
     for (const name of readdirSync(this.root)) {
-      const full = join5(this.root, name);
+      const full = join6(this.root, name);
       let st;
       try {
         st = statSync(full);
@@ -5870,7 +5954,7 @@ var FileCache = class {
       };
     }
     for (const name of readdirSync(this.root)) {
-      const full = join5(this.root, name);
+      const full = join6(this.root, name);
       let st;
       try {
         st = statSync(full);
@@ -5906,7 +5990,7 @@ function measurePath(path) {
     if (!st.isDirectory()) return 0;
     let total = 0;
     for (const name of readdirSync(path)) {
-      total += measurePath(join5(path, name));
+      total += measurePath(join6(path, name));
     }
     return total;
   } catch {
@@ -6079,19 +6163,19 @@ function extractQrcLyricContent(xml) {
   if (!xml) return "";
   const m = xml.match(/LyricContent="([^"]*)"/s) || xml.match(/LyricContent='([^']*)'/s);
   if (!m) return xml;
-  const text = m[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#10;/g, "\n").replace(/\\n/g, "\n");
-  return text.replace(/\r\n/g, "\n");
+  const text2 = m[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#10;/g, "\n").replace(/\\n/g, "\n");
+  return text2.replace(/\r\n/g, "\n");
 }
 function looksLikeQrc(content) {
   return /\[\d+,\d+\]/.test(content) && content.includes("(");
 }
 function qrcPlainOrDecrypt(raw2) {
-  const text = String(raw2 || "").trim();
-  if (!text) return "";
-  if (looksLikeQrc(text) || text.startsWith("[")) return text;
-  if (!/^[0-9a-fA-F]+$/.test(text.replace(/\s+/g, ""))) return text;
+  const text2 = String(raw2 || "").trim();
+  if (!text2) return "";
+  if (looksLikeQrc(text2) || text2.startsWith("[")) return text2;
+  if (!/^[0-9a-fA-F]+$/.test(text2.replace(/\s+/g, ""))) return text2;
   try {
-    const decrypted = qrcTripleDesDecrypt(text);
+    const decrypted = qrcTripleDesDecrypt(text2);
     const plain = inflateAuto(decrypted).toString("utf8");
     return extractQrcLyricContent(plain) || plain;
   } catch {
@@ -6250,13 +6334,13 @@ function ttmlToLrc(ttml) {
   while (match2 = re.exec(ttml)) {
     const attrs = match2[1] || "";
     const begin = attrs.match(/\bbegin="([^"]+)"/i)?.[1] || "";
-    const text = match2[2].replace(/<br\s*\/?>/gi, "").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
-    if (!text) continue;
+    const text2 = match2[2].replace(/<br\s*\/?>/gi, "").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
+    if (!text2) continue;
     const ms = parseTtmlTime(begin);
     const m = Math.floor(ms / 6e4);
     const s = Math.floor(ms % 6e4 / 1e3);
     const cs = ms % 1e3;
-    lines.push(`[${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(cs).padStart(3, "0")}]${text}`);
+    lines.push(`[${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(cs).padStart(3, "0")}]${text2}`);
   }
   return lines.join("\n");
 }
@@ -6755,13 +6839,13 @@ init_crossPlay();
 init_http();
 init_util();
 function parseKuwoJsonp(body) {
-  const text = body.trim();
-  if (!text) return null;
+  const text2 = body.trim();
+  if (!text2) return null;
   try {
-    return JSON.parse(text);
+    return JSON.parse(text2);
   } catch {
     try {
-      return new Function(`"use strict"; return (${text});`)();
+      return new Function(`"use strict"; return (${text2});`)();
     } catch {
       return null;
     }
@@ -7442,11 +7526,11 @@ var NeteaseService = class _NeteaseService {
 
 // server/src/pages.ts
 import { existsSync as existsSync3, readFileSync as readFileSync3 } from "node:fs";
-import { join as join6 } from "node:path";
+import { join as join7 } from "node:path";
 function spaHtml(webRoot) {
   const manifestPath = [
-    join6(webRoot, "static/app/manifest.json"),
-    join6(webRoot, "static/app/.vite/manifest.json")
+    join7(webRoot, "static/app/manifest.json"),
+    join7(webRoot, "static/app/.vite/manifest.json")
   ].find((p) => existsSync3(p));
   if (!manifestPath) return null;
   let manifest;
@@ -7483,6 +7567,309 @@ ${cssTags}
 </body>
 </html>`;
 }
+
+// server/src/qishui.ts
+init_http();
+init_sign();
+var PUBLIC_SEARCH_URL = "https://api-vehicle.volcengine.com/v2/search/type";
+var PUBLIC_CONTENTS_URL = "https://api-vehicle.volcengine.com/v2/custom/contents";
+var PC_TRACK_URL = "https://api.qishui.com/luna/pc/track_v2";
+var PUBLIC_HEADERS = {
+  Accept: "application/json,text/plain,*/*",
+  "User-Agent": "RyanMusic/2.0.9 (Qishui catalog)"
+};
+var PC_UA = "LunaPC/3.3.0(359450208)";
+function text(value) {
+  return String(value ?? "").trim();
+}
+function firstUrl(...values) {
+  for (const value of values) {
+    const raw2 = text(value);
+    if (/^https?:\/\//i.test(raw2)) return raw2;
+  }
+  return "";
+}
+function pickObject(...values) {
+  for (const value of values) {
+    if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  }
+  return {};
+}
+function pickArray(...values) {
+  for (const value of values) {
+    if (Array.isArray(value)) return value;
+  }
+  return [];
+}
+function comparable(value) {
+  return text(value).normalize("NFKC").toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+}
+function scoreTrack(track, keywords) {
+  const query = comparable(keywords);
+  if (!query) return 0;
+  const name = comparable(track.title);
+  const artist = comparable(track.author);
+  const album = comparable(track.album || "");
+  let score = 0;
+  if (name === query) score += 180;
+  else if (name.includes(query)) score += 120;
+  else if (name && query.includes(name) && name.length >= 2) score += 70;
+  if (artist === query) score += 150;
+  else if (artist.includes(query)) score += 105;
+  if (album === query) score += 80;
+  else if (album.includes(query)) score += 45;
+  for (const token of text(keywords).split(/\s+/).map(comparable).filter((item) => item.length >= 2)) {
+    if (name.includes(token)) score += 28;
+    if (artist.includes(token)) score += 22;
+    if (album.includes(token)) score += 10;
+  }
+  return score;
+}
+var QishuiService = class {
+  constructor(cache, secret) {
+    this.cache = cache;
+    this.secret = secret;
+  }
+  metas = /* @__PURE__ */ new Map();
+  remember(id, meta) {
+    if (!id) return;
+    this.metas.set(id, meta);
+  }
+  meta(id) {
+    return this.metas.get(id);
+  }
+  wrap(track, playUrl = "") {
+    this.remember(track.songid, {
+      title: track.title,
+      author: track.author,
+      pic: track.pic,
+      album: track.album,
+      durationMs: track.durationMs,
+      playUrl: playUrl || void 0
+    });
+    return {
+      ...track,
+      type: "qishui",
+      url: proxyUrl(this.secret, "url", "qishui", track.songid),
+      pic: track.pic || proxyUrl(this.secret, "pic", "qishui", track.songid)
+    };
+  }
+  async searchByName(query, page) {
+    const limit = 12;
+    const offset = Math.max(0, (Math.max(1, page) - 1) * limit);
+    const requestLimit = Math.min(80, offset + limit * 3);
+    const url = new URL(PUBLIC_SEARCH_URL);
+    url.searchParams.set("keyword", query);
+    url.searchParams.set("search_type", "music");
+    url.searchParams.set("limit", String(requestLimit));
+    url.searchParams.set("real_offset", "0");
+    url.searchParams.set("search_source", "qishui");
+    const res = await request("GET", url.toString(), { headers: PUBLIC_HEADERS, timeoutMs: 8e3 });
+    const list = pickArray(res.json?.data?.list);
+    const tracks = this.rankTracks(
+      list.map((item, index) => this.trackFromPublic(item, index, query)).filter((item) => Boolean(item)),
+      query
+    );
+    const sliced = tracks.slice(offset, offset + limit);
+    if (!sliced.length) return null;
+    return { tracks: sliced, hasMore: offset + sliced.length < tracks.length };
+  }
+  async searchByCategory(query, page, category, cookie = "") {
+    const songs = cookie ? await this.searchPc(query, page, cookie).catch(() => null) || await this.searchByName(query, category === "all" ? 1 : page) : await this.searchByName(query, category === "all" ? 1 : page);
+    if (!songs?.tracks.length) return null;
+    if (category === "song" || category === "all") {
+      const playlists = [];
+      const albums = [];
+      const artists = [];
+      if (category === "all") {
+        return {
+          data: { songs: songs.tracks.slice(0, 8), playlists, albums, artists },
+          hasMore: songs.hasMore,
+          category: "all"
+        };
+      }
+      return { data: songs.tracks, hasMore: songs.hasMore, category: "song" };
+    }
+    return { data: [], hasMore: false, category };
+  }
+  async songsByIds(ids) {
+    const tracks = [];
+    for (const id of ids) {
+      const cached = this.meta(id);
+      if (cached) {
+        tracks.push(this.wrap({
+          type: "qishui",
+          songid: id,
+          title: cached.title,
+          author: cached.author,
+          pic: cached.pic,
+          album: cached.album,
+          durationMs: cached.durationMs,
+          lrc: "",
+          url: ""
+        }, cached.playUrl || ""));
+        continue;
+      }
+      const detail = await this.publicDetail(id).catch(() => null);
+      if (detail) tracks.push(detail);
+    }
+    return tracks;
+  }
+  async resolvePlayUrl(id, cookie = "") {
+    const cached = this.meta(id)?.playUrl;
+    if (cached) return cached;
+    if (!cookie || !/(?:^|;\s*)(?:sessionid|sessionid_ss|sid_guard|sid_tt)=/i.test(cookie)) return null;
+    const now = Date.now();
+    const qs = new URLSearchParams({
+      aid: "386088",
+      app_name: "luna_pc",
+      region: "cn",
+      device_id: String(now),
+      version_name: "3.3.0",
+      version_code: "30030000",
+      channel: "official",
+      device_platform: "windows",
+      fp: String(now)
+    });
+    const body = JSON.stringify({
+      track_id: id,
+      media_type: "track",
+      queue_type: "favorite_track_playlist",
+      scene_name: "library"
+    });
+    const res = await request("POST", `${PC_TRACK_URL}?${qs}`, {
+      headers: {
+        Accept: "application/json,text/plain,*/*",
+        "Content-Type": "application/json; charset=utf-8",
+        "User-Agent": PC_UA,
+        Cookie: cookie,
+        Referer: "https://www.qishui.com/"
+      },
+      body,
+      timeoutMs: 6e3
+    });
+    const code = Number(res.json?.status_code ?? res.json?.error_code ?? 0);
+    if (code) return null;
+    return this.firstStreamUrl(res.json);
+  }
+  async publicCover(id) {
+    return this.meta(id)?.pic || (await this.publicDetail(id))?.pic || "";
+  }
+  async searchPc(query, page, cookie) {
+    const limit = 12;
+    const offset = Math.max(0, (Math.max(1, page) - 1) * limit);
+    const now = Date.now();
+    const qs = new URLSearchParams({
+      aid: "386088",
+      app_name: "luna_pc",
+      region: "cn",
+      device_id: String(now),
+      version_name: "3.3.0",
+      version_code: "30030000",
+      channel: "official",
+      device_platform: "windows",
+      fp: String(now),
+      q: query,
+      cursor: String(offset),
+      count: String(limit),
+      search_method: "input"
+    });
+    const res = await request("GET", `https://api.qishui.com/luna/pc/search/track?${qs}`, {
+      headers: {
+        Accept: "application/json,text/plain,*/*",
+        "User-Agent": PC_UA,
+        Cookie: cookie,
+        Referer: "https://www.qishui.com/"
+      },
+      timeoutMs: 8500
+    });
+    const code = Number(res.json?.status_code ?? res.json?.error_code ?? 0);
+    if (code) return null;
+    const tracks = this.rankTracks(
+      this.extractMediaList(res.json).map((item, index) => this.trackFromPublic(item, index, query)).filter((item) => Boolean(item)),
+      query
+    );
+    if (!tracks.length) return null;
+    const data = pickObject(res.json?.data, res.json);
+    const result = pickObject(data.search_result, data.searchResult, data);
+    const hasMore = result.has_more === true || result.has_more === "true" || tracks.length >= limit;
+    return { tracks, hasMore };
+  }
+  async publicDetail(id) {
+    const url = new URL(PUBLIC_CONTENTS_URL);
+    url.searchParams.set("sources", "qishui");
+    url.searchParams.set("need_author", "true");
+    url.searchParams.set("need_album", "true");
+    url.searchParams.set("item_ids", id);
+    const res = await request("GET", url.toString(), { headers: PUBLIC_HEADERS, timeoutMs: 8e3 });
+    const item = pickArray(res.json?.data?.list)[0];
+    return this.trackFromPublic(item, 0, "");
+  }
+  extractMediaList(payload) {
+    const data = pickObject(payload?.data, payload);
+    const groups = pickArray(
+      data.result_groups,
+      data.resultGroups,
+      data.search_result?.result_groups,
+      payload?.result_groups
+    );
+    const items = [];
+    for (const group of groups) {
+      items.push(...pickArray(group?.data, group?.items, group?.list, group?.result));
+    }
+    if (items.length) return items;
+    return pickArray(data.list, data.items, data.tracks, data.song_list);
+  }
+  rankTracks(tracks, keywords) {
+    const query = comparable(keywords);
+    if (!query || tracks.length < 2) return tracks;
+    const scored = tracks.map((track, index) => ({ track, index, score: scoreTrack(track, keywords) }));
+    const matched = scored.filter((item) => item.score > 0);
+    const source = matched.length ? matched : scored;
+    return source.sort((left, right) => right.score - left.score || left.index - right.index).map((item) => item.track);
+  }
+  trackFromPublic(raw2, index, query) {
+    const media = pickObject(raw2?.track, raw2?.track_info, raw2?.trackInfo, raw2);
+    const author = pickObject(media.author_info, media.author, media.artist, raw2?.author_info, raw2?.author);
+    const album = pickObject(media.album_info, media.album, raw2?.album_info, raw2?.album);
+    const id = text(
+      media.item_id || media.id || media.song_id || media.music_id || media.track_id || raw2?.item_id || raw2?.id || raw2?.song_id || raw2?.music_id || raw2?.track_id
+    );
+    const title = text(media.title || media.name || media.song_name || media.track_name || raw2?.title || raw2?.name);
+    if (!id || !title) return null;
+    const artistName = text(
+      author.name || media.author_name || media.artist_name || media.singer || raw2?.author_name || raw2?.artist_name || raw2?.singer
+    );
+    const pic = firstUrl(media.cover_url, media.cover, media.artwork, raw2?.cover_url, raw2?.cover, album.cover_url);
+    const durationRaw = Number(media.duration || media.duration_ms || raw2?.duration || raw2?.duration_ms || 0);
+    const durationMs = durationRaw > 1e4 ? durationRaw : durationRaw * 1e3;
+    const playUrl = firstUrl(media.play_url, raw2?.play_url);
+    return this.wrap({
+      type: "qishui",
+      songid: id,
+      title,
+      author: artistName,
+      album: text(album.name || media.album_name || raw2?.album_name),
+      pic,
+      durationMs: durationMs || void 0,
+      lrc: "",
+      url: "",
+      link: query ? `qishui://search/${encodeURIComponent(query)}/${index}` : `qishui://${id}`
+    }, playUrl);
+  }
+  firstStreamUrl(payload) {
+    const data = payload?.data || payload || {};
+    const track = pickObject(data.track, data.track_info, data.trackInfo);
+    const audio = pickObject(track.audio_info, track.audioInfo, data.audio_info);
+    const list = pickArray(audio.play_info_list, audio.PlayInfoList, audio.playInfoList);
+    for (const item of list) {
+      const url = firstUrl(item?.url, item?.main_url, item?.play_url, item?.PlayUrl);
+      const auth = text(item?.auth || item?.url_player_info);
+      if (url) return auth && !url.includes("#auth=") ? `${url}#auth=${encodeURIComponent(auth)}` : url;
+    }
+    return firstUrl(track.url, data.url) || null;
+  }
+};
 
 // server/src/qq.ts
 init_config();
@@ -7983,7 +8370,7 @@ function isAllowedCoverUrl(url) {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
     const host = parsed.hostname.toLowerCase();
-    return host.endsWith("126.net") || host.endsWith("163.com") || host.endsWith("gtimg.cn") || host.endsWith("qlogo.cn") || host.endsWith("qq.com") || host.endsWith("myqcloud.com") || host.endsWith("music.126.net") || host.endsWith("kugou.com") || host.endsWith("kgimg.com") || host.endsWith("mzstatic.com") || host.endsWith("apple.com");
+    return host.endsWith("126.net") || host.endsWith("163.com") || host.endsWith("gtimg.cn") || host.endsWith("qlogo.cn") || host.endsWith("qq.com") || host.endsWith("myqcloud.com") || host.endsWith("music.126.net") || host.endsWith("kugou.com") || host.endsWith("kgimg.com") || host.endsWith("mzstatic.com") || host.endsWith("apple.com") || host.endsWith("qishui.com") || host.endsWith("byteimg.com") || host.endsWith("douyin.com") || host.endsWith("toutiao.com") || host.endsWith("volccdn.com") || host.endsWith("volcengine.com");
   } catch {
     return false;
   }
@@ -8036,13 +8423,15 @@ function createApp(options) {
     }
   } catch {
   }
-  const secret = apiSecret(options.coreMarker || join7(options.webRoot, "core"));
+  const secret = apiSecret(options.coreMarker || join8(options.webRoot, "core"));
   const cache = new FileCache(options.cacheDir);
   const netease = new NeteaseService(cache, secret);
   const qq = new QqService(cache, secret);
+  const qishui = new QishuiService(cache, secret);
   const neteaseAccount = new NeteaseAccount(cache, netease);
   const qqAccount = new QqAccount(cache, qq);
   const kugouAccount = new KugouAccount(cache);
+  const qishuiAccount = new QishuiAccount(cache);
   const lyrics = new LyricsService(
     cache,
     netease,
@@ -8071,7 +8460,7 @@ function createApp(options) {
   };
   const sendFile = (rel) => {
     const safe = normalize(rel).replace(/^(\.\.(\/|\\|$))+/, "");
-    const file = join7(options.webRoot, safe);
+    const file = join8(options.webRoot, safe);
     if (!file.startsWith(options.webRoot) || !existsSync4(file) || !statSync2(file).isFile()) {
       return new Response("Not found", { status: 404 });
     }
@@ -8085,8 +8474,8 @@ function createApp(options) {
   app.get("/apple-art/:id", (c) => {
     const raw2 = (c.req.param("id") || "").replace(/\.(jpe?g|png|webp)$/i, "");
     if (!/^[A-Za-z0-9._-]+(?:-cover)?$/.test(raw2)) return c.text("Not found", 404);
-    const jpg = join7(options.cacheDir, "apple-art", `${raw2}.jpg`);
-    const png = join7(options.cacheDir, "apple-art", `${raw2}.png`);
+    const jpg = join8(options.cacheDir, "apple-art", `${raw2}.jpg`);
+    const png = join8(options.cacheDir, "apple-art", `${raw2}.png`);
     const file = existsSync4(jpg) ? jpg : existsSync4(png) ? png : "";
     if (!file) return c.text("Not found", 404);
     const stream = Readable.toWeb(createReadStream(file));
@@ -8112,9 +8501,10 @@ function createApp(options) {
     if (!get || !typeRaw || !id || !given || !t) return c.text("\u7F3A\u5C11\u8BF7\u6C42\u53C2\u6570", 400);
     if (!verifySign(secret, get, typeRaw, id, t, given)) return c.text("\u975E\u6CD5\u8BF7\u6C42", 403);
     let type = typeRaw === "wy" ? "netease" : typeRaw;
-    if (type !== "qq" && type !== "netease") return c.text("\u6682\u4E0D\u652F\u6301\u8BE5\u97F3\u6E90", 400);
+    if (type !== "qq" && type !== "netease" && type !== "qishui") return c.text("\u6682\u4E0D\u652F\u6301\u8BE5\u97F3\u6E90", 400);
     if (type === "qq" && !/^[a-zA-Z0-9]+$/.test(id)) return c.text("Invalid id", 400);
     if (type === "netease" && !/^\d+$/.test(id)) return c.text("Invalid id", 400);
+    if (type === "qishui" && !/^[A-Za-z0-9._-]+$/.test(id)) return c.text("Invalid id", 400);
     if (get === "url") {
       const useAuth = Boolean(c.req.query("auth"));
       const skipCache = Boolean(c.req.query("fresh"));
@@ -8123,31 +8513,34 @@ function createApp(options) {
       const qqCookie = useAuth ? qqAccount.sessionCookie() || "" : "";
       const wantCross = c.req.query("cross") === "1";
       const isDelisted = c.req.query("delisted") === "1";
-      const resolveCurrent = (auth, fresh = skipCache) => type === "qq" ? qq.resolvePlayUrl(id, auth ? qqCookie : "", fresh) : netease.resolvePlayUrl(id, auth ? neteaseCookie : "", level, fresh);
+      const resolveCurrent = (auth, fresh = skipCache) => {
+        if (type === "qishui") return qishui.resolvePlayUrl(id, auth ? qishuiAccount.sessionCookie() || "" : "");
+        return type === "qq" ? qq.resolvePlayUrl(id, auth ? qqCookie : "", fresh) : netease.resolvePlayUrl(id, auth ? neteaseCookie : "", level, fresh);
+      };
       const resolveCross = async () => {
-        const title = String(c.req.query("title") || "").trim();
-        const artist = String(c.req.query("artist") || "").trim();
+        const meta = type === "qishui" ? qishui.meta(id) : void 0;
+        const title = String(c.req.query("title") || meta?.title || "").trim();
+        const artist = String(c.req.query("artist") || meta?.author || "").trim();
         if (!title) return null;
-        const altType = type === "qq" ? "netease" : "qq";
-        const searchAlt = async (query) => altType === "qq" ? qq.searchByName(query, 1).catch(() => null) : netease.searchByName(query, 1).catch(() => null);
-        const pickCross = async (query, mode) => {
-          const found = await searchAlt(query);
-          return pickBestCrossPlayTrack({ title, artist }, found?.tracks || [], mode);
+        const trySource = async (altType, query2, mode) => {
+          const found = altType === "qq" ? await qq.searchByName(query2, 1).catch(() => null) : await netease.searchByName(query2, 1).catch(() => null);
+          const best = pickBestCrossPlayTrack({ title, artist }, found?.tracks || [], mode);
+          if (!best?.songid) return null;
+          return altType === "qq" ? qq.resolvePlayUrl(String(best.songid), "", true) : netease.resolvePlayUrl(String(best.songid), "", "", true);
         };
-        let best = await pickCross([title, artist].filter(Boolean).join(" "), "strict");
-        if (!best?.songid && artist.trim()) {
-          best = await pickCross(title, "titleOnly");
-        }
-        if (!best?.songid) return null;
-        return altType === "qq" ? qq.resolvePlayUrl(String(best.songid), "", true) : netease.resolvePlayUrl(String(best.songid), "", "", true);
+        const query = [title, artist].filter(Boolean).join(" ");
+        return await trySource("netease", query, "strict") || await trySource("qq", query, "strict") || (artist ? await trySource("netease", title, "titleOnly") : null) || (artist ? await trySource("qq", title, "titleOnly") : null);
       };
       let play = null;
-      if (isDelisted) {
-        play = await resolveCross();
+      if (type === "qishui") {
+        play = await resolveCurrent(true);
+        if (!play) play = await resolveCross();
+      } else {
+        if (isDelisted) play = await resolveCross();
+        if (!play) play = await resolveCurrent(useAuth);
+        if (!play && useAuth) play = await resolveCurrent(false, skipCache);
+        if (!play && wantCross && !isDelisted) play = await resolveCross();
       }
-      if (!play) play = await resolveCurrent(useAuth);
-      if (!play && useAuth) play = await resolveCurrent(false, skipCache);
-      if (!play && wantCross && !isDelisted) play = await resolveCross();
       if (!play) return c.text("\u65E0\u6CD5\u83B7\u53D6\u64AD\u653E\u5730\u5740", 502);
       if (c.req.query("probe")) return new Response(null, { status: 204 });
       let name = c.req.query("name") || "RyanMusic";
@@ -8158,12 +8551,12 @@ function createApp(options) {
         download: wantDownload,
         filename: name,
         contentType: "audio/mpeg",
-        cookie: type === "netease" ? neteaseCookie : type === "qq" ? qqCookie : void 0
+        cookie: type === "netease" ? neteaseCookie : type === "qq" ? qqCookie : type === "qishui" ? qishuiAccount.sessionCookie() || void 0 : void 0
       };
       let streamed = await proxyMedia(play, c.req.raw, proxyOpts);
       if (streamed.status >= 400) {
         if (type === "qq") qq.forgetCachedPlay(id);
-        else netease.forgetCachedPlay(id);
+        else if (type === "netease") netease.forgetCachedPlay(id);
         let retry = await resolveCurrent(false, true);
         if ((!retry || retry === play) && (wantCross || isDelisted)) {
           retry = await resolveCross();
@@ -8175,7 +8568,7 @@ function createApp(options) {
       return streamed;
     }
     if (get === "pic") {
-      const pic = type === "qq" ? await qq.resolvePicUrl(id) : await netease.resolvePicUrl(id);
+      const pic = type === "qq" ? await qq.resolvePicUrl(id) : type === "qishui" ? await qishui.publicCover(id) : await netease.resolvePicUrl(id);
       if (!pic) return c.text("\u5C01\u9762\u4E0D\u5B58\u5728", 404);
       const streamed = await proxyMedia(pic, c.req.raw, { contentType: "image/jpeg" });
       return streamed.status >= 400 ? c.text("\u5C01\u9762\u4E0D\u5B58\u5728", 404) : streamed;
@@ -8190,7 +8583,7 @@ function createApp(options) {
     if (c.req.query("cover") && c.req.query("type") && c.req.query("id")) {
       let type = c.req.query("type") === "wy" ? "netease" : c.req.query("type");
       const id = c.req.query("id") || "";
-      if (type !== "netease" && type !== "qq" || !id) return c.text("Invalid cover", 400);
+      if (type !== "netease" && type !== "qq" && type !== "qishui" || !id) return c.text("Invalid cover", 400);
       const { proxyUrl: proxyUrl2 } = await Promise.resolve().then(() => (init_sign(), sign_exports));
       c.header("Cache-Control", "public, max-age=3600");
       return c.redirect(proxyUrl2(secret, "pic", type, id), 302);
@@ -8219,7 +8612,7 @@ function createApp(options) {
       }
       const action = (post.action || "").trim();
       if (action === "sign_media") {
-        const type2 = post.type === "qq" ? "qq" : "netease";
+        const type2 = post.type === "qq" ? "qq" : post.type === "qishui" ? "qishui" : "netease";
         const id = String(post.id || post.songid || "").trim();
         if (!id) return jsonResponse(null, 400, "\u7F3A\u5C11\u6B4C\u66F2");
         let delisted = post.delisted === "1";
@@ -8228,7 +8621,7 @@ function createApp(options) {
             if (type2 === "netease") {
               const [track] = await netease.songsByIds([id]);
               delisted = Boolean(track?.delisted);
-            } else {
+            } else if (type2 === "qq") {
               const [track] = await qq.songsByIds([id]);
               delisted = Boolean(track?.delisted);
             }
@@ -8245,7 +8638,7 @@ function createApp(options) {
           pic: "",
           ...delisted ? { delisted: true } : {}
         };
-        const wrapped = type2 === "qq" ? qq.wrap(stub) : netease.wrap(stub);
+        const wrapped = type2 === "qq" ? qq.wrap(stub) : type2 === "qishui" ? qishui.wrap(stub) : netease.wrap(stub);
         return jsonResponse({ url: wrapped.url, pic: wrapped.pic, delisted }, 200, "");
       }
       if (action.startsWith("netease_")) {
@@ -8278,6 +8671,10 @@ function createApp(options) {
       }
       if (action.startsWith("kugou_")) {
         const result = await kugouAccount.handle(action, post);
+        return jsonResponse(result.data, result.code, result.error);
+      }
+      if (action.startsWith("qishui_")) {
+        const result = await qishuiAccount.handle(action, post);
         return jsonResponse(result.data, result.code, result.error);
       }
       if (action === "lyrics_search") {
@@ -8397,7 +8794,7 @@ function createApp(options) {
       if (!input || !filter || !type) {
         return jsonResponse("", 403, "(\xB0\u30FC\xB0\u3003) \u4F20\u5165\u7684\u6570\u636E\u4E0D\u5BF9\u554A");
       }
-      if (filter !== "url" && type !== "netease" && type !== "qq") {
+      if (filter !== "url" && type !== "netease" && type !== "qq" && type !== "qishui") {
         return jsonResponse("", 403, "(\xB0\u30FC\xB0\u3003) \u76EE\u524D\u8FD8\u4E0D\u652F\u6301\u8FD9\u4E2A\u7F51\u7AD9");
       }
       const patterns = {
@@ -8411,7 +8808,7 @@ function createApp(options) {
       try {
         if (filter === "name") {
           const activeCategory = category === "all" ? "all" : category;
-          const result2 = type === "qq" ? await qq.searchByCategory(input, page, activeCategory) : await netease.searchByCategory(input, page, activeCategory);
+          const result2 = type === "qq" ? await qq.searchByCategory(input, page, activeCategory) : type === "qishui" ? await qishui.searchByCategory(input, page, activeCategory, qishuiAccount.sessionCookie() || "") : await netease.searchByCategory(input, page, activeCategory);
           if (!result2) {
             return jsonResponse("", 404, "\u311F( \u2594, \u2594 )\u310F \u6CA1\u6709\u627E\u5230\u76F8\u5173\u4FE1\u606F");
           }
@@ -8422,7 +8819,7 @@ function createApp(options) {
         }
         let result = null;
         if (filter === "id") {
-          const tracks = type === "qq" ? await qq.songsByIds([input]) : await netease.songsByIds([input]);
+          const tracks = type === "qq" ? await qq.songsByIds([input]) : type === "qishui" ? await qishui.songsByIds([input]) : await netease.songsByIds([input]);
           result = { tracks, hasMore: false };
         } else {
           const parsed = parseSongUrl(input);

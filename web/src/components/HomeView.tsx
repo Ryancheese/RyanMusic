@@ -21,6 +21,7 @@ import {
   type AccountProviderId,
 } from '../lib/accountProviders';
 import { useAppleMusicStore } from '../store/appleMusicStore';
+import { qishuiNativeLogout } from '../lib/qishuiNative';
 
 const LIBRARY_SLIDE = {
   enter: (direction: number) => ({
@@ -48,12 +49,16 @@ interface HomeViewProps {
   cardStyle: LibraryCardStyle;
   neteasePlaylists: CloudPlaylist[];
   qqPlaylists: CloudPlaylist[];
+  qishuiPlaylists: CloudPlaylist[];
   neteaseRecommendItems: NeteaseRecommendItem[];
   qqRecommendItems: NeteaseRecommendItem[];
+  qishuiRecommendItems: NeteaseRecommendItem[];
   neteaseOpen: CloudPlaylist | null;
   qqOpen: CloudPlaylist | null;
+  qishuiOpen: CloudPlaylist | null;
   neteaseTracks: LibraryEntry[];
   qqTracks: LibraryEntry[];
+  qishuiTracks: LibraryEntry[];
   cloudLoading: boolean;
   cloudSyncing: boolean;
   recommendSyncing: boolean;
@@ -83,6 +88,7 @@ interface HomeViewProps {
   qq: AccountStatus | null;
   kugou?: AccountStatus | null;
   apple?: AccountStatus | null;
+  qishui?: AccountStatus | null;
 }
 
 const NETEASE_LIBRARY_SECTIONS: { id: NeteaseLibrarySection; label: string }[] = [
@@ -106,12 +112,16 @@ const HomeView: React.FC<HomeViewProps> = ({
   cardStyle,
   neteasePlaylists,
   qqPlaylists,
+  qishuiPlaylists,
   neteaseRecommendItems,
   qqRecommendItems,
+  qishuiRecommendItems,
   neteaseOpen,
   qqOpen,
+  qishuiOpen,
   neteaseTracks,
   qqTracks,
+  qishuiTracks,
   cloudLoading,
   cloudSyncing,
   recommendSyncing,
@@ -141,6 +151,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   qq,
   kugou = null,
   apple = null,
+  qishui = null,
 }) => {
   const [tabDir, setTabDir] = useState(1);
   const [browseDir, setBrowseDir] = useState(1);
@@ -152,18 +163,58 @@ const HomeView: React.FC<HomeViewProps> = ({
   const appleRecommendItems = useAppleMusicStore((state) => state.recommendItems);
   const appleOpen = useAppleMusicStore((state) => state.open);
   const appleTracks = useAppleMusicStore((state) => state.tracks);
-  const openPlaylist = homeTab === 'apple' ? appleOpen : homeTab === 'netease' ? neteaseOpen : qqOpen;
-  const cloudPlaylists = homeTab === 'apple' ? applePlaylists : homeTab === 'netease' ? neteasePlaylists : qqPlaylists;
-  const cloudTracks = homeTab === 'apple' ? appleTracks : homeTab === 'netease' ? neteaseTracks : qqTracks;
+  const openPlaylist = homeTab === 'apple'
+    ? appleOpen
+    : homeTab === 'netease'
+      ? neteaseOpen
+      : homeTab === 'qq'
+        ? qqOpen
+        : homeTab === 'qishui'
+          ? qishuiOpen
+          : null;
+  const cloudPlaylists = homeTab === 'apple'
+    ? applePlaylists
+    : homeTab === 'netease'
+      ? neteasePlaylists
+      : homeTab === 'qq'
+        ? qqPlaylists
+        : homeTab === 'qishui'
+          ? qishuiPlaylists
+          : [];
+  const cloudTracks = homeTab === 'apple'
+    ? appleTracks
+    : homeTab === 'netease'
+      ? neteaseTracks
+      : homeTab === 'qq'
+        ? qqTracks
+        : homeTab === 'qishui'
+          ? qishuiTracks
+          : [];
   const activeRecommendItems = homeTab === 'apple'
     ? appleRecommendItems
-    : homeTab === 'netease' ? neteaseRecommendItems : qqRecommendItems;
+    : homeTab === 'netease'
+      ? neteaseRecommendItems
+      : homeTab === 'qq'
+        ? qqRecommendItems
+        : homeTab === 'qishui'
+          ? qishuiRecommendItems
+          : [];
   const librarySection = neteaseLibrarySection;
   const browsingRecommend = librarySection === 'recommend' && !openPlaylist;
   const loggedIn = homeTab === 'apple'
     ? Boolean(apple?.loggedIn)
-    : homeTab === 'netease' ? Boolean(netease?.loggedIn) : Boolean(qq?.loggedIn);
-  const activeAccount = homeTab === 'apple' ? apple : homeTab === 'qq' ? qq : netease;
+    : homeTab === 'qishui'
+      ? Boolean(qishui?.loggedIn)
+      : homeTab === 'netease'
+        ? Boolean(netease?.loggedIn)
+        : Boolean(qq?.loggedIn);
+  const activeAccount = homeTab === 'apple'
+    ? apple
+    : homeTab === 'qishui'
+      ? qishui
+      : homeTab === 'qq'
+        ? qq
+        : netease;
   const activeAvatar = activeAccount?.loggedIn && activeAccount.avatar
     ? (coverImageUrl(activeAccount.avatar, 72) || activeAccount.avatar)
     : '';
@@ -173,7 +224,9 @@ const HomeView: React.FC<HomeViewProps> = ({
       ? 'QQ'
       : homeTab === 'apple'
         ? 'Apple'
-        : '网易云';
+        : homeTab === 'qishui'
+          ? '汽水'
+          : '网易云';
   const ownerLabel = activeAccount?.nickname?.trim() || '';
   const capsuleLabel = capsuleDisplayName(activeAccount, platformLabel);
   const activeMeta = providerMeta(homeTab);
@@ -191,6 +244,17 @@ const HomeView: React.FC<HomeViewProps> = ({
     setBrowseDir(next === 'recommend' ? 1 : -1);
     onNeteaseLibrarySectionChange(next);
   };
+
+  const qishuiLoginPrompted = useRef(false);
+  useEffect(() => {
+    if (homeTab !== 'qishui') {
+      qishuiLoginPrompted.current = false;
+      return;
+    }
+    if (qishui?.loggedIn || qishuiLoginPrompted.current) return;
+    qishuiLoginPrompted.current = true;
+    onOpenAccount('qishui');
+  }, [homeTab, onOpenAccount, qishui?.loggedIn]);
 
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -217,10 +281,13 @@ const HomeView: React.FC<HomeViewProps> = ({
       onAccountsChanged();
       return;
     }
-    if (provider === 'netease' || provider === 'qq') {
+    if (provider === 'qishui') {
+      qishuiLoginPrompted.current = true;
+      await qishuiNativeLogout();
+    }
+    if (provider === 'netease' || provider === 'qq' || provider === 'qishui') {
       useCloudStore.getState().clearProvider(provider);
     }
-    onAccountsChanged();
     await postAction(meta.logoutAction);
     onAccountsChanged();
   };
@@ -278,10 +345,10 @@ const HomeView: React.FC<HomeViewProps> = ({
   const layoutRailStyle = chromeButtonStyle(glassOpacity, glassBlur);
   const syncCopy = cloudSyncing || cloudLoading || recommendSyncing ? '正在同步…' : '';
   const playlistEmptyCopy = !loggedIn
-    ? '登录后即可同步账号歌单'
+    ? (homeTab === 'qishui' ? '扫码登录汽水后即可同步歌单' : '登录后即可同步账号歌单')
     : syncCopy || cloudError || '还没有歌单，打开登录面板可重新同步';
   const recommendEmptyCopy = !loggedIn
-    ? '登录后即可查看每日推荐与私人 FM'
+    ? (homeTab === 'qishui' ? '登录后即可查看最近播放与推荐' : '登录后即可查看每日推荐与私人 FM')
     : syncCopy || recommendError || '暂无推荐内容';
   const trackEmptyCopy = syncCopy || cloudError || recommendError || '这个歌单是空的';
   const listSummary = openPlaylist
@@ -367,7 +434,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               }`}
             >
               {visibleAccountProviders().map((provider) => {
-                const account = accountOf(provider.id, netease, qq, kugou, apple);
+                const account = accountOf(provider.id, netease, qq, kugou, apple, qishui);
                 const active = provider.hasCloudLibrary && homeTab === provider.id;
                 const avatar = account?.loggedIn && account.avatar
                   ? (coverImageUrl(account.avatar, 72) || account.avatar)
@@ -387,7 +454,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                       role="menuitem"
                       onClick={() => {
                         setAccountMenuOpen(false);
-                        if (provider.hasCloudLibrary && (provider.id === 'netease' || provider.id === 'qq' || provider.id === 'apple')) {
+                        if (provider.hasCloudLibrary && (provider.id === 'netease' || provider.id === 'qq' || provider.id === 'apple' || provider.id === 'qishui')) {
                           if (account?.loggedIn) {
                             switchHomeTab(provider.id);
                           } else {
