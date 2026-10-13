@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ALargeSmall, ArrowDownUp, AudioLines, Clock3, Columns2, Flame, Gauge, HardDrive, Hexagon, Keyboard, LayoutDashboard, LayoutGrid, Link2, List, MessageCircleHeart, Music, Palette, Rows2, SlidersHorizontal, Sparkles, SquareStack, Trash2, Users, X } from 'lucide-react';
+import { ALargeSmall, AlignLeft, ArrowDownUp, AudioLines, Clock3, Columns2, Flame, Gauge, HardDrive, Hexagon, Keyboard, LayoutDashboard, LayoutGrid, Link2, List, MessageCircleHeart, Minus, Music, Palette, Rows2, SlidersHorizontal, Sparkles, SquareStack, Trash2, Users, X } from 'lucide-react';
 import {
   LYRIC_SOURCE_OPTIONS,
   useLyricSettingsStore,
@@ -187,6 +187,12 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
   const setCrossPlayFallback = usePlaybackSettingsStore((state) => state.setCrossPlayFallback);
   const preferredQuality = usePlaybackSettingsStore((state) => state.preferredQuality);
   const setPreferredQuality = usePlaybackSettingsStore((state) => state.setPreferredQuality);
+  const transitionEnabled = usePlaybackSettingsStore((state) => state.transitionEnabled);
+  const setTransitionEnabled = usePlaybackSettingsStore((state) => state.setTransitionEnabled);
+  const transitionMode = usePlaybackSettingsStore((state) => state.transitionMode);
+  const setTransitionMode = usePlaybackSettingsStore((state) => state.setTransitionMode);
+  const transitionSeconds = usePlaybackSettingsStore((state) => state.transitionSeconds);
+  const setTransitionSeconds = usePlaybackSettingsStore((state) => state.setTransitionSeconds);
   const commentAtmosphere = useCommentAtmosphereStore((state) => state.enabled);
   const setCommentAtmosphere = useCommentAtmosphereStore((state) => state.setEnabled);
   const commentTypewriter = useCommentAtmosphereStore((state) => state.typewriter);
@@ -205,6 +211,10 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
   const setCommentSource = useCommentAtmosphereStore((state) => state.setCommentSource);
   const autoBestComment = useCommentAtmosphereStore((state) => state.autoBestComment);
   const setAutoBestComment = useCommentAtmosphereStore((state) => state.setAutoBestComment);
+  const commentStageLine = useCommentAtmosphereStore((state) => state.stageLine);
+  const setCommentStageLine = useCommentAtmosphereStore((state) => state.setStageLine);
+  const skipLongComments = useCommentAtmosphereStore((state) => state.skipLongComments);
+  const setSkipLongComments = useCommentAtmosphereStore((state) => state.setSkipLongComments);
   const opacity = useControlAppearanceStore((state) => state.opacity);
   const blur = useControlAppearanceStore((state) => state.blur);
   const hoverBoost = useControlAppearanceStore((state) => state.hoverBoost);
@@ -389,6 +399,17 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                 />
 
                 <ToggleRow
+                  icon={<Minus size={15} />}
+                  title="跳过超长评论"
+                  description="超过 80 字的评论不进舞台。这种往往又长又空。"
+                  enabled={skipLongComments}
+                  isDaylight={isDaylight}
+                  card={card}
+                  idle={idle}
+                  onToggle={() => setSkipLongComments(!skipLongComments)}
+                />
+
+                <ToggleRow
                   icon={<MessageCircleHeart size={15} />}
                   title="歌曲评论氛围"
                   description="在歌词舞台边缘随机飘出日式气泡评论（头像 + 昵称 + 热评），会躲开中部歌词、底栏和侧栏卡片。"
@@ -411,17 +432,30 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                 />
 
                 <ToggleRow
-                  icon={<Users size={15} />}
-                  title="评论群像模式"
-                  description="开启后一批评论会在约 3 秒内先后飘出，并可同时留在屏幕上；互相回复的评论按时间先后排列。关闭时仍每次只飘一条。"
-                  enabled={commentCrowdMode}
+                  icon={<AlignLeft size={15} />}
+                  title="单行评论"
+                  description="标题下方只留一条评论。过长的字会截断，然后换成下一条。"
+                  enabled={commentStageLine}
                   isDaylight={isDaylight}
                   card={card}
                   idle={idle}
-                  onToggle={() => setCommentCrowdMode(!commentCrowdMode)}
+                  onToggle={() => setCommentStageLine(!commentStageLine)}
                 />
 
-                {commentCrowdMode ? (
+                <div className={commentStageLine ? 'pointer-events-none opacity-45' : undefined}>
+                  <ToggleRow
+                    icon={<Users size={15} />}
+                    title="评论群像模式"
+                    description="开启后一批评论会在约 3 秒内先后飘出，并可同时留在屏幕上；互相回复的评论按时间先后排列。关闭时仍每次只飘一条。"
+                    enabled={commentCrowdMode}
+                    isDaylight={isDaylight}
+                    card={card}
+                    idle={idle}
+                    onToggle={() => setCommentCrowdMode(!commentCrowdMode)}
+                  />
+                </div>
+
+                {commentCrowdMode && !commentStageLine ? (
                   <div className={`rounded-2xl px-3 py-3 ${card}`}>
                     <div className="text-sm font-semibold">同屏最多数量</div>
                     <div className="mt-1 text-[11px] leading-relaxed opacity-50">
@@ -481,7 +515,7 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                 <ToggleRow
                   icon={<Music size={15} />}
                   title="自动匹配最佳评论平台"
-                  description="开启后比较网易云、QQ 音乐、酷狗的评论数量，优先用评论最多的平台；关闭后使用下方指定平台，找不到再兜底。"
+                  description="开启后比较网易云、QQ 音乐、酷狗的评论数量，优先用评论数最多的平台；关闭后使用下方指定平台，找不到再兜底。"
                   enabled={autoBestComment}
                   isDaylight={isDaylight}
                   card={card}
@@ -733,6 +767,60 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                       );
                     })}
                   </div>
+                </div>
+
+                <div className={`rounded-2xl px-3 py-3 ${card}`}>
+                  <ToggleRow
+                    icon={<AudioLines size={15} />}
+                    title="切歌过渡"
+                    description="一首还没结束就叠上下一首。智能过渡会看前奏、收尾和速度，决定切拍、交接低频，还是顺着尾巴叠进去。量不出来就退回固定淡化。"
+                    enabled={transitionEnabled}
+                    isDaylight={isDaylight}
+                    card="bg-transparent px-0 py-0"
+                    idle={idle}
+                    onToggle={() => setTransitionEnabled(!transitionEnabled)}
+                  />
+                  {transitionEnabled ? (
+                    <div className="mt-3 space-y-3 px-1">
+                      <div className="grid grid-cols-2 gap-2">
+                        {([
+                          ['automix', '智能过渡'],
+                          ['crossfade', '固定淡化'],
+                        ] as const).map(([id, label]) => {
+                          const active = transitionMode === id;
+                          return (
+                            <button
+                              key={id}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() => setTransitionMode(id)}
+                              className={`rounded-xl px-2.5 py-2 text-[12px] font-medium transition ${
+                                active
+                                  ? (isDaylight ? 'bg-white text-black shadow-sm ring-2 ring-white/90' : 'bg-white/10 text-white ring-2 ring-white/75')
+                                  : (isDaylight ? 'bg-black/5 opacity-70 hover:opacity-100' : 'bg-white/5 opacity-70 hover:opacity-100')
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {transitionMode === 'crossfade' ? (
+                        <SettingSlider
+                          label="过渡时长"
+                          value={transitionSeconds}
+                          display={`${transitionSeconds} 秒`}
+                          min={1}
+                          max={12}
+                          onChange={setTransitionSeconds}
+                        />
+                      ) : (
+                        <div className="text-[11px] leading-relaxed opacity-45">
+                          智能过渡自己决定这一次接多长。歌曲一开始播放就会在后台量首尾，快结束时才用得上。
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
 
                 <ToggleRow

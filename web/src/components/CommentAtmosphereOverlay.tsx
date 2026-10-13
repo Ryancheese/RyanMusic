@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Flame } from 'lucide-react';
 import { coverImageUrl, fetchSongComments, type SongComment } from '../api';
 import type { Track } from '../types';
-import { useCommentAtmosphereStore, type CommentReadOrder } from '../store/commentAtmosphereStore';
+import { commentFitsLength, useCommentAtmosphereStore, type CommentReadOrder } from '../store/commentAtmosphereStore';
+import CommentStageLine from './CommentStageLine';
 
 interface CommentAtmosphereOverlayProps {
   track: Track | null;
@@ -467,6 +468,8 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
   isPanelOpen = false,
 }) => {
   const enabled = useCommentAtmosphereStore((state) => state.enabled);
+  const stageLine = useCommentAtmosphereStore((state) => state.stageLine);
+  const skipLongComments = useCommentAtmosphereStore((state) => state.skipLongComments);
   const typewriter = useCommentAtmosphereStore((state) => state.typewriter);
   const readOrder = useCommentAtmosphereStore((state) => state.readOrder);
   const crowdMode = useCommentAtmosphereStore((state) => state.crowdMode);
@@ -568,7 +571,7 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
     setActive([]);
     clearTimers();
 
-    if (!enabled || !track) return;
+    if (!enabled || stageLine || !track) return;
 
     let cancelled = false;
     const currentTrack = track;
@@ -634,7 +637,7 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [clearTimers, autoBestComment, commentSource, enabled, readOrder, trackKey]);
+  }, [clearTimers, autoBestComment, commentSource, enabled, readOrder, stageLine, trackKey]);
 
   const prefetchLatest = useCallback(async () => {
     if (prefetchPromiseRef.current) {
@@ -691,7 +694,7 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
   useEffect(() => {
     clearTimers();
     setActive([]);
-    if (!enabled || !feedReady) return;
+    if (!enabled || stageLine || !feedReady) return;
 
     let alive = true;
     let waveLeft = maxVisible;
@@ -700,7 +703,7 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
       while (cursorRef.current < list.length) {
         const item = list[cursorRef.current];
         cursorRef.current += 1;
-        if (!shownIdsRef.current.has(item.id)) {
+        if (!shownIdsRef.current.has(item.id) && commentFitsLength(normalizeContent(item.content), skipLongComments)) {
           shownIdsRef.current.add(item.id);
           return item;
         }
@@ -823,13 +826,19 @@ const CommentAtmosphereOverlay: React.FC<CommentAtmosphereOverlayProps> = ({
   }, [
     clearTimers,
     enabled,
+    stageLine,
     feedReady,
     maxVisible,
     mixBias,
     prefetchLatest,
     scheduleRemove,
+    skipLongComments,
     typewriter,
   ]);
+
+  if (stageLine && track) {
+    return <CommentStageLine track={track} chromeHidden={chromeHidden} />;
+  }
 
   if (!enabled || !track) return null;
 

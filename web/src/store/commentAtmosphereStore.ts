@@ -29,6 +29,7 @@ export type CrowdCount = (typeof CROWD_COUNT_OPTIONS)[number];
 export const COMMENT_FONT_SCALE_MIN = 100;
 export const COMMENT_FONT_SCALE_MAX = 200;
 export const COMMENT_FONT_SCALE_DEFAULT = 100;
+export const COMMENT_LONG_LIMIT = 80;
 
 export function isCommentReadOrder(value: unknown): value is CommentReadOrder {
   return value === 'sequential' || value === 'random' || value === 'reverse';
@@ -70,6 +71,8 @@ interface PersistedCommentAtmosphere {
   mixBias?: string;
   commentSource?: string;
   autoBestComment?: boolean;
+  stageLine?: boolean;
+  skipLongComments?: boolean;
 }
 
 function readSettings() {
@@ -86,6 +89,8 @@ function readSettings() {
       commentSource: isCommentPlatform(parsed.commentSource) ? parsed.commentSource : 'netease' as CommentPlatform,
       // 默认开启：按评论数自动选平台
       autoBestComment: parsed.autoBestComment !== false,
+      stageLine: parsed.stageLine === true,
+      skipLongComments: parsed.skipLongComments !== false,
     };
   } catch {
     return {
@@ -98,8 +103,15 @@ function readSettings() {
       mixBias: 'hot' as CommentMixBias,
       commentSource: 'netease' as CommentPlatform,
       autoBestComment: true,
+      stageLine: false,
+      skipLongComments: true,
     };
   }
+}
+
+export function commentFitsLength(text: string, skipLong: boolean): boolean {
+  if (!skipLong) return true;
+  return Array.from(text.replace(/\s+/g, ' ').trim()).length <= COMMENT_LONG_LIMIT;
 }
 
 interface CommentAtmosphereState {
@@ -112,6 +124,8 @@ interface CommentAtmosphereState {
   mixBias: CommentMixBias;
   commentSource: CommentPlatform;
   autoBestComment: boolean;
+  stageLine: boolean;
+  skipLongComments: boolean;
   setEnabled: (enabled: boolean) => void;
   setTypewriter: (enabled: boolean) => void;
   setReadOrder: (readOrder: CommentReadOrder) => void;
@@ -121,6 +135,8 @@ interface CommentAtmosphereState {
   setMixBias: (mixBias: CommentMixBias) => void;
   setCommentSource: (commentSource: CommentPlatform) => void;
   setAutoBestComment: (enabled: boolean) => void;
+  setStageLine: (enabled: boolean) => void;
+  setSkipLongComments: (enabled: boolean) => void;
   /** 评论区一键切换：自动 / 指定平台 */
   selectCommentPlatform: (value: 'auto' | CommentPlatform) => void;
 }
@@ -137,10 +153,14 @@ export const useCommentAtmosphereStore = create<CommentAtmosphereState>((set) =>
   mixBias: initial.mixBias,
   commentSource: initial.commentSource,
   autoBestComment: initial.autoBestComment,
+  stageLine: initial.stageLine,
+  skipLongComments: initial.skipLongComments,
   setEnabled: (enabled) => set({ enabled }),
   setTypewriter: (typewriter) => set({ typewriter }),
   setReadOrder: (readOrder) => set({ readOrder }),
-  setCrowdMode: (crowdMode) => set({ crowdMode }),
+  setCrowdMode: (crowdMode) => set((state) => ({ crowdMode: crowdMode && !state.stageLine })),
+  setStageLine: (stageLine) => set(stageLine ? { stageLine: true, crowdMode: false } : { stageLine: false }),
+  setSkipLongComments: (skipLongComments) => set({ skipLongComments }),
   setCrowdCount: (crowdCount) => set({ crowdCount: clampCrowdCount(crowdCount) }),
   setFontScale: (fontScale) => set({ fontScale: clampCommentFontScale(fontScale) }),
   setMixBias: (mixBias) => set({ mixBias: isCommentMixBias(mixBias) ? mixBias : 'hot' }),
@@ -172,5 +192,7 @@ useCommentAtmosphereStore.subscribe((state) => {
     mixBias: state.mixBias,
     commentSource: state.commentSource,
     autoBestComment: state.autoBestComment,
+    stageLine: state.stageLine,
+    skipLongComments: state.skipLongComments,
   }));
 });

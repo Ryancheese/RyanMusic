@@ -80,7 +80,7 @@ async function proxyMedia(
   const range = req.headers.get('range');
   if (range) headers.Range = range;
   try {
-    const res = await fetchOpen(url, { headers, redirect: 'follow', connectTimeoutMs: 8_000 });
+    const res = await fetchOpen(url, { headers, redirect: 'follow', connectTimeoutMs: opts.download ? 20_000 : 8_000 });
     if (res.status >= 400) {
       return new Response(opts.download ? '无法获取播放地址' : '上游资源不可用', { status: res.status });
     }

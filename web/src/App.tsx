@@ -19,6 +19,8 @@ import { isMobileViewport, isNativeApp, isWindowsApp, prefersLightweightVisualiz
 import { useWebFullscreen } from './lib/webFullscreen';
 import WindowControls from './components/WindowControls';
 import TitlebarDragZone from './components/TitlebarDragZone';
+import { peekTrackProfile, plainBlend, planAutomix, primeTrackProfile, profileFromTail } from './lib/automix';
+import { attachAudioGraph, readMixRms, resetDeckTone, scheduleBlend, snapDeckGain, unlockAudio } from './lib/audioGraph';
 import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig, writeVisualizerMode } from './lib/visualizer';
 import { loadCustomBackgroundImage } from './lib/customBackgroundImage';
 import { useLibraryStore } from './store/libraryStore';
@@ -28,7 +30,7 @@ import { touchPlaylistRecent } from './store/playlistRecentStore';
 import { useSearchHistoryStore } from './store/searchHistoryStore';
 import { usePlayerStore } from './store/playerStore';
 import { useThemeAccentStore } from './store/themeStore';
-import { LYRIC_SOURCE_OPTIONS, useLyricSettingsStore, buildLyricSourceOrder } from './store/lyricSettingsStore';
+import { LYRIC_SOURCE_OPTIONS, useLyricSettingsStore } from './store/lyricSettingsStore';
 import { useLyricMatchStore } from './store/lyricMatchStore';
 import { hasUsableTrackLyrics, isWordByWordLyricText } from './lib/lyrics';
 import { showToast } from './store/toastStore';
@@ -108,6 +110,17 @@ function buildPlayMediaUrl(
 
 const App: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const audioBRef = useRef<HTMLAudioElement>(null);
+  const activeDeckRef = useRef(0);
+  const blendTokenRef = useRef(0);
+  const blendRef = useRef<{
+    token: number;
+    incomingDeck: number;
+    incomingKey: string;
+    timer: number;
+  } | null>(null);
+  const tailSamplesRef = useRef<number[]>([]);
+  const tailStampRef = useRef(0);
   const currentTime = useMotionValue(0);
   const audioPower = useMotionValue(0);
   const audioBands = useMemo(() => createAudioBands(), []);
@@ -263,6 +276,9 @@ const App: React.FC = () => {
   const [streamFresh, setStreamFresh] = useState(0);
   const crossPlayFallback = usePlaybackSettingsStore((state) => state.crossPlayFallback);
   const preferredQuality = usePlaybackSettingsStore((state) => state.preferredQuality);
+  const transitionEnabled = usePlaybackSettingsStore((state) => state.transitionEnabled);
+  const transitionMode = usePlaybackSettingsStore((state) => state.transitionMode);
+  const transitionSeconds = usePlaybackSettingsStore((state) => state.transitionSeconds);
   const track = queue[index] || null;
   const vipPlay = trackVipPlay(track, netease, qq);
   const authedPlay = !authFallback && vipPlay;
@@ -288,6 +304,173 @@ const App: React.FC = () => {
       cache: 'no-store',
     }).catch(() => {});
   }, [authFallback, crossPlayFallback, netease, preferredQuality, qq]);
+  const deckList = useCallback((): Array<HTMLAudioElement | null> => (
+    [audioRef.current, audioBRef.current]
+  ), []);
+  const clockAudio = useCallback((): HTMLAudioElement | null => {
+    const blend = blendRef.current;
+    const state = usePlayerStore.getState();
+    const item = state.queue[state.index];
+    const key = item ? `${item.type}:${item.songid}` : '';
+    const els = deckList();
+    if (blend && blend.incomingKey === key) return els[blend.incomingDeck] || els[activeDeckRef.current];
+    return els[activeDeckRef.current] || audioRef.current;
+  }, [deckList]);
+  const fadeOf = useCallback((audio: HTMLAudioElement | null) => {
+    if (!audio) return null;
+    try {
+      return attachAudioGraph(audio, isWindowsApp() ? 128 : 256);
+    } catch {
+      return null;
+    }
+  }, []);
+  const finishBlend = useCallback((token: number) => {
+    const blend = blendRef.current;
+    if (!blend || blend.token !== token) return;
+    window.clearTimeout(blend.timer);
+    const els = deckList();
+    const outgoing = els[1 - blend.incomingDeck];
+    const incoming = els[blend.incomingDeck];
+    activeDeckRef.current = blend.incomingDeck;
+    blendRef.current = null;
+    if (outgoing) {
+      outgoing.pause();
+      const graph = fadeOf(outgoing);
+      if (graph?.fade) {
+        snapDeckGain(graph.fade, 0);
+        resetDeckTone(graph);
+      }
+    }
+    if (incoming) {
+      const graph = fadeOf(incoming);
+      if (graph?.fade) {
+        snapDeckGain(graph.fade, 1);
+        resetDeckTone(graph);
+      }
+    }
+  }, [deckList, fadeOf]);
+  const beginCrossfade = useCallback((nextIndex: number) => {
+    if (blendRef.current) return;
+    const state = usePlayerStore.getState();
+    const next = state.queue[nextIndex];
+    const current = state.queue[state.index];
+    if (!next?.url || !current || isAppleTrack(next) || isAppleTrack(current)) return;
+    if (`${next.type}:${next.songid}` === `${current.type}:${current.songid}`) return;
+    const els = deckList();
+    const outgoingDeck = activeDeckRef.current;
+    const incomingDeck = 1 - outgoingDeck;
+    const outgoing = els[outgoingDeck];
+    const incoming = els[incomingDeck];
+    if (!outgoing || !incoming) return;
+    const outGraph = fadeOf(outgoing);
+    const inGraph = fadeOf(incoming);
+    if (!outGraph || !inGraph) return;
+    const key = `${next.type}:${next.songid}`;
+    const currentKey = `${current.type}:${current.songid}`;
+    const remain = Number.isFinite(outgoing.duration)
+      ? Math.max(0, outgoing.duration - outgoing.currentTime)
+      : transitionSeconds;
+    const room = Math.min(remain || transitionSeconds, Number.isFinite(outgoing.duration) ? outgoing.duration / 4 : 12, 14);
+    const mode = usePlaybackSettingsStore.getState().transitionMode;
+    const cachedFrom = peekTrackProfile(currentKey);
+    const fromProfile = cachedFrom || profileFromTail(tailSamplesRef.current, 0.05);
+    const plan = mode === 'automix'
+      ? planAutomix(fromProfile, peekTrackProfile(key), Math.max(0.8, room), transitionSeconds)
+      : plainBlend(Math.max(0.8, room), transitionSeconds);
+    const token = ++blendTokenRef.current;
+    const media = buildPlayMediaUrl(next, {
+      authed: trackVipPlay(next, netease, qq),
+      audioQuality: audioQuality || preferredQuality,
+      crossPlayFallback,
+    });
+    blendRef.current = { token, incomingDeck, incomingKey: key, timer: 0 };
+    snapDeckGain(inGraph.fade, 0);
+    resetDeckTone(inGraph);
+    incoming.setAttribute('data-src', media);
+    incoming.setAttribute('data-songid', key);
+    incoming.src = media;
+    try {
+      if (plan.inStart > 0.05) incoming.currentTime = plan.inStart;
+    } catch {
+      // 元数据还没到，play 之后再对一次。
+    }
+    unlockAudio();
+    void incoming.play().then(() => {
+      if (blendRef.current?.token !== token) return;
+      if (playbackIntentRef.current !== 'playing') {
+        incoming.pause();
+        blendRef.current = null;
+        snapDeckGain(inGraph.fade, 0);
+        resetDeckTone(inGraph);
+        return;
+      }
+      if (plan.inStart > 0.2 && incoming.currentTime < plan.inStart * 0.5) {
+        try { incoming.currentTime = plan.inStart; } catch { /* ignore */ }
+      }
+      let span = plan.overlap;
+      try {
+        span = scheduleBlend(outGraph, inGraph, plan);
+      } catch {
+        snapDeckGain(outGraph.fade, 0);
+        snapDeckGain(inGraph.fade, 1);
+      }
+      playbackIntentRef.current = 'playing';
+      const live = usePlayerStore.getState();
+      live.playTracks(live.queue, nextIndex);
+      const timer = window.setTimeout(() => finishBlend(token), span * 1000 + 80);
+      if (blendRef.current?.token === token) blendRef.current.timer = timer;
+    }).catch(() => {
+      if (blendRef.current?.token !== token) return;
+      blendRef.current = null;
+      incoming.pause();
+      snapDeckGain(inGraph.fade, 0);
+      resetDeckTone(inGraph);
+    });
+  }, [audioQuality, crossPlayFallback, deckList, fadeOf, finishBlend, netease, preferredQuality, qq, transitionSeconds]);
+  const maybeCrossfadeRef = useRef<() => void>(() => {});
+  maybeCrossfadeRef.current = () => {
+    if (!transitionEnabled || blendRef.current) return;
+    if (playbackIntentRef.current !== 'playing') return;
+    if (transitionMode === 'automix' && performance.now() - tailStampRef.current > 50) {
+      tailStampRef.current = performance.now();
+      const level = readMixRms();
+      if (level > 0) {
+        tailSamplesRef.current.push(level);
+        if (tailSamplesRef.current.length > 360) tailSamplesRef.current.shift();
+      }
+    }
+    const state = usePlayerStore.getState();
+    if (state.loopMode === 'one') return;
+    const item = state.queue[state.index];
+    if (!item || isAppleTrack(item)) return;
+    const outgoing = deckList()[activeDeckRef.current];
+    if (!outgoing || outgoing.paused) return;
+    const dur = outgoing.duration;
+    if (!Number.isFinite(dur) || dur < 8) return;
+    const remain = dur - outgoing.currentTime;
+    const room = Math.min(remain, dur / 4, 14);
+    const nextIndex = state.index + 1 < state.queue.length
+      ? state.index + 1
+      : state.loopMode === 'all' && state.queue.length > 1
+        ? 0
+        : -1;
+    if (nextIndex < 0) return;
+    const next = state.queue[nextIndex];
+    if (!next?.url || isAppleTrack(next)) return;
+    const fromKey = `${item.type}:${item.songid}`;
+    const nextKey = `${next.type}:${next.songid}`;
+    if (transitionMode === 'automix') {
+      const from = peekTrackProfile(fromKey) || profileFromTail(tailSamplesRef.current, 0.05);
+      const to = peekTrackProfile(nextKey);
+      if ((from === undefined || to === undefined) && remain > transitionSeconds + 0.6) return;
+      const plan = planAutomix(from ?? null, to ?? null, Math.max(0.8, room), transitionSeconds);
+      if (remain > plan.overlap + 0.35) return;
+      if (plan.style !== 'beatCut' && remain < 0.45) return;
+    } else if (room < 0.8 || remain > transitionSeconds + 0.3) {
+      return;
+    }
+    beginCrossfade(nextIndex);
+  };
   const theme = isDaylight ? DAYLIGHT_THEME : MIDNIGHT_THEME;
   const resolveAccent = useThemeAccentStore((state) => state.resolveAccent);
   const presetId = useThemeAccentStore((state) => state.presetId);
@@ -445,11 +628,12 @@ const App: React.FC = () => {
       void seekAppleMusic(time);
       return;
     }
-    const audio = audioRef.current;
+    if (blendRef.current) finishBlend(blendRef.current.token);
+    const audio = clockAudio();
     if (!audio) return;
     audio.currentTime = time;
     currentTime.set(time);
-  }, [currentTime]);
+  }, [clockAudio, currentTime, finishBlend]);
 
   const startAppleQueue = useCallback((current: Track) => {
     const gen = ++appleCommandGenRef.current;
@@ -466,6 +650,35 @@ const App: React.FC = () => {
       });
   }, [setStatus]);
 
+  const resumeWebAudioPlayback = useCallback(async () => {
+    await unlockAudio();
+    const audio = clockAudio();
+    if (!audio) return;
+    const blend = blendRef.current;
+    const incoming = blend ? deckList()[blend.incomingDeck] : audio;
+    const incomingGraph = fadeOf(incoming);
+    // 暂停时 AudioContext 仍在走，交叉淡化的增益曲线可能已经跑完，听起来就像没声。
+    if (incomingGraph?.fade) {
+      snapDeckGain(incomingGraph.fade, 1);
+      resetDeckTone(incomingGraph);
+    }
+    if (!blend) {
+      const idle = deckList().find((item) => item && item !== audio) || null;
+      const idleGraph = fadeOf(idle);
+      if (idleGraph?.fade) snapDeckGain(idleGraph.fade, 0);
+    }
+    try {
+      await incoming?.play();
+    } catch {
+      await unlockAudio();
+      try { await incoming?.play(); } catch { /* ignore */ }
+    }
+    if (blend) {
+      const outgoing = deckList()[1 - blend.incomingDeck];
+      if (outgoing?.paused) void outgoing.play();
+    }
+  }, [clockAudio, deckList, fadeOf]);
+
   const togglePlay = useCallback(() => {
     const current = usePlayerStore.getState().queue[usePlayerStore.getState().index];
     if (!current) return;
@@ -481,7 +694,7 @@ const App: React.FC = () => {
       nativeClockRef.current.playing = false;
       nativeClockRef.current.stamp = performance.now();
       if (isAppleTrack(current)) void pauseAppleMusic();
-      else audioRef.current?.pause();
+      else deckList().forEach((audio) => audio?.pause());
       return;
     }
     playbackIntentRef.current = 'playing';
@@ -500,10 +713,8 @@ const App: React.FC = () => {
       startAppleQueue(current);
       return;
     }
-    const audio = audioRef.current;
-    if (!audio) return;
-    void audio.play();
-  }, [setStatus, startAppleQueue]);
+    void resumeWebAudioPlayback();
+  }, [deckList, resumeWebAudioPlayback, setStatus, startAppleQueue]);
 
   const playIndex = useCallback(
     (nextIndex: number, options?: { keepIntent?: boolean }) => {
@@ -517,20 +728,52 @@ const App: React.FC = () => {
   const playNext = useCallback(
     (fromEnded = false) => {
       if (!queue.length) return;
+      if (blendRef.current) {
+        if (fromEnded) {
+          finishBlend(blendRef.current.token);
+          return;
+        }
+        finishBlend(blendRef.current.token);
+        const live = usePlayerStore.getState();
+        const follow = live.index + 1 < live.queue.length
+          ? live.index + 1
+          : live.loopMode === 'all' && live.queue.length > 1
+            ? 0
+            : -1;
+        if (follow >= 0) playIndex(follow, { keepIntent: true });
+        return;
+      }
       if (loopMode === 'one' && fromEnded) {
         playbackIntentRef.current = 'playing';
         seek(0);
         const current = usePlayerStore.getState().queue[usePlayerStore.getState().index];
         if (isAppleTrack(current)) startAppleQueue(current);
-        else void audioRef.current?.play();
+        else void clockAudio()?.play();
         return;
       }
       if (fromEnded) playbackIntentRef.current = 'playing';
       const keepIntent = !fromEnded;
+      const nextIndex = index + 1 < queue.length ? index + 1 : loopMode === 'all' && queue.length > 1 ? 0 : -1;
+      const outgoing = deckList()[activeDeckRef.current];
+      const remain = outgoing && Number.isFinite(outgoing.duration)
+        ? outgoing.duration - outgoing.currentTime
+        : transitionSeconds;
+      if (
+        !fromEnded
+        && transitionEnabled
+        && nextIndex >= 0
+        && !isAppleTrack(queue[index])
+        && queue[nextIndex]?.url
+        && !isAppleTrack(queue[nextIndex])
+        && remain >= 0.8
+      ) {
+        beginCrossfade(nextIndex);
+        return;
+      }
       if (index + 1 < queue.length) playIndex(index + 1, { keepIntent });
       else if (loopMode === 'all') playIndex(0, { keepIntent });
     },
-    [index, loopMode, playIndex, queue.length, seek, startAppleQueue],
+    [beginCrossfade, clockAudio, deckList, finishBlend, index, loopMode, playIndex, queue, seek, startAppleQueue, transitionEnabled, transitionSeconds],
   );
 
   const playPrev = useCallback(() => {
@@ -776,29 +1019,76 @@ const App: React.FC = () => {
   );
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.loop = loopMode === 'one';
-  }, [loopMode]);
+    tailSamplesRef.current = [];
+  }, [track?.songid, track?.type]);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    let context: AudioContext | null = null;
-    let analyser: AnalyserNode | null = null;
+    if (!transitionEnabled || transitionMode !== 'automix' || !track || isAppleTrack(track) || !mediaUrl) return;
+    const key = `${track.type}:${track.songid}`;
+    const url = mediaUrl;
+    const timer = window.setTimeout(() => primeTrackProfile(key, url), 12_000);
+    return () => window.clearTimeout(timer);
+  }, [mediaUrl, track, transitionEnabled, transitionMode]);
+
+  useEffect(() => {
+    if (!transitionEnabled || transitionMode !== 'automix') return;
+    const next = index + 1 < queue.length
+      ? queue[index + 1]
+      : loopMode === 'all' && queue.length > 1
+        ? queue[0]
+        : null;
+    if (!next?.url || isAppleTrack(next)) return;
+    if (track && next.type === track.type && String(next.songid) === String(track.songid)) return;
+    const url = buildPlayMediaUrl(next, {
+      authed: trackVipPlay(next, netease, qq),
+      audioQuality: audioQuality || preferredQuality,
+      crossPlayFallback,
+    });
+    if (url) primeTrackProfile(`${next.type}:${next.songid}`, url);
+  }, [
+    audioQuality,
+    crossPlayFallback,
+    index,
+    loopMode,
+    netease,
+    preferredQuality,
+    qq,
+    queue,
+    track,
+    transitionEnabled,
+    transitionMode,
+  ]);
+
+  useEffect(() => {
+    const loop = loopMode === 'one';
+    deckList().forEach((audio) => {
+      if (audio) audio.loop = loop;
+    });
+  }, [deckList, loopMode]);
+
+  useEffect(() => {
+    const primary = audioRef.current;
+    const secondary = audioBRef.current;
+    if (!primary) return;
+    let graph: ReturnType<typeof attachAudioGraph> = null;
     try {
-      context = new AudioContext();
-      const source = context.createMediaElementSource(audio);
-      analyser = context.createAnalyser();
-      analyser.fftSize = isWindowsApp() ? 128 : 256;
-      source.connect(analyser);
-      analyser.connect(context.destination);
+      graph = attachAudioGraph(primary, isWindowsApp() ? 128 : 256);
     } catch {
-      analyser = null;
+      graph = null;
     }
+    if (secondary) {
+      try {
+        const idle = attachAudioGraph(secondary, isWindowsApp() ? 128 : 256);
+        if (idle?.fade && !blendRef.current) snapDeckGain(idle.fade, 0);
+      } catch {
+        // 第二路接不上时仍保留单路播放。
+      }
+    }
+    const analyser = graph?.analyser || null;
 
     let frame = 0;
     const syncClock = () => {
+      const audio = clockAudio() || primary;
       const clock = nativeClockRef.current;
       const next = clock.active
         ? clock.time + (clock.playing ? (performance.now() - clock.stamp) / 1000 : 0)
@@ -812,29 +1102,34 @@ const App: React.FC = () => {
         + audioBands.vocal.get()
         + audioBands.treble.get()
       ) / 5);
-      if (context && context.state === 'suspended' && !audio.paused) {
-        void context.resume();
+      if (graph && graph.context.state !== 'running' && graph.context.state !== 'closed' && !audio.paused) {
+        void graph.context.resume();
       }
+      maybeCrossfadeRef.current();
       frame = requestAnimationFrame(syncClock);
     };
     frame = requestAnimationFrame(syncClock);
 
     const snapClock = () => {
       if (nativeClockRef.current.active) return;
+      const audio = clockAudio() || primary;
       currentTime.set(audio.currentTime);
     };
-    audio.addEventListener('seeking', snapClock);
-    audio.addEventListener('seeked', snapClock);
-    audio.addEventListener('timeupdate', snapClock);
+    for (const audio of [primary, secondary]) {
+      audio?.addEventListener('seeking', snapClock);
+      audio?.addEventListener('seeked', snapClock);
+      audio?.addEventListener('timeupdate', snapClock);
+    }
 
     return () => {
       cancelAnimationFrame(frame);
-      audio.removeEventListener('seeking', snapClock);
-      audio.removeEventListener('seeked', snapClock);
-      audio.removeEventListener('timeupdate', snapClock);
-      void context?.close();
+      for (const audio of [primary, secondary]) {
+        audio?.removeEventListener('seeking', snapClock);
+        audio?.removeEventListener('seeked', snapClock);
+        audio?.removeEventListener('timeupdate', snapClock);
+      }
     };
-  }, [audioBands, audioPower, currentTime]);
+  }, [audioBands, audioPower, clockAudio, currentTime]);
 
   useEffect(() => {
     setAuthFallback(false);
@@ -842,21 +1137,50 @@ const App: React.FC = () => {
   }, [track?.songid, track?.type, netease?.loggedIn, netease?.vip, qq?.loggedIn, qq?.vip]);
 
   useEffect(() => {
+    if (!track) return;
     if (isAppleTrack(track)) {
-      const audio = audioRef.current;
-      if (audio) {
+      if (blendRef.current) finishBlend(blendRef.current.token);
+      deckList().forEach((audio) => {
+        if (!audio) return;
         audio.pause();
         audio.removeAttribute('src');
         audio.removeAttribute('data-src');
         audio.removeAttribute('data-songid');
-      }
+      });
       return;
     }
     nativeClockRef.current.active = false;
-    const audio = audioRef.current;
+    const songKey = `${track.type}:${track.songid}`;
+    const blend = blendRef.current;
+    if (blend?.incomingKey === songKey) {
+      if (playbackIntentRef.current === 'paused') {
+        deckList().forEach((audio) => audio?.pause());
+        setBuffering(false);
+        setStatus('paused');
+        return;
+      }
+      setBuffering(false);
+      setStatus('playing');
+      return;
+    }
+    if (blend) finishBlend(blend.token);
+    const audio = deckList()[activeDeckRef.current] || audioRef.current;
+    const other = deckList()[1 - activeDeckRef.current];
+    if (other && other !== audio) {
+      other.pause();
+      const idle = fadeOf(other);
+      if (idle?.fade) {
+        snapDeckGain(idle.fade, 0);
+        resetDeckTone(idle);
+      }
+    }
+    const activeFade = audio ? fadeOf(audio) : null;
+    if (activeFade?.fade) {
+      snapDeckGain(activeFade.fade, 1);
+      resetDeckTone(activeFade);
+    }
     if (!audio || !mediaUrl || !track) return;
     const previous = audio.getAttribute('data-src') || '';
-    const songKey = `${track.type}:${track.songid}`;
     if (previous !== mediaUrl) {
       const sameSong = audio.getAttribute('data-songid') === songKey;
       const keep = sameSong ? audio.currentTime : 0;
@@ -884,20 +1208,28 @@ const App: React.FC = () => {
     }
     setBuffering(true);
     setStatus('loading');
-    const playPromise = audio.play();
-    if (playPromise) {
-      playPromise.then(() => {
-        if (playbackIntentRef.current !== 'playing') {
-          audio.pause();
-          setStatus('paused');
-          return;
+    const startPlayback = async () => {
+      await unlockAudio();
+      const graph = fadeOf(audio);
+      if (graph?.fade) {
+        snapDeckGain(graph.fade, 1);
+        resetDeckTone(graph);
+      }
+      if (graph?.context.state !== 'running' && graph?.context.state !== 'closed') {
+        try { await graph.context.resume(); } catch { /* ignore */ }
+      }
+      try {
+        await audio.play();
+      } catch {
+        if (playbackIntentRef.current !== 'playing') return;
+        await unlockAudio();
+        try { await audio.play(); } catch {
+          if (playbackIntentRef.current === 'paused') setStatus('paused');
         }
-        setStatus('playing');
-      }).catch(() => {
-        if (playbackIntentRef.current === 'paused') setStatus('paused');
-      });
-    }
-  }, [currentTime, mediaUrl, setDuration, setStatus, track?.songid, track?.type]);
+      }
+    };
+    void startPlayback();
+  }, [clockAudio, currentTime, deckList, fadeOf, finishBlend, mediaUrl, setDuration, setStatus, track?.songid, track?.type]);
 
   useEffect(() => {
     if (!isAppleTrack(track)) {
@@ -1169,92 +1501,37 @@ const App: React.FC = () => {
     };
 
     const runMatch = async (durationMs: number) => {
-      let nativeExactApplied = false;
-
-      if (type === 'netease' || type === 'qq') {
-        const exact = await fetchExactLyrics(type, id, durationMs);
-        nativeExactApplied = applyLyrics(exact, type, id);
-      }
-
-      if (autoUseBestLyrics) {
-        if (nativeExactApplied) {
-          const current = usePlayerStore.getState().queue[usePlayerStore.getState().index];
-          const nativeIsWordByWord = Boolean(
-            current && isWordByWordLyricText(current.yrc),
-          );
-          // 原生已有逐字：守住，不再跨平台覆盖
-          if (nativeIsWordByWord) return true;
-          // 原生只有行词：允许服务端在「≥75 + 时长很近 + 逐字」时升级
-          const upgraded = await fetchTrackLyrics({
-            type,
-            songid: id,
-            title,
-            artist,
-            preferred,
-            autoUseBest: true,
-            durationMs,
-          });
-          if (
-            upgraded
-            && isWordByWordLyricText(upgraded.yrc)
-            && applyLyrics(upgraded, upgraded.lyricSource || preferred)
-          ) {
-            return true;
-          }
-          return true;
-        }
-        const best = await fetchTrackLyrics({
-          type,
-          songid: id,
-          title,
-          artist,
-          preferred,
-          autoUseBest: true,
-          durationMs,
-        });
-        if (applyLyrics(best, preferred)) return true;
-        return false;
-      }
-
-      const preferredFirst = await fetchTrackLyrics({
+      const exactPromise = (type === 'netease' || type === 'qq')
+        ? fetchExactLyrics(type, id, durationMs)
+        : Promise.resolve(null);
+      const bestPromise = fetchTrackLyrics({
         type,
         songid: id,
         title,
         artist,
         preferred,
-        autoUseBest: false,
-        forceSource: true,
+        autoUseBest: autoUseBestLyrics,
+        forceSource: !autoUseBestLyrics,
         durationMs,
       });
-      if (applyLyrics(preferredFirst, preferred)) return true;
 
-      if (preferred !== type && type !== 'qishui') {
-        const nativeFirst = await fetchTrackLyrics({
-          type,
-          songid: id,
-          title,
-          artist,
-          nativeOnly: true,
-          durationMs,
-        });
-        if (applyLyrics(nativeFirst, type)) return true;
+      const exact = await exactPromise;
+      const showedNative = applyLyrics(exact, type, id);
+      if (showedNative && alive && gen === lyricRequestGen.current) {
+        setLyricsLoading(false);
+        const current = usePlayerStore.getState().queue[usePlayerStore.getState().index];
+        if (!autoUseBestLyrics || (current && isWordByWordLyricText(current.yrc))) return true;
       }
 
-      for (const source of buildLyricSourceOrder(preferred)) {
-        if (source === preferred) continue;
-        const forced = await fetchTrackLyrics({
-          type,
-          songid: id,
-          title,
-          artist,
-          preferred: source,
-          autoUseBest: false,
-          forceSource: true,
-          durationMs,
-        });
-        if (applyLyrics(forced, source)) return true;
+      const best = await bestPromise;
+      if (
+        best
+        && (!showedNative || isWordByWordLyricText(best.yrc))
+        && applyLyrics(best, best.lyricSource || preferred)
+      ) {
+        return true;
       }
-      return false;
+      return showedNative;
     };
 
     const timer = window.setTimeout(() => {
@@ -1407,7 +1684,7 @@ const App: React.FC = () => {
       if (isAppleTrack(track)) {
         void resumeAppleMusic().catch(() => startAppleQueue(track));
       } else {
-        void audioRef.current?.play();
+        void resumeWebAudioPlayback();
       }
     });
     navigator.mediaSession.setActionHandler('pause', () => {
@@ -1416,14 +1693,14 @@ const App: React.FC = () => {
       setStatus('paused');
       setBuffering(false);
       if (isAppleTrack(track)) void pauseAppleMusic();
-      else audioRef.current?.pause();
+      else deckList().forEach((audio) => audio?.pause());
     });
     navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
     navigator.mediaSession.setActionHandler('nexttrack', () => playNext());
     navigator.mediaSession.setActionHandler('seekto', (details) => {
       if (details.seekTime != null) seek(details.seekTime);
     });
-  }, [playNext, playPrev, seek, setStatus, startAppleQueue, status, track]);
+  }, [deckList, playNext, playPrev, resumeWebAudioPlayback, seek, setStatus, startAppleQueue, status, track]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -1544,7 +1821,16 @@ const App: React.FC = () => {
   const downloadSong = () => {
     if (!track || isAppleTrack(track)) return;
     const name = `${track.title}-${track.author}`;
-    const url = buildDownloadUrl(track.url, name);
+    const playUrl = buildPlayMediaUrl(track, {
+      authed: authedPlay,
+      audioQuality,
+      crossPlayFallback,
+      fresh: streamFresh,
+    }) || track.url;
+    const download = new URL(buildDownloadUrl(playUrl, name), window.location.origin);
+    if (track.title) download.searchParams.set('title', track.title);
+    if (track.author) download.searchParams.set('artist', track.author);
+    const url = download.toString();
     if (canNativeSave()) nativeSave({ url, filename: `${name}.mp3` });
     else window.location.href = url;
   };
@@ -1570,39 +1856,61 @@ const App: React.FC = () => {
       <TitlebarDragZone disabled={searchOpen} />
       <WindowControls isDaylight={isDaylight} autoHide={view === 'player'} />
       <div className="ryan-accent-wash" aria-hidden />
-      <audio
-        ref={audioRef}
-        preload="auto"
-        onPlay={() => {
-          if (isAppleTrack(usePlayerStore.getState().queue[usePlayerStore.getState().index])) return;
-          setBuffering(false);
-          setStatus('playing');
-        }}
-        onPause={() => {
-          if (isAppleTrack(usePlayerStore.getState().queue[usePlayerStore.getState().index])) return;
-          setBuffering(false);
-          setStatus('paused');
-        }}
-        onWaiting={() => {
-          if (audioRef.current && !audioRef.current.paused) setBuffering(true);
-        }}
-        onStalled={() => {
-          if (audioRef.current && !audioRef.current.paused) setBuffering(true);
-        }}
-        onPlaying={() => setBuffering(false)}
-        onCanPlay={() => setBuffering(false)}
-        onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
-        onEnded={() => {
-          if (isAppleTrack(usePlayerStore.getState().queue[usePlayerStore.getState().index])) return;
-          playNext(true);
-        }}
-        onError={() => {
-          if (isAppleTrack(usePlayerStore.getState().queue[usePlayerStore.getState().index])) return;
-          setBuffering(false);
-          if (authedPlay) setAuthFallback(true);
-          if (streamFresh < 1) setStreamFresh(1);
-        }}
-      />
+      {[audioRef, audioBRef].map((deckRef, deck) => (
+        <audio
+          key={deck}
+          ref={deckRef}
+          preload="auto"
+          onPlay={(event) => {
+            if (event.currentTarget !== clockAudio()) return;
+            if (isAppleTrack(usePlayerStore.getState().queue[usePlayerStore.getState().index])) return;
+            setBuffering(false);
+            setStatus('playing');
+          }}
+          onPause={(event) => {
+            if (event.currentTarget !== clockAudio()) return;
+            if (isAppleTrack(usePlayerStore.getState().queue[usePlayerStore.getState().index])) return;
+            setBuffering(false);
+            setStatus('paused');
+          }}
+          onWaiting={(event) => {
+            if (event.currentTarget !== clockAudio()) return;
+            if (!event.currentTarget.paused) setBuffering(true);
+          }}
+          onStalled={(event) => {
+            if (event.currentTarget !== clockAudio()) return;
+            if (!event.currentTarget.paused) setBuffering(true);
+          }}
+          onPlaying={(event) => {
+            if (event.currentTarget !== clockAudio()) return;
+            setBuffering(false);
+          }}
+          onCanPlay={(event) => {
+            if (event.currentTarget !== clockAudio()) return;
+            setBuffering(false);
+          }}
+          onDurationChange={(event) => {
+            if (event.currentTarget !== clockAudio()) return;
+            setDuration(event.currentTarget.duration || 0);
+          }}
+          onEnded={(event) => {
+            if (isAppleTrack(usePlayerStore.getState().queue[usePlayerStore.getState().index])) return;
+            const blend = blendRef.current;
+            if (blend && event.currentTarget !== deckList()[blend.incomingDeck]) {
+              finishBlend(blend.token);
+              return;
+            }
+            playNext(true);
+          }}
+          onError={(event) => {
+            if (event.currentTarget !== clockAudio()) return;
+            if (isAppleTrack(usePlayerStore.getState().queue[usePlayerStore.getState().index])) return;
+            setBuffering(false);
+            if (authedPlay) setAuthFallback(true);
+            if (streamFresh < 1) setStreamFresh(1);
+          }}
+        />
+      ))}
 
       <div className={`absolute inset-0 z-10 ${view === 'home' ? '' : 'hidden'}`} aria-hidden={view !== 'home'}>
         <HomeView
@@ -1650,6 +1958,7 @@ const App: React.FC = () => {
           }}
           onLayoutModeChange={setLayoutMode}
           onSelectEntry={(entry, queueEntries) => {
+            unlockAudio();
             if (homeTab === 'netease' && neteaseOpen) {
               touchPlaylistRecent('netease', neteaseOpen.id);
             } else if (homeTab === 'qq' && qqOpen) {
@@ -1841,6 +2150,7 @@ const App: React.FC = () => {
           setSearchOpen(false);
         }}
         onPlay={(item, playAt) => {
+          unlockAudio();
           returnToSearchRef.current = true;
           playbackIntentRef.current = 'playing';
           playTracks(results, playAt);

@@ -355,10 +355,26 @@ export class NeteaseService {
     }
 
     if (cookie) {
-      const authUrl = await this.cookiePlayUrl(songid, cookie, level);
+      const authTask = this.cookiePlayUrl(songid, cookie, level);
+      const bootTask = this.bootstrapPlayUrl(songid);
+      const authUrl = await Promise.race([
+        authTask,
+        new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 900)),
+      ]);
       if (authUrl && !isNeteaseTrialMediaUrl(authUrl)) {
         this.cache.setTtl(cacheKey, songid, authUrl, 600);
         return authUrl;
+      }
+      const bootUrl = await bootTask;
+      if (bootUrl && !isBadMediaUrl(bootUrl) && !isNeteaseTrialMediaUrl(bootUrl) && !isKuwoTrialMediaUrl(bootUrl) && !/\/404/i.test(bootUrl)) {
+        const safeUrl = httpsNeteaseUrl(bootUrl);
+        this.cache.setTtl('netease_play_v7', songid, safeUrl, 1800);
+        return safeUrl;
+      }
+      const lateAuth = await authTask;
+      if (lateAuth && !isNeteaseTrialMediaUrl(lateAuth)) {
+        this.cache.setTtl(cacheKey, songid, lateAuth, 600);
+        return lateAuth;
       }
     }
 

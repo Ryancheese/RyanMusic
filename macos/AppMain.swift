@@ -201,6 +201,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         if #available(macOS 12.3, *) {
             config.preferences.isElementFullscreenEnabled = true
         }
+        config.mediaTypesRequiringUserActionForPlayback = []
         config.userContentController.add(self, name: "ryanSave")
         config.userContentController.add(self, name: "ryanUpdate")
         config.userContentController.add(self, name: "ryanWindowDrag")
@@ -472,6 +473,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 }
                 guard let tempURL else {
                     Self.alert("下载失败：没有收到文件")
+                    return
+                }
+                if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                    Self.alert("下载失败：没有拿到音频（\(http.statusCode)）")
+                    return
+                }
+                let size = (try? FileManager.default.attributesOfItem(atPath: tempURL.path)[.size] as? NSNumber)?.intValue ?? 0
+                if size < 1024 {
+                    Self.alert("下载失败：文件不完整")
                     return
                 }
                 do {

@@ -12,6 +12,7 @@ import {
     resolveHarmonySnapshotFromVocals,
     type HarmonySnapshot,
 } from './harmonyRuntime';
+import { useCommentAtmosphereStore } from '../../store/commentAtmosphereStore';
 
 // src/components/visualizer/VisualizerHarmonyOverlay.tsx
 // Renders TTML background vocals in one shared top safe-area without changing mode-specific main lyrics.
@@ -201,7 +202,8 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
     }, [currentTime, updateSnapshot]);
 
     useMotionValueEvent(currentTime, 'change', updateSnapshot);
-    const harmonyTopPx = 76;
+    const stageLine = useCommentAtmosphereStore((state) => state.stageLine);
+    const harmonyTopPx = stageLine ? 126 : 76;
 
     return (
         <AnimatePresence>

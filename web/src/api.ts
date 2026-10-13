@@ -15,7 +15,7 @@ function apiEndpoint(): string {
 }
 
 const API_TIMEOUT_MS = 15_000;
-const LYRICS_TIMEOUT_MS = 45_000;
+const LYRICS_TIMEOUT_MS = 12_000;
 
 async function postForm(body: URLSearchParams, timeoutMs = API_TIMEOUT_MS): Promise<Response> {
   return fetch(apiEndpoint(), {

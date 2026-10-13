@@ -581,7 +581,10 @@ export class LyricsService {
         });
       }
     });
-    await Promise.all(jobs);
+    await Promise.race([
+      Promise.all(jobs),
+      new Promise((resolve) => setTimeout(resolve, 3_500)),
+    ]);
 
     return best;
   }

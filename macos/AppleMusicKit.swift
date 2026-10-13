@@ -947,7 +947,7 @@ final class AppleMusicBridge: NSObject {
         player.queue = ApplicationMusicPlayer.Queue(for: items, startingAt: start)
         await waitForQueue()
         guard isCurrentEpoch(epoch) else {
-            haltCurrentAudio()
+            if lastStatus != "paused" { haltCurrentAudio() }
             return
         }
         if await attemptPlay(player, epoch: epoch) { return }

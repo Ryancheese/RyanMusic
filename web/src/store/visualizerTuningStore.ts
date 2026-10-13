@@ -9,6 +9,7 @@ import {
   DEFAULT_MONET_TUNING,
   DEFAULT_PARTITA_TUNING,
   DEFAULT_PENDOLO_TUNING,
+  DEFAULT_LUMIERE_TUNING,
   DEFAULT_SONNET_TUNING,
   DEFAULT_TEMPERA_TUNING,
   DEFAULT_TILT_TUNING,
@@ -21,6 +22,7 @@ import {
   type MonetTuning,
   type PartitaTuning,
   type PendoloTuning,
+  type LumiereTuning,
   type SonnetTuning,
   type TemperaTuning,
   type TiltTuning,
@@ -43,6 +45,7 @@ export interface VisualizerTuningsState {
   pendolo: PendoloTuning;
   sonnet: SonnetTuning;
   tempera: TemperaTuning;
+  lumiere: LumiereTuning;
 }
 
 export const VISUALIZER_TUNING_DEFAULTS: VisualizerTuningsState = {
@@ -60,6 +63,7 @@ export const VISUALIZER_TUNING_DEFAULTS: VisualizerTuningsState = {
   monet: { ...DEFAULT_MONET_TUNING },
   pendolo: { ...DEFAULT_PENDOLO_TUNING },
   sonnet: { ...DEFAULT_SONNET_TUNING },
+  lumiere: { ...DEFAULT_LUMIERE_TUNING },
   tempera: {
     ...DEFAULT_TEMPERA_TUNING,
     layerImages: [],
@@ -103,6 +107,7 @@ const readTunings = (): VisualizerTuningsState => {
       monet: { ...DEFAULT_MONET_TUNING, ...parsed?.monet },
       pendolo: { ...DEFAULT_PENDOLO_TUNING, ...parsed?.pendolo },
       sonnet: { ...DEFAULT_SONNET_TUNING, ...parsed?.sonnet },
+      lumiere: { ...DEFAULT_LUMIERE_TUNING, ...parsed?.lumiere },
       tempera,
     };
   } catch {
@@ -128,6 +133,7 @@ interface VisualizerTuningStore extends VisualizerTuningsState {
   patchTilt: (patch: Partial<TiltTuning>) => void;
   patchDiorama: (patch: Partial<DioramaTuning>) => void;
   patchMonet: (patch: Partial<MonetTuning>) => void;
+  patchLumiere: (patch: Partial<LumiereTuning>) => void;
   patchPendolo: (patch: Partial<PendoloTuning>) => void;
   patchSonnet: (patch: Partial<SonnetTuning>) => void;
   patchTempera: (patch: Partial<TemperaTuning>) => void;
@@ -155,6 +161,7 @@ const pick = (state: VisualizerTuningStore): VisualizerTuningsState => ({
   monet: state.monet,
   pendolo: state.pendolo,
   sonnet: state.sonnet,
+  lumiere: state.lumiere,
   tempera: state.tempera,
 });
 
@@ -238,6 +245,11 @@ export const useVisualizerTuningStore = create<VisualizerTuningStore>((set, get)
     set(next);
     persist(next);
   },
+  patchLumiere: (patch) => {
+    const next = { ...pick(get()), lumiere: { ...get().lumiere, ...patch } };
+    set(next);
+    persist(next);
+  },
   resetMode: (mode) => {
     const defaults = VISUALIZER_TUNING_DEFAULTS[mode];
     const next = {
@@ -270,6 +282,7 @@ export const useVisualizerTuningStore = create<VisualizerTuningStore>((set, get)
       monet: { ...DEFAULT_MONET_TUNING },
       pendolo: { ...DEFAULT_PENDOLO_TUNING },
       sonnet: { ...DEFAULT_SONNET_TUNING },
+      lumiere: { ...DEFAULT_LUMIERE_TUNING },
       tempera: mergeTempera(null),
     };
     set(fresh);

@@ -67,6 +67,8 @@ export interface Line {
   renderHints?: LineRenderHints;
   isChorus?: boolean;
   chorusEffect?: 'bars' | 'circles' | 'beams';
+  /** 用户保存的分词边界。绘光按这个切词，没有时走 Intl.Segmenter。 */
+  wordSegments?: string[];
 }
 
 export interface LyricData {
@@ -113,7 +115,60 @@ export interface DualTheme {
 
 export type ThemeMode = 'default' | 'ai' | 'custom';
 
-export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' | 'monet' | 'spotlight' | 'tempera';
+export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' | 'monet' | 'spotlight' | 'tempera' | 'lumiere';
+
+/** 绘光画质档位。`full` 全分辨率；`balanced` / `low` 把光场与辉光降采样。 */
+export type LumiereRenderQuality = 'full' | 'balanced' | 'low';
+
+export interface LumiereTuning {
+  lightIntensity: number;
+  audioResponse: number;
+  fogDensity: number;
+  darkField: number;
+  moteAmount: number;
+  bloom: number;
+  textBloom: number;
+  unlitOpacity: number;
+  windowNeighbors: 1 | 2;
+  decay: number;
+  echo: number;
+  fogOctaves: number;
+  lineArt: boolean;
+  frontBokeh: boolean;
+  trails: boolean;
+  seamlessTransitions: boolean;
+  overlayFrame: boolean;
+  textOnly: boolean;
+  keywordColors: boolean;
+  themeIcons: boolean;
+  themeColorMix: number;
+  renderQuality: LumiereRenderQuality;
+}
+
+export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
+  lightIntensity: 1,
+  audioResponse: 1,
+  fogDensity: 1,
+  darkField: 0.75,
+  moteAmount: 1,
+  bloom: 1,
+  textBloom: 1,
+  unlitOpacity: 0.22,
+  windowNeighbors: 2,
+  decay: 1,
+  echo: 1,
+  fogOctaves: 5,
+  lineArt: true,
+  frontBokeh: true,
+  trails: true,
+  seamlessTransitions: true,
+  overlayFrame: true,
+  textOnly: false,
+  keywordColors: true,
+  themeIcons: true,
+  themeColorMix: 0.3,
+  renderQuality: 'full',
+};
 export type VisualizerMode = BuiltinVisualizerMode | (string & {});
 export type VisualizerFrameRate = 'off' | 120 | 90 | 60;
 

@@ -1,6 +1,17 @@
 {
-  "_VividLightBlend-BC4oT_pB.js": {
-    "file": "assets/VividLightBlend-BC4oT_pB.js",
+  "_VisualizerLumiere-7sPJlW6x.js": {
+    "file": "assets/VisualizerLumiere-7sPJlW6x.js",
+    "name": "VisualizerLumiere",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html"
+    ],
+    "dynamicImports": [
+      "src/components/visualizer/lumiere/createLumierePixiRuntime.ts"
+    ]
+  },
+  "_VividLightBlend-D99W67SW.js": {
+    "file": "assets/VividLightBlend-D99W67SW.js",
     "name": "VividLightBlend",
     "imports": [
       "index.html"
@@ -11,16 +22,17 @@
     "name": "sonnetPrintFilters"
   },
   "index.html": {
-    "file": "assets/index-DBykPqQx.js",
+    "file": "assets/index-B5mmVPYJ.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "dynamicImports": [
+      "_VisualizerLumiere-7sPJlW6x.js",
       "src/components/visualizer/sonnet/createSonnetPixiRuntime.ts",
       "src/components/visualizer/tempera/createTemperaPixiRuntime.ts"
     ],
     "css": [
-      "assets/index-Aw9L6vyZ.css"
+      "assets/index-CaKUoLO_.css"
     ],
     "assets": [
       "assets/avatar10-CEta-Hap.png",
@@ -50,36 +62,36 @@
     ]
   },
   "node_modules/pixi.js/lib/environment-browser/browserAll.mjs": {
-    "file": "assets/browserAll-DcJ2TBlC.js",
+    "file": "assets/browserAll-DjsH7NeH.js",
     "name": "browserAll",
     "src": "node_modules/pixi.js/lib/environment-browser/browserAll.mjs",
     "isDynamicEntry": true,
     "imports": [
-      "_VividLightBlend-BC4oT_pB.js",
+      "_VividLightBlend-D99W67SW.js",
       "node_modules/pixi.js/lib/index.mjs",
       "node_modules/pixi.js/lib/environment-webworker/webworkerAll.mjs",
       "index.html"
     ]
   },
   "node_modules/pixi.js/lib/environment-webworker/webworkerAll.mjs": {
-    "file": "assets/webworkerAll-Czo06N-u.js",
+    "file": "assets/webworkerAll-3YAL3q1D.js",
     "name": "webworkerAll",
     "src": "node_modules/pixi.js/lib/environment-webworker/webworkerAll.mjs",
     "isDynamicEntry": true,
     "imports": [
       "node_modules/pixi.js/lib/index.mjs",
-      "_VividLightBlend-BC4oT_pB.js",
+      "_VividLightBlend-D99W67SW.js",
       "index.html"
     ]
   },
   "node_modules/pixi.js/lib/index.mjs": {
-    "file": "assets/index-DBgv_JQd.js",
+    "file": "assets/index-dutpzGOf.js",
     "name": "index",
     "src": "node_modules/pixi.js/lib/index.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_VividLightBlend-BC4oT_pB.js"
+      "_VividLightBlend-D99W67SW.js"
     ],
     "dynamicImports": [
       "node_modules/pixi.js/lib/environment-browser/browserAll.mjs",
@@ -182,22 +194,35 @@
     "file": "assets/vibe3-DwUTsaJA.png",
     "src": "src/components/visualizer/cappella/emo/vibe3.png"
   },
+  "src/components/visualizer/lumiere/createLumierePixiRuntime.ts": {
+    "file": "assets/createLumierePixiRuntime-xQc55l8D.js",
+    "name": "createLumierePixiRuntime",
+    "src": "src/components/visualizer/lumiere/createLumierePixiRuntime.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_VisualizerLumiere-7sPJlW6x.js"
+    ],
+    "dynamicImports": [
+      "node_modules/pixi.js/lib/index.mjs"
+    ]
+  },
   "src/components/visualizer/sonnet/createSonnetPixiRuntime.ts": {
-    "file": "assets/createSonnetPixiRuntime-D0cNw6DE.js",
+    "file": "assets/createSonnetPixiRuntime-CpJgHraO.js",
     "name": "createSonnetPixiRuntime",
     "src": "src/components/visualizer/sonnet/createSonnetPixiRuntime.ts",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
       "_sonnetPrintFilters-CtEx3DMO.js",
-      "_VividLightBlend-BC4oT_pB.js"
+      "_VividLightBlend-D99W67SW.js"
     ],
     "dynamicImports": [
       "node_modules/pixi.js/lib/index.mjs"
     ]
   },
   "src/components/visualizer/tempera/createTemperaPixiRuntime.ts": {
-    "file": "assets/createTemperaPixiRuntime-C4ktnRf6.js",
+    "file": "assets/createTemperaPixiRuntime-Dbx8f9b0.js",
     "name": "createTemperaPixiRuntime",
     "src": "src/components/visualizer/tempera/createTemperaPixiRuntime.ts",
     "isDynamicEntry": true,
