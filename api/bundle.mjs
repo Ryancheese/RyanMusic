@@ -42,7 +42,7 @@ var VERSION, UA, NETEASE_UA, CN_IP_A;
 var init_config = __esm({
   "server/src/config.ts"() {
     "use strict";
-    VERSION = "2.0.10";
+    VERSION = "2.0.11";
     UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     NETEASE_UA = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.29.205117";
     CN_IP_A = [36, 58, 111, 112, 114, 117, 120, 123, 183, 218, 223];
@@ -7576,7 +7576,7 @@ var PUBLIC_CONTENTS_URL = "https://api-vehicle.volcengine.com/v2/custom/contents
 var PC_TRACK_URL = "https://api.qishui.com/luna/pc/track_v2";
 var PUBLIC_HEADERS = {
   Accept: "application/json,text/plain,*/*",
-  "User-Agent": "RyanMusic/2.0.10 (Qishui catalog)"
+  "User-Agent": "RyanMusic/2.0.11 (Qishui catalog)"
 };
 var PC_UA = "LunaPC/3.3.0(359450208)";
 function text(value) {

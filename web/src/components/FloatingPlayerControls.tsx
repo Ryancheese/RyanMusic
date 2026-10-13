@@ -211,6 +211,8 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const [capsuleWidth, setCapsuleWidth] = useState(0);
   const collapseTimeoutRef = useRef<number | null>(null);
   const zoneRef = useRef<'left' | 'center' | 'right' | null>(null);
+  // 这次悬停里到过中间播放条之后，滑向左右仍保持展开，离开整条才收回。
+  const expandedLatchRef = useRef(false);
   const rowRef = useRef<HTMLDivElement>(null);
   const leftBtnRef = useRef<HTMLButtonElement>(null);
   const rightChromeRef = useRef<HTMLDivElement>(null);
@@ -235,9 +237,10 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const sidePush = (SIDE_BTN_SIZE * (sideHoverScale - 1)) / 2 + (isMobile ? 6 : 8);
   const isHovered = zone === 'center';
   const sideHover = zone === 'left' || zone === 'right' ? zone : null;
-  // 指针还在整条播放条上时保持展开，避免滑到左右按钮时中间先缩回去
+  // 直接停在左右按钮上不展开中间。从中间滑过去则这次悬停一直保持展开，宽度不中途跳。
   const showExpanded =
-    zone !== null
+    zone === 'center'
+    || (zone !== null && expandedLatchRef.current)
     || coarsePointer
     || (buffering && status === 'loading');
   const mobilePlayerExpanded = isMobile && currentView === 'player' && showExpanded;
@@ -271,6 +274,8 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const rightX = sideHover === 'left' ? sidePush : centerOutShift;
 
   const assignZone = (next: 'left' | 'center' | 'right' | null) => {
+    if (next === 'center') expandedLatchRef.current = true;
+    if (next === null) expandedLatchRef.current = false;
     if (zoneRef.current === next) return;
     zoneRef.current = next;
     setZone(next);

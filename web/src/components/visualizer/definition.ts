@@ -15,6 +15,7 @@ import {
     type MonetTuning,
     type PartitaTuning,
     type PendoloTuning,
+    type JizuraTuning,
     type LakeTuning,
     type LumiereTuning,
     type SonnetTuning,
@@ -29,7 +30,7 @@ import type { VisualizerBackgroundConfig } from './backgrounds/definition';
 
 // src/components/visualizer/definition.ts
 // Shared contracts for discoverable visualizer modes.
-export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'claddagh' | 'cappella' | 'tilt' | 'monet' | 'diorama' | 'pendolo' | 'sonnet' | 'tempera' | 'lumiere' | 'lake';
+export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'claddagh' | 'cappella' | 'tilt' | 'monet' | 'diorama' | 'pendolo' | 'sonnet' | 'tempera' | 'lumiere' | 'lake' | 'jizura';
 
 export interface VisualizerSharedProps {
     currentTime: MotionValue<number>;
@@ -44,6 +45,7 @@ export interface VisualizerSharedProps {
     songTitle?: string | null;
     songArtist?: string | null;
     songAlbum?: string | null;
+    songDuration?: number | null;
     coverUrl?: string | null;
     seed?: string | number;
     staticMode?: boolean;
@@ -93,6 +95,8 @@ export interface VisualizerSharedProps {
     onLumiereTuningChange?: (patch: Partial<LumiereTuning>) => void;
     lakeTuning?: LakeTuning;
     onLakeTuningChange?: (patch: Partial<LakeTuning>) => void;
+    jizuraTuning?: JizuraTuning;
+    onJizuraTuningChange?: (patch: Partial<JizuraTuning>) => void;
 }
 
 export interface VisualizerSettingsPanelProps {
@@ -144,6 +148,8 @@ export interface VisualizerSettingsPanelProps {
     onLumiereTuningChange?: (patch: Partial<LumiereTuning>) => void;
     lakeTuning?: LakeTuning;
     onLakeTuningChange?: (patch: Partial<LakeTuning>) => void;
+    jizuraTuning?: JizuraTuning;
+    onJizuraTuningChange?: (patch: Partial<JizuraTuning>) => void;
     /** Mark slider drag start so onChange only updates draft. */
     onSliderPointerDown?: () => void;
     /** Commit draft values to persistent store on slider release. */
@@ -164,6 +170,7 @@ export interface VisualizerSettingsResetProps {
     resetTemperaTuning?: () => void;
     resetLumiereTuning?: () => void;
     resetLakeTuning?: () => void;
+    resetJizuraTuning?: () => void;
     setDraftFumeTuning?: (tuning: FumeTuning) => void;
     setDraftCladdaghTuning?: (tuning: CladdaghTuning) => void;
     setDraftPendoloTuning?: (tuning: PendoloTuning) => void;

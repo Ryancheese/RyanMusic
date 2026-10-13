@@ -308,6 +308,9 @@ export function createStage(canvas, opts = {}) {
   // the picture's tier (app.js TIERS): main MSAA, the mirror's size and how often it is drawn. High is the picture
   // as it was (main 4x, mirror half size 4x, every frame); mid and low lose only these
   const Qt = {mirror: .5, every: 1, ratio: 1, n: 0};
+  // 0 draws the reflection every frame, 1 every other, 2 keeps the last one. A late frame (the electro
+  // grid lit by a drum section) must not paint that scene twice, or the next frame is later still.
+  let frameAt = 0, mirrorLoad = 0, mirrorTick = 0;
   function setQuality(T) {
     if (!T) return;
     const ms = T.msaa ?? 4, mm = ms >= 4 ? 4 : 0;
@@ -347,7 +350,15 @@ export function createStage(canvas, opts = {}) {
   }
   function render(F, {clock = 0, live = 1, capture = false} = {}) {
     if (!track) return;
-    if (PROF) { profT = performance.now(); prof.n++; }
+    const wall = performance.now();
+    const gapMs = frameAt ? wall - frameAt : 16;
+    frameAt = wall;
+    if (!capture) {
+      if (gapMs > 48) mirrorLoad = 2;
+      else if (gapMs > 32) mirrorLoad = Math.max(mirrorLoad, 1);
+      else if (gapMs < 22) mirrorLoad = 0;
+    }
+    if (PROF) { profT = wall; prof.n++; }
     const t = F.t, lt = t + shift + LEAD;
     // pointer: smoothed, and only in live mode (stills stay deterministic)
     const pIn = !capture && pointer.x > -5;
@@ -436,7 +447,9 @@ export function createStage(canvas, opts = {}) {
       scene.background = black; renderer.clippingPlanes = [clipPlane]; lyrics.shared.uMirror.value = 1; imagery.mirror.value = 1;
       const prevRT = renderer.getRenderTarget();
       // (the low tier draws the reflection every second frame; the water keeps the last one between)
-      if (capture || Qt.every < 2 || Qt.n++ % Qt.every === 0) { renderer.setRenderTarget(reflRT); renderer.clear(); renderer.render(scene, mirrorCam); }
+      mirrorTick++;
+      const skipMirror = !capture && (mirrorLoad > 1 || (mirrorLoad === 1 && (mirrorTick & 1) === 1));
+      if (!skipMirror && (capture || Qt.every < 2 || Qt.n++ % Qt.every === 0)) { renderer.setRenderTarget(reflRT); renderer.clear(); renderer.render(scene, mirrorCam); }
       renderer.setRenderTarget(prevRT); renderer.clippingPlanes = []; scene.background = bg; lyrics.shared.uMirror.value = 0; imagery.mirror.value = 0; mark('mirror', true);
       // sky: the song's grade and play mode, breathing with the music; the lake below it
       skyP.tick(F, t, capture);

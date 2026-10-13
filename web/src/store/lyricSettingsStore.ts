@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { LyricProviderSource } from '../types';
-import { DEFAULT_LYRIC_FILTER_PATTERN } from '../utils/lyrics/filtering';
+import { DEFAULT_LYRIC_FILTER_PATTERN, PREVIOUS_DEFAULT_LYRIC_FILTERS } from '../utils/lyrics/filtering';
 
 const KEY = 'ryanmusic-lyric-source-v1';
 export const LYRIC_SOURCE_OPTIONS: { id: LyricProviderSource; label: string }[] = [
@@ -23,6 +23,13 @@ function isLyricProviderSource(value: unknown): value is LyricProviderSource {
   return value === 'netease' || value === 'amll' || value === 'qq' || value === 'kugou';
 }
 
+function resolveFilterPattern(stored: unknown): string {
+  if (typeof stored !== 'string') return DEFAULT_LYRIC_FILTER_PATTERN;
+  const pattern = stored.trim();
+  if (!pattern || PREVIOUS_DEFAULT_LYRIC_FILTERS.includes(pattern)) return DEFAULT_LYRIC_FILTER_PATTERN;
+  return stored;
+}
+
 interface PersistedLyricSettings {
   preferred?: string;
   filterEnabled?: boolean;
@@ -43,9 +50,7 @@ function readSettings(): {
         ? parsed.preferred
         : DEFAULT_PREFERRED_LYRIC_SOURCE,
       filterEnabled: parsed?.filterEnabled !== false,
-      filterPattern: typeof parsed?.filterPattern === 'string'
-        ? parsed.filterPattern
-        : DEFAULT_LYRIC_FILTER_PATTERN,
+      filterPattern: resolveFilterPattern(parsed?.filterPattern),
       autoUseBest: parsed?.autoUseBest !== false,
     };
   } catch {

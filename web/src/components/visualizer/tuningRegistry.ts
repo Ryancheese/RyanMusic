@@ -9,6 +9,7 @@ import type {
     PartitaTuning,
     PendoloTuning,
     LumiereTuning,
+    JizuraTuning,
     LakeTuning,
     SonnetTuning,
     TemperaTuning,
@@ -34,6 +35,7 @@ export interface VisualizerTuningMap {
     tempera: TemperaTuning;
     lumiere: LumiereTuning;
     lake: LakeTuning;
+    jizura: JizuraTuning;
 }
 
 export type VisualizerTuningMode = keyof VisualizerTuningMap;

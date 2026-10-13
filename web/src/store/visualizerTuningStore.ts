@@ -10,6 +10,7 @@ import {
   DEFAULT_PARTITA_TUNING,
   DEFAULT_PENDOLO_TUNING,
   DEFAULT_LUMIERE_TUNING,
+  DEFAULT_JIZURA_TUNING,
   DEFAULT_LAKE_TUNING,
   DEFAULT_SONNET_TUNING,
   DEFAULT_TEMPERA_TUNING,
@@ -24,6 +25,7 @@ import {
   type PartitaTuning,
   type PendoloTuning,
   type LumiereTuning,
+  type JizuraTuning,
   type LakeTuning,
   type SonnetTuning,
   type TemperaTuning,
@@ -49,6 +51,7 @@ export interface VisualizerTuningsState {
   tempera: TemperaTuning;
   lumiere: LumiereTuning;
   lake: LakeTuning;
+  jizura: JizuraTuning;
 }
 
 export const VISUALIZER_TUNING_DEFAULTS: VisualizerTuningsState = {
@@ -68,6 +71,7 @@ export const VISUALIZER_TUNING_DEFAULTS: VisualizerTuningsState = {
   sonnet: { ...DEFAULT_SONNET_TUNING },
   lumiere: { ...DEFAULT_LUMIERE_TUNING },
   lake: { ...DEFAULT_LAKE_TUNING },
+  jizura: { ...DEFAULT_JIZURA_TUNING },
   tempera: {
     ...DEFAULT_TEMPERA_TUNING,
     layerImages: [],
@@ -113,6 +117,7 @@ const readTunings = (): VisualizerTuningsState => {
       sonnet: { ...DEFAULT_SONNET_TUNING, ...parsed?.sonnet },
       lumiere: { ...DEFAULT_LUMIERE_TUNING, ...parsed?.lumiere },
       lake: { ...DEFAULT_LAKE_TUNING, ...parsed?.lake },
+      jizura: { ...DEFAULT_JIZURA_TUNING, ...parsed?.jizura },
       tempera,
     };
   } catch {
@@ -140,6 +145,7 @@ interface VisualizerTuningStore extends VisualizerTuningsState {
   patchMonet: (patch: Partial<MonetTuning>) => void;
   patchLumiere: (patch: Partial<LumiereTuning>) => void;
   patchLake: (patch: Partial<LakeTuning>) => void;
+  patchJizura: (patch: Partial<JizuraTuning>) => void;
   patchPendolo: (patch: Partial<PendoloTuning>) => void;
   patchSonnet: (patch: Partial<SonnetTuning>) => void;
   patchTempera: (patch: Partial<TemperaTuning>) => void;
@@ -169,6 +175,7 @@ const pick = (state: VisualizerTuningStore): VisualizerTuningsState => ({
   sonnet: state.sonnet,
   lumiere: state.lumiere,
   lake: state.lake,
+  jizura: state.jizura,
   tempera: state.tempera,
 });
 
@@ -262,6 +269,11 @@ export const useVisualizerTuningStore = create<VisualizerTuningStore>((set, get)
     set(next);
     persist(next);
   },
+  patchJizura: (patch) => {
+    const next = { ...pick(get()), jizura: { ...get().jizura, ...patch } };
+    set(next);
+    persist(next);
+  },
   resetMode: (mode) => {
     const defaults = VISUALIZER_TUNING_DEFAULTS[mode];
     const next = {
@@ -296,6 +308,7 @@ export const useVisualizerTuningStore = create<VisualizerTuningStore>((set, get)
       sonnet: { ...DEFAULT_SONNET_TUNING },
       lumiere: { ...DEFAULT_LUMIERE_TUNING },
       lake: { ...DEFAULT_LAKE_TUNING },
+      jizura: { ...DEFAULT_JIZURA_TUNING },
       tempera: mergeTempera(null),
     };
     set(fresh);

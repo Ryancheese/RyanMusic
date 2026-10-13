@@ -1,12 +1,12 @@
 /** 当前应用版本（与 Info.plist / Windows Version / server package 保持一致） */
-export const APP_VERSION = '2.0.10';
+export const APP_VERSION = '2.0.11';
 
 const SEEN_KEY = 'ryanmusic-whats-new-seen';
 
 /** 本版启动后弹窗展示的更新说明 */
-export const WHATS_NEW_NOTES = `• 新增湖面舞台，歌词站在水线上，可选六种演出和七种样子
-• 暂停较久后再播放会恢复声音
-• 播放条滑到左右按钮时，放大效果保持连续`;
+export const WHATS_NEW_NOTES = `• 新增字面舞台
+• 湖面纯音乐按整首时长演出，进鼓时画面继续走
+• 歌词过滤去掉纯音乐占位句、制作信息和平台水印`;
 
 export function shouldShowWhatsNew(currentVersion = APP_VERSION): boolean {
   try {

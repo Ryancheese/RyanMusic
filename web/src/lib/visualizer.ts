@@ -17,6 +17,7 @@ export function createAudioBands(): AudioBands {
     mid: motionValue(0),
     vocal: motionValue(0),
     treble: motionValue(0),
+    spectrum: motionValue(new Uint8Array(new ArrayBuffer(0))),
   };
 }
 
@@ -131,12 +132,17 @@ export function pulseAudioBands(bands: AudioBands, analyser: AnalyserNode | null
     decay(bands.mid);
     decay(bands.vocal);
     decay(bands.treble);
+    const spec = bands.spectrum?.get();
+    if (spec?.length) {
+      for (let i = 0; i < spec.length; i += 1) spec[i] = (spec[i] * 0.92) | 0;
+    }
     return;
   }
   if (!analyserBuffer || analyserBuffer.length !== analyser.frequencyBinCount) {
     analyserBuffer = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
   }
   analyser.getByteFrequencyData(analyserBuffer as never);
+  if (bands.spectrum && bands.spectrum.get() !== analyserBuffer) bands.spectrum.set(analyserBuffer);
   const data = analyserBuffer;
   const avg = (from: number, to: number) => {
     let sum = 0;

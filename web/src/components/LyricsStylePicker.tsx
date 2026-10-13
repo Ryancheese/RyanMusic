@@ -217,6 +217,7 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
     sonnet: state.sonnet,
     lumiere: state.lumiere,
     lake: state.lake,
+    jizura: state.jizura,
     tempera: state.tempera,
     patchClassic: state.patchClassic,
     patchPartita: state.patchPartita,
@@ -230,6 +231,7 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
     patchSonnet: state.patchSonnet,
     patchLumiere: state.patchLumiere,
     patchLake: state.patchLake,
+    patchJizura: state.patchJizura,
     patchTempera: state.patchTempera,
     resetMode: state.resetMode,
   })));
@@ -449,6 +451,8 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
     onLumiereTuningChange: tunings.patchLumiere,
     lakeTuning: tunings.lake,
     onLakeTuningChange: tunings.patchLake,
+    jizuraTuning: tunings.jizura,
+    onJizuraTuningChange: tunings.patchJizura,
     temperaTuning: tunings.tempera,
     onTemperaTuningChange: tunings.patchTempera,
   });

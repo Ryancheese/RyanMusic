@@ -20,7 +20,7 @@ export function timedLyricScore(text?: string | null): number {
   return word * 10 + lrc;
 }
 
-const PLACEHOLDER_LYRIC_RE = /^(?:暂无歌词|无歌词|纯音乐(?:[，,]?\s*请欣赏)?|此歌曲为没有填词的纯音乐|instrumental|not\s*available|no\s*lyrics?)[\s.…]*$/iu;
+const PLACEHOLDER_LYRIC_RE = /^(?:暂无歌词|无歌词|纯音乐(?:[，,]?\s*请您?欣赏)?|此歌曲为没有填词的纯音乐(?:[，,]?\s*请您?欣赏)?|instrumental|not\s*available|no\s*lyrics?)[\s.…]*$/iu;
 const PURE_MUSIC_NOTICE = '纯音乐，请欣赏';
 
 /** Folia：正文含「纯音乐，请欣赏」即视为纯音乐占位 */
@@ -32,7 +32,11 @@ export function isPureMusicLyricText(text?: string | null): boolean {
     .replace(/\s+/g, ' ')
     .trim();
   if (!raw) return false;
-  return raw.includes(PURE_MUSIC_NOTICE) || raw.includes('纯音乐,请欣赏');
+  return raw.includes(PURE_MUSIC_NOTICE)
+    || raw.includes('纯音乐,请欣赏')
+    || raw.includes('纯音乐，请您欣赏')
+    || raw.includes('纯音乐,请您欣赏')
+    || raw.includes('没有填词的纯音乐');
 }
 
 /** 去掉时间轴后是否仅为「暂无歌词」等占位 */

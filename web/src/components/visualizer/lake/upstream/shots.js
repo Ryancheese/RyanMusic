@@ -772,8 +772,16 @@ export function createShots(track, sig, score, offset = 0, modeName = 'lake') {
   }
   function reset(t) { const t0 = t - 3; target(t0 + AHEAD, tg); snapTo(t0); }
   function camera(t, cam) {
-    if (S.t === null || t < S.t - .05 || t - S.t > .5 || !Number.isFinite(S.pos.x + S.look.x + S.q.w + S.fov)) reset(t);
-    while (S.t < t - 1e-6) { const dt = Math.min(1 / 60, t - S.t); step(S.t + dt, dt); }
+    // A stall used to rewind three seconds and integrate every step on the main thread. A drum
+    // section that already missed a frame would then miss the next one too, and the picture locked.
+    const gap = S.t == null ? 0 : t - S.t;
+    if (S.t === null || t < S.t - .05 || gap > .2 || !Number.isFinite(S.pos.x + S.look.x + S.q.w + S.fov)) {
+      target(Math.max(0, t), tg); snapTo(t);
+    } else {
+      let steps = 0;
+      while (S.t < t - 1e-6 && steps++ < 5) { const dt = Math.min(1 / 60, t - S.t); step(S.t + dt, dt); }
+      if (S.t < t - 1e-6) snapTo(t);
+    }
     cam.position.copy(S.pos); cam.quaternion.copy(S.q);
     if (cam.isPerspectiveCamera) { cam.fov = S.fov; cam.updateProjectionMatrix(); }
     return cam;

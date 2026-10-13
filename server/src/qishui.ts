@@ -15,7 +15,7 @@ const PUBLIC_CONTENTS_URL = 'https://api-vehicle.volcengine.com/v2/custom/conten
 const PC_TRACK_URL = 'https://api.qishui.com/luna/pc/track_v2';
 const PUBLIC_HEADERS = {
   Accept: 'application/json,text/plain,*/*',
-  'User-Agent': 'RyanMusic/2.0.10 (Qishui catalog)',
+  'User-Agent': 'RyanMusic/2.0.11 (Qishui catalog)',
 };
 const PC_UA = 'LunaPC/3.3.0(359450208)';
 

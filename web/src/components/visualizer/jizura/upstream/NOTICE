@@ -1,0 +1,19 @@
+JIZURA lyric stage
+https://github.com/852wa/JIZURA/
+
+The JavaScript in this directory is the stage engine from src/ of that project
+(planner, renderer, styles, and the expression packs). It is licensed under
+the MIT License. Copyright (c) 2026 hakoniwa. See LICENSE in this directory.
+
+Not included: the editor UI (src/12_ui.js), MP4 export (src/11_export.js),
+After Effects tooling, and vendor/mp4-muxer. Fonts are loaded from Google
+Fonts when a frame is drawn; they are not bundled here.
+
+RyanMusic plays this engine from the song's lyric times. The files stay
+separate and are concatenated in filename order when the app is built, the
+same order JIZURA's own build uses.
+
+RyanMusic changes:
+- 09_render.js: live playback can skip the full-frame glow. Copying the finished
+  frame back to blur it costs most of a frame, so the player sets noBloom.
+  Playback also asks for every frame (koma 0, 60fps) instead of the 12fps step.

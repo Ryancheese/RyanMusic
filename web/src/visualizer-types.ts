@@ -161,6 +161,43 @@ export const DEFAULT_LAKE_TUNING: LakeTuning = {
   water: 0.85,
 };
 
+export type JizuraStyle =
+  | 'noir'
+  | 'crimson'
+  | 'caution'
+  | 'magenta'
+  | 'paper'
+  | 'hud'
+  | 'mint'
+  | 'specimen'
+  | 'transit'
+  | 'blueprint'
+  | 'rouge'
+  | 'mono'
+  | 'sakura'
+  | 'ocean'
+  | 'sunset'
+  | 'forest'
+  | 'vapor'
+  | 'newsprint'
+  | 'synth80'
+  | 'kraft'
+  | 'candy'
+  | 'acid'
+  | 'sumi'
+  | 'gold'
+  | 'hrRuin'
+  | 'hrNightRec'
+  | 'hrCurse';
+
+export interface JizuraTuning {
+  style: JizuraStyle;
+}
+
+export const DEFAULT_JIZURA_TUNING: JizuraTuning = {
+  style: 'sakura',
+};
+
 export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
   lightIntensity: 1,
   audioResponse: 1,

@@ -94,6 +94,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
     sonnet: state.sonnet,
     lumiere: state.lumiere,
     lake: state.lake,
+    jizura: state.jizura,
     tempera: state.tempera,
   })));
   const resolvedLyrics = useMemo(
@@ -146,6 +147,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
             showText
             songTitle={track.title}
             songArtist={track.author}
+            songDuration={(track.durationMs || 0) / 1000}
             coverUrl={coverUrl}
             seed={track.songid}
             paused={paused}

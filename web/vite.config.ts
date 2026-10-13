@@ -32,6 +32,24 @@ function copyManifestPlugin() {
   };
 }
 
+function jizuraEnginePlugin() {
+  const virtual = '\0jizura-engine';
+  const dir = path.resolve(rootDir, 'src/components/visualizer/jizura/upstream');
+  return {
+    name: 'jizura-engine',
+    resolveId(id: string) {
+      if (id === 'jizura-engine') return virtual;
+    },
+    load(this: { addWatchFile: (file: string) => void }, id: string) {
+      if (id !== virtual) return null;
+      const files = fs.readdirSync(dir).filter((name) => name.endsWith('.js')).sort();
+      for (const name of files) this.addWatchFile(path.join(dir, name));
+      const body = files.map((name) => fs.readFileSync(path.join(dir, name), 'utf8')).join('\n;\n');
+      return `${body}\nexport {}\n`;
+    },
+  };
+}
+
 function proxyApiPlugin() {
   return {
     name: 'ryanmusic-api-proxy',
@@ -84,7 +102,7 @@ function proxyApiPlugin() {
 }
 
 export default defineConfig(({ command }) => ({
-  plugins: [react(), tailwindcss(), proxyApiPlugin(), copyManifestPlugin()],
+  plugins: [react(), tailwindcss(), jizuraEnginePlugin(), proxyApiPlugin(), copyManifestPlugin()],
   base: command === 'build' ? '/static/app/' : '/',
   build: {
     outDir: path.resolve(rootDir, '../web-root/static/app'),
