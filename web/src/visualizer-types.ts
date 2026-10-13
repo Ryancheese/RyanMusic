@@ -145,6 +145,22 @@ export interface LumiereTuning {
   renderQuality: LumiereRenderQuality;
 }
 
+export type LakeOutline = 'lake' | 'orbit' | 'strike' | 'still' | 'screen' | 'flow';
+export type LakeLook = 'rock' | 'pop' | 'electro' | 'hiphop' | 'anime' | 'soft' | 'indie';
+
+export interface LakeTuning {
+  outline: LakeOutline;
+  look: LakeLook;
+  /** 水面和倒影的强度，0 为关掉。 */
+  water: number;
+}
+
+export const DEFAULT_LAKE_TUNING: LakeTuning = {
+  outline: 'lake',
+  look: 'pop',
+  water: 0.85,
+};
+
 export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
   lightIntensity: 1,
   audioResponse: 1,

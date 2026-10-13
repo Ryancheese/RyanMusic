@@ -20,7 +20,7 @@ import { useWebFullscreen } from './lib/webFullscreen';
 import WindowControls from './components/WindowControls';
 import TitlebarDragZone from './components/TitlebarDragZone';
 import { peekTrackProfile, plainBlend, planAutomix, primeTrackProfile, profileFromTail } from './lib/automix';
-import { attachAudioGraph, readMixRms, resetDeckTone, scheduleBlend, snapDeckGain, unlockAudio } from './lib/audioGraph';
+import { attachAudioGraph, beginAudioWake, parkAudioGraph, readMixRms, rearmDeckOutput, resetDeckTone, scheduleBlend, snapDeckGain, unlockAudio } from './lib/audioGraph';
 import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig, writeVisualizerMode } from './lib/visualizer';
 import { loadCustomBackgroundImage } from './lib/customBackgroundImage';
 import { useLibraryStore } from './store/libraryStore';
@@ -651,15 +651,14 @@ const App: React.FC = () => {
   }, [setStatus]);
 
   const resumeWebAudioPlayback = useCallback(async () => {
-    await unlockAudio();
+    const wake = beginAudioWake();
     const audio = clockAudio();
     if (!audio) return;
     const blend = blendRef.current;
     const incoming = blend ? deckList()[blend.incomingDeck] : audio;
     const incomingGraph = fadeOf(incoming);
-    // 暂停时 AudioContext 仍在走，交叉淡化的增益曲线可能已经跑完，听起来就像没声。
     if (incomingGraph?.fade) {
-      snapDeckGain(incomingGraph.fade, 1);
+      rearmDeckOutput(incomingGraph.fade);
       resetDeckTone(incomingGraph);
     }
     if (!blend) {
@@ -667,11 +666,17 @@ const App: React.FC = () => {
       const idleGraph = fadeOf(idle);
       if (idleGraph?.fade) snapDeckGain(idleGraph.fade, 0);
     }
+    const playTarget = incoming;
+    if (!playTarget) return;
+    if (wake.longPause) {
+      const keep = Number.isFinite(playTarget.currentTime) ? playTarget.currentTime : 0;
+      try { playTarget.currentTime = Math.max(0, keep - 0.03); } catch { /* 还不能 seek */ }
+    }
     try {
-      await incoming?.play();
+      await playTarget.play();
     } catch {
-      await unlockAudio();
-      try { await incoming?.play(); } catch { /* ignore */ }
+      beginAudioWake();
+      try { await playTarget.play(); } catch { /* ignore */ }
     }
     if (blend) {
       const outgoing = deckList()[1 - blend.incomingDeck];
@@ -694,7 +699,10 @@ const App: React.FC = () => {
       nativeClockRef.current.playing = false;
       nativeClockRef.current.stamp = performance.now();
       if (isAppleTrack(current)) void pauseAppleMusic();
-      else deckList().forEach((audio) => audio?.pause());
+      else {
+        deckList().forEach((audio) => audio?.pause());
+        parkAudioGraph();
+      }
       return;
     }
     playbackIntentRef.current = 'playing';
@@ -1693,7 +1701,10 @@ const App: React.FC = () => {
       setStatus('paused');
       setBuffering(false);
       if (isAppleTrack(track)) void pauseAppleMusic();
-      else deckList().forEach((audio) => audio?.pause());
+      else {
+        deckList().forEach((audio) => audio?.pause());
+        parkAudioGraph();
+      }
     });
     navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
     navigator.mediaSession.setActionHandler('nexttrack', () => playNext());

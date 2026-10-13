@@ -1,0 +1,15 @@
+Universe Anthem stage
+https://github.com/NAMELESSAurora/Universe-Anthem
+
+The JavaScript in this directory is taken from proto/js of that project
+(stage, lyrics, shots, sky, figures, and the modules they import).
+It is licensed under the GNU Affero General Public License v3.0.
+See LICENSE in this directory.
+
+RyanMusic changes, so the same stage can run inside this app:
+- data.js: LIBRARY is optional. This bundle has no /l library index.
+- data.js: analyseInWorker rejects. The analysis worker is not included.
+- genre.js: styleOf reads track.forceStyle, so the look picker can choose a style.
+
+Sky video loops are not included. The stage is opened with loops turned off,
+so the night sky is the live aurora and haze from sky.js.

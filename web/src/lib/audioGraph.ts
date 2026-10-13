@@ -126,12 +126,65 @@ function needsResume(context: AudioContext) {
   return context.state !== 'running' && context.state !== 'closed';
 }
 
+const LONG_PAUSE_MS = 8_000;
+let pausedStamp = 0;
+let suspendTimer = 0;
+
+function kickOutput(context: AudioContext) {
+  try {
+    const buffer = context.createBuffer(1, 1, context.sampleRate || 44100);
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    source.start();
+  } catch {
+    // 唤醒失败不影响后面的 play()。
+  }
+}
+
+/** 暂停一会儿后挂起上下文。WKWebView 里上下文空转太久，再 play() 会只走进度、没有声音。 */
+export function parkAudioGraph() {
+  pausedStamp = performance.now();
+  window.clearTimeout(suspendTimer);
+  suspendTimer = window.setTimeout(() => {
+    const context = shared?.context;
+    if (!context || context.state !== 'running') return;
+    void context.suspend().then(() => undefined, () => undefined);
+  }, 1200);
+}
+
 export function unlockAudio(): Promise<void> {
+  window.clearTimeout(suspendTimer);
   const pending: Promise<void>[] = [];
   for (const context of contexts) {
-    if (needsResume(context)) pending.push(context.resume().then(() => undefined, () => undefined));
+    if (!needsResume(context)) continue;
+    kickOutput(context);
+    pending.push(context.resume().then(() => undefined, () => undefined));
   }
   return pending.length ? Promise.all(pending).then(() => undefined) : Promise.resolve();
+}
+
+/**
+ * 在点击处理里同步调用，保住用户手势。
+ * 长暂停时调用方再拨一下 currentTime，叫醒已经静音的 MediaElementSource。
+ */
+export function beginAudioWake(): { longPause: boolean } {
+  window.clearTimeout(suspendTimer);
+  const longPause = pausedStamp > 0 && performance.now() - pausedStamp > LONG_PAUSE_MS;
+  pausedStamp = 0;
+  const context = shared?.context;
+  if (!context || context.state === 'closed') return { longPause };
+  kickOutput(context);
+  if (needsResume(context)) void context.resume().then(() => undefined, () => undefined);
+  return { longPause };
+}
+
+/** 重新接到总线上，让已经静音的 MediaElementSource 重新出声。 */
+export function rearmDeckOutput(fade: GainNode) {
+  if (!shared) return;
+  try { fade.disconnect(); } catch { /* 可能尚未连接 */ }
+  fade.connect(shared.mix);
+  snapDeckGain(fade, 1);
 }
 
 export function attachAudioGraph(audio: HTMLMediaElement, fftSize = 256): AudioGraph | null {

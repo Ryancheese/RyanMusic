@@ -16,6 +16,7 @@ const zh = {
     visualizerSonnet: '海报',
     visualizerTempera: '凝彩',
     visualizerLumiere: '绘光',
+    visualizerLake: '湖面',
     visualizerSpotlight: '聚光',
     waitingForMusic: '',
     backToHome: '返回主页',

@@ -13,12 +13,6 @@ import { showToast } from '../store/toastStore';
 import type { LoopMode, PlayerStatus, Track } from '../types';
 import { isInterludeLine } from '../utils/lyrics/parserCore';
 
-const CONTROL_LAYOUT_SPRING = {
-  type: 'spring' as const,
-  stiffness: 280,
-  damping: 24,
-};
-
 const CONTROL_HOVER_SPRING = {
   type: 'spring' as const,
   stiffness: 380,
@@ -213,11 +207,13 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   track = null,
   children,
 }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  const [sideHover, setSideHover] = useState<'left' | 'right' | null>(null);
+  const [zone, setZone] = useState<'left' | 'center' | 'right' | null>(null);
   const [capsuleWidth, setCapsuleWidth] = useState(0);
-  const expandTimeoutRef = useRef<number | null>(null);
   const collapseTimeoutRef = useRef<number | null>(null);
+  const zoneRef = useRef<'left' | 'center' | 'right' | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const leftBtnRef = useRef<HTMLButtonElement>(null);
+  const rightChromeRef = useRef<HTMLDivElement>(null);
   const capsuleRef = useRef<HTMLDivElement>(null);
   const coarsePointer = useCoarsePointer();
   const isMobile = useIsMobile();
@@ -237,9 +233,11 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const skipIconSize = isMobile ? 16 : 18;
   // 悬停侧钮时，把邻居往外挤开（约等于放大后伸出的半径 + 一点间距）
   const sidePush = (SIDE_BTN_SIZE * (sideHoverScale - 1)) / 2 + (isMobile ? 6 : 8);
-  // 默认与暂停保持缩小；悬停/触摸/缓冲加载时才展开
+  const isHovered = zone === 'center';
+  const sideHover = zone === 'left' || zone === 'right' ? zone : null;
+  // 指针还在整条播放条上时保持展开，避免滑到左右按钮时中间先缩回去
   const showExpanded =
-    isHovered
+    zone !== null
     || coarsePointer
     || (buffering && status === 'loading');
   const mobilePlayerExpanded = isMobile && currentView === 'player' && showExpanded;
@@ -272,44 +270,55 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
   const centerX = sideHover === 'left' ? sidePush : (sideHover === 'right' ? -sidePush : 0);
   const rightX = sideHover === 'left' ? sidePush : centerOutShift;
 
-  const clearHoverTimers = () => {
-    if (expandTimeoutRef.current) {
-      window.clearTimeout(expandTimeoutRef.current);
-      expandTimeoutRef.current = null;
+  const assignZone = (next: 'left' | 'center' | 'right' | null) => {
+    if (zoneRef.current === next) return;
+    zoneRef.current = next;
+    setZone(next);
+  };
+
+  const zoneAt = (clientX: number): 'left' | 'center' | 'right' => {
+    const row = rowRef.current;
+    const cap = capsuleRef.current;
+    if (!row || !cap) return 'center';
+    const localX = clientX - row.getBoundingClientRect().left;
+    const capStart = cap.offsetLeft;
+    const capEnd = capStart + cap.offsetWidth;
+    const current = zoneRef.current;
+    if (leftBtnRef.current) {
+      const edge = current === 'left' ? capStart + 12 : capStart;
+      if (localX < edge) return 'left';
     }
+    if (rightChromeRef.current) {
+      const edge = current === 'right' ? capEnd - 12 : capEnd;
+      if (localX > edge) return 'right';
+    }
+    return 'center';
+  };
+
+  const onDockMove = (event: React.PointerEvent) => {
+    if (coarsePointer || event.pointerType === 'touch') return;
     if (collapseTimeoutRef.current) {
       window.clearTimeout(collapseTimeoutRef.current);
       collapseTimeoutRef.current = null;
     }
+    assignZone(zoneAt(event.clientX));
   };
 
-  const onCapsuleEnter = () => {
-    if (collapseTimeoutRef.current) {
-      window.clearTimeout(collapseTimeoutRef.current);
-      collapseTimeoutRef.current = null;
-    }
-    if (expandTimeoutRef.current) return;
-    expandTimeoutRef.current = window.setTimeout(() => {
-      setIsHovered(true);
-      expandTimeoutRef.current = null;
-    }, 20);
-  };
-
-  const onCapsuleLeave = () => {
-    if (expandTimeoutRef.current) {
-      window.clearTimeout(expandTimeoutRef.current);
-      expandTimeoutRef.current = null;
-    }
+  const onDockLeave = () => {
+    if (coarsePointer) return;
+    if (collapseTimeoutRef.current) window.clearTimeout(collapseTimeoutRef.current);
     collapseTimeoutRef.current = window.setTimeout(() => {
-      setIsHovered(false);
+      assignZone(null);
       collapseTimeoutRef.current = null;
-    }, 100);
+    }, 70);
   };
 
-  useEffect(() => () => clearHoverTimers(), []);
+  useEffect(() => () => {
+    if (collapseTimeoutRef.current) window.clearTimeout(collapseTimeoutRef.current);
+  }, []);
 
   useEffect(() => {
-    if (hideDock) setSideHover(null);
+    if (hideDock) assignZone(null);
   }, [hideDock]);
 
   useLayoutEffect(() => {
@@ -359,12 +368,17 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
       onClick={(event) => event.stopPropagation()}
     >
       <div
-        className={`pointer-events-auto flex items-center justify-center overflow-visible ${
+        ref={rowRef}
+        className={`pointer-events-auto relative flex items-center justify-center overflow-visible ${
           showSideChrome ? `w-fit max-w-full ${isMobile ? 'gap-1.5' : 'gap-2'}` : `w-full max-w-lg ${isMobile ? 'gap-2' : 'gap-3'}`
         }`}
+        onPointerEnter={onDockMove}
+        onPointerMove={onDockMove}
+        onPointerLeave={onDockLeave}
       >
         {showSideChrome && onBack ? (
           <motion.button
+            ref={leftBtnRef}
             type="button"
             aria-label="返回"
             className={`flex ${sideBtnClass} shrink-0 items-center justify-center rounded-full outline-none ring-0`}
@@ -377,8 +391,6 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
             }}
             whileTap={{ scale: Math.max(0.92, sideHoverScale - 0.1) }}
             transition={CONTROL_HOVER_SPRING}
-            onMouseEnter={() => setSideHover('left')}
-            onMouseLeave={() => setSideHover((prev) => (prev === 'left' ? null : prev))}
             onClick={onBack}
           >
             <ArrowLeft size={18} />
@@ -393,9 +405,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
             x: centerX,
             width: playerCapsuleWidth,
           }}
-          transition={CONTROL_LAYOUT_SPRING}
-          onMouseEnter={onCapsuleEnter}
-          onMouseLeave={onCapsuleLeave}
+          transition={CONTROL_HOVER_SPRING}
         >
           {currentView === 'home' && isHovered && !coarsePointer ? (
             <div
@@ -561,6 +571,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
 
         {showSideChrome && onTogglePanel ? (
           <motion.div
+            ref={rightChromeRef}
             className="relative flex shrink-0 flex-col items-center gap-1.5"
             initial={false}
             animate={{ x: rightX }}
@@ -580,8 +591,6 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                 animate={{ scale: sideHover === 'right' ? sideHoverScale : 1 }}
                 whileTap={{ scale: Math.max(0.92, sideHoverScale - 0.1) }}
                 transition={CONTROL_HOVER_SPRING}
-                onMouseEnter={() => setSideHover('right')}
-                onMouseLeave={() => setSideHover((prev) => (prev === 'right' ? null : prev))}
                 onClick={(event) => {
                   event.stopPropagation();
                   onFullscreenClick();
@@ -602,8 +611,6 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
               animate={{ scale: sideHover === 'right' ? sideHoverScale : 1 }}
               whileTap={{ scale: Math.max(0.92, sideHoverScale - 0.1) }}
               transition={CONTROL_HOVER_SPRING}
-              onMouseEnter={() => setSideHover('right')}
-              onMouseLeave={() => setSideHover((prev) => (prev === 'right' ? null : prev))}
               onClick={onTogglePanel}
             >
               <ListMusic size={18} />

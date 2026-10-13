@@ -93,6 +93,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
     pendolo: state.pendolo,
     sonnet: state.sonnet,
     lumiere: state.lumiere,
+    lake: state.lake,
     tempera: state.tempera,
   })));
   const resolvedLyrics = useMemo(

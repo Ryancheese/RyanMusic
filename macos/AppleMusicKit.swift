@@ -21,6 +21,7 @@ final class AppleMusicBridge: NSObject {
     private var avPlayer: AVPlayer?
     private var usingLocalPlayer = false
     private var playbackEpoch: UInt64 = 0
+    private var pausedAt: Date?
     private var virtualPlaylists: [String: (name: String, cover: String, tracks: [[String: Any]])] = [:]
     private var cachedCatalogPlaylists: [String: Playlist] = [:]
 
@@ -1028,6 +1029,7 @@ final class AppleMusicBridge: NSObject {
 
     @MainActor
     private func pause() {
+        pausedAt = Date()
         _ = bumpPlaybackEpoch()
         if usingLocalPlayer {
             avPlayer?.pause()
@@ -1042,8 +1044,15 @@ final class AppleMusicBridge: NSObject {
 
     @MainActor
     private func resume() async throws {
+        let stale = pausedAt.map { Date().timeIntervalSince($0) > 8 } ?? false
+        pausedAt = nil
         if usingLocalPlayer {
-            avPlayer?.play()
+            if let player = avPlayer {
+                if stale {
+                    await player.seek(to: player.currentTime(), toleranceBefore: .zero, toleranceAfter: .zero)
+                }
+                player.play()
+            }
             lastStatus = "playing"
             startStateTimer()
             emitState()
@@ -1055,6 +1064,10 @@ final class AppleMusicBridge: NSObject {
         let player = ApplicationMusicPlayer.shared
         if player.queue.currentEntry == nil {
             throw AppleMusicError.message("没有可恢复的播放")
+        }
+        if stale {
+            let time = player.playbackTime
+            player.playbackTime = max(0, time - 0.03)
         }
         try await player.play()
         lastStatus = "playing"
