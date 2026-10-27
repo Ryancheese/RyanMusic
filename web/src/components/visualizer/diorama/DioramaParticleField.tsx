@@ -32,6 +32,21 @@ import {
     lerpDioramaParticleMaterialColors,
     resolveDioramaParticleContrastColors,
 } from './dioramaParticleMaterials';
+import {
+    createDioramaBeatCounter,
+    resolveDioramaBeatClusterPulse,
+    resolveDioramaBeatRipple,
+    stepDioramaBeatCounter,
+} from './dioramaBeatRipples';
+import { beatImpact, downbeatImpact } from '../../../stores/motionSignals';
+import {
+    getBeatFxFiredCounts,
+    getBeatFxIntensities,
+    getBeatFxLastBeat,
+    getBeatFxLastDownbeat,
+    getBeatFxTrackScale,
+    isBeatFxReady,
+} from '../../../services/beatFx/beatFxLive';
 
 // src/components/visualizer/diorama/DioramaParticleField.tsx
 // Renders the active geometry mode as one deterministic, self-lit Points draw call plus an optional
@@ -217,6 +232,7 @@ export const DioramaParticleField: React.FC<DioramaParticleFieldProps> = ({
     // One valley/peak tracker per band. These are what keep a steady beat reading as a beat for the whole
     // song instead of fading into the background - see stepDioramaBandTracker.
     const trackersRef = useRef(RIPPLE_BANDS.map(() => createDioramaBandTracker()));
+    const beatCounterRef = useRef(createDioramaBeatCounter());
     const ripplesRef = useRef<RipplePool>(createRipplePool());
     const flowTimeRef = useRef(0);
     const previousPlaybackTimeRef = useRef<number | null>(null);
@@ -244,6 +260,7 @@ export const DioramaParticleField: React.FC<DioramaParticleFieldProps> = ({
         // A new song has its own loudness; the trackers must re-prime onto it rather than carry the last
         // song's floor and peak across (which would mis-read the first seconds in both directions).
         trackersRef.current = RIPPLE_BANDS.map(() => createDioramaBandTracker());
+        beatCounterRef.current = createDioramaBeatCounter();
     }, [resetKey]);
 
     useFrame((frameState, rawDelta) => {
@@ -262,6 +279,8 @@ export const DioramaParticleField: React.FC<DioramaParticleFieldProps> = ({
         const treble = stepDioramaBandTracker(trackers[2], trebleTarget, delta);
         const bands: DioramaBandSignal[] = [bass, mid, treble];
         const response = resolveDioramaParticleAudioResponse(bass, mid);
+        const beatTriggers = stepDioramaBeatCounter(beatCounterRef.current, getBeatFxFiredCounts());
+        const beatFxActive = isBeatFxReady();
         // The one place the slider lands. 0 disables the audio response entirely; 1 is the designed feel;
         // the top of the range genuinely overdrives it, because it scales the DISPLACEMENT rather than a
         // detection threshold that was already saturated.
@@ -295,8 +314,21 @@ export const DioramaParticleField: React.FC<DioramaParticleFieldProps> = ({
         if (gain > 0.001) {
             bands.forEach((signal, index) => {
                 if (!signal.onset) return;
+                if (beatFxActive && index < 2) return;
                 spawnRipple(pool, index, signal.transient, flowTimeRef.current, isCorridor, readHeadAlong);
             });
+            if (beatFxActive) {
+                const intensities = getBeatFxIntensities();
+                const trackScale = getBeatFxTrackScale();
+                if (beatTriggers.downbeat && intensities.downbeat > 0) {
+                    const ripple = resolveDioramaBeatRipple('downbeat', getBeatFxLastDownbeat(), trackScale, intensities.downbeat);
+                    if (ripple.strength > 0) spawnRipple(pool, ripple.index, ripple.strength, flowTimeRef.current, isCorridor, readHeadAlong);
+                }
+                if (beatTriggers.beat && intensities.beat > 0) {
+                    const ripple = resolveDioramaBeatRipple('beat', getBeatFxLastBeat(), trackScale, intensities.beat);
+                    if (ripple.strength > 0) spawnRipple(pool, ripple.index, ripple.strength, flowTimeRef.current, isCorridor, readHeadAlong);
+                }
+            }
         }
 
         // The corridor keeps only a trace of the whole-body pulse (see DIORAMA_CORRIDOR_PULSE_SHARE): its
@@ -304,7 +336,11 @@ export const DioramaParticleField: React.FC<DioramaParticleFieldProps> = ({
         // camera. The clouds keep it in full - a cluster breathing on the beat is the point there.
         const elasticPulse = stepDioramaParticleElasticResponse(
             elasticStateRef.current,
-            resolveDioramaPulseTarget(response.clusterPulse, gain, isCorridor),
+            resolveDioramaPulseTarget(
+                beatFxActive ? resolveDioramaBeatClusterPulse(beatImpact.get(), downbeatImpact.get()) : response.clusterPulse,
+                gain,
+                isCorridor,
+            ),
             delta,
         );
         frameState.gl.getDrawingBufferSize(drawingBufferSizeRef.current);

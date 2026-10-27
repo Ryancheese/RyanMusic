@@ -17,6 +17,13 @@ import { resolvePendoloFallbackAnchorIndex } from './pendoloTimeline';
 import PendoloRotatingLine from './PendoloRotatingLine';
 import InterludeDots from '../../InterludeDots';
 import { isInterludeLine } from '../../../utils/lyrics/parserCore';
+import { resolvePendoloPointWave } from './pendoloBeatFx';
+import { resolvePendoloWaveReach, usePendoloBeatFx } from './usePendoloBeatFx';
+import { useVisualizerSettingsStore } from '../../../store/visualizerSettingsStore';
+import { smartBeatActive } from '../../../services/beatFx/beatEffects';
+
+/** Peak alpha of the beat halo's front, at full strength (additive). */
+const PENDOLO_HALO_ALPHA = 0.45;
 
 const PENDOLO_SCROLL_IDLE_RESET_MS = 2500;
 const PENDOLO_SCROLL_STEP_PX = 90;
@@ -344,6 +351,22 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const lyricRadiusOffset = Math.min(viewportSize.width, viewportSize.height) * 0.06;
     const lyricRingRadius = baseRadius + lyricRadiusOffset;
 
+    // 智能动感模式 (usePendoloBeatFx): the drumhead's halo, shake and lens. Off, every MotionValue it
+    // returns stays 0. The wheel itself keeps to the lyrics.
+    const smartBeatEnabled = useVisualizerSettingsStore((state) => smartBeatActive(state.smartBeat));
+    const beatFx = usePendoloBeatFx(
+        smartBeatEnabled,
+        {
+            centerX,
+            centerY,
+            baseRadius,
+            lyricRingRadius,
+            viewportWidth: viewportSize.width,
+            viewportHeight: viewportSize.height,
+        },
+        theme.accentColor || '#3B82F6',
+    );
+
     const maxItemX = centerX + baseRadius;
     const availableTextWidth = Math.max(
         140,
@@ -422,6 +445,32 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     }, [theme.lyricsIcons]);
     const balanceGearX = centerX + baseRadius * 0.2;
     const balanceGearY = centerY - baseRadius * 0.75;
+    // 智能动感模式's beat halo: a filled soft glow (no ring) out of the hub, grown by
+    // usePendoloBeatFx with the shockwave to the far corner and faded with it.
+    const haloReach = resolvePendoloWaveReach({
+        centerX,
+        centerY,
+        baseRadius,
+        lyricRingRadius: 0,
+        viewportWidth: viewportSize.width,
+        viewportHeight: viewportSize.height,
+    });
+    const haloBackground = useMemo(() => {
+        const [r, g, b] = beatFx.color;
+        const at = (alpha: number) => `rgba(${r},${g},${b},${alpha})`;
+        // Only a soft band at its front, clear behind it. No edge line: 0 at the rim.
+        return `radial-gradient(circle closest-side, ${at(0)} 0%, ${at(0)} 45%, ${at(PENDOLO_HALO_ALPHA * 0.15)} 65%, `
+            + `${at(PENDOLO_HALO_ALPHA)} 88%, ${at(0)} 100%)`;
+    }, [beatFx.color]);
+    // The balance's icon is DOM over the canvas: it moves with the shockwave lens as the balance
+    // wheel under it does (0 while off, so it stays exactly where it was).
+    const balanceLensInputs = [beatFx.waveRadius, beatFx.waveBand, beatFx.waveStrength, beatFx.waveX, beatFx.waveY];
+    const balanceIconX = useTransform(balanceLensInputs, ([radius, band, strength, x, y]: number[]) => (
+        resolvePendoloPointWave(balanceGearX - centerX - x, balanceGearY - centerY - y, radius, band, strength).x
+    ));
+    const balanceIconY = useTransform(balanceLensInputs, ([radius, band, strength, x, y]: number[]) => (
+        resolvePendoloPointWave(balanceGearX - centerX - x, balanceGearY - centerY - y, radius, band, strength).y
+    ));
 
     return (
         <VisualizerShell
@@ -431,6 +480,31 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
             sharedProps={props}
         >
             <div ref={visualizerRef} className="relative w-full h-full overflow-hidden select-none pointer-events-none">
+                {smartBeatEnabled && (
+                    <motion.div
+                        aria-hidden
+                        className="absolute pointer-events-none"
+                        style={{
+                            left: centerX - haloReach,
+                            top: centerY - haloReach,
+                            width: haloReach * 2,
+                            height: haloReach * 2,
+                            zIndex: 0,
+                            background: haloBackground,
+                            mixBlendMode: 'plus-lighter',
+                            willChange: 'transform',
+                            x: beatFx.haloX,
+                            y: beatFx.haloY,
+                            scale: beatFx.haloScale,
+                            opacity: beatFx.haloOpacity,
+                        }}
+                    />
+                )}
+                {/* 智能动感模式's shake moves the clockwork and the lyrics together; 0 while off. */}
+                <motion.div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ x: beatFx.shakeX, y: beatFx.shakeY, scale: beatFx.breath, transformOrigin: `${centerX}px ${centerY}px` }}
+                >
                 {/* Wireframe Dynamic Clockwork Canvas (Gears, Escapement & Hairspring) */}
                 <PendoloClockworkCanvas
                     centerX={centerX}
@@ -449,6 +523,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                     enableLineGlow={pendoloTuning.enableLineGlow ?? false}
                     paused={props.paused}
                     motionProfile={motionProfile}
+                    beatFxRef={beatFx.shared}
                 />
                 {pendoloTuning.showGearDecor !== 'none' && (
                     <div
@@ -460,12 +535,14 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                             transform: 'translate(-50%, -50%)',
                         }}
                     >
-                        <BalanceIcon
-                            size={Math.max(14, baseRadius * 0.13)}
-                            strokeWidth={1.2}
-                            absoluteStrokeWidth
-                            color={colorWithAlpha(accentTextColor, 0.62)}
-                        />
+                        <motion.div style={{ x: balanceIconX, y: balanceIconY }}>
+                            <BalanceIcon
+                                size={Math.max(14, baseRadius * 0.13)}
+                                strokeWidth={1.2}
+                                absoluteStrokeWidth
+                                color={colorWithAlpha(accentTextColor, 0.62)}
+                            />
+                        </motion.div>
                     </div>
                 )}
 
@@ -497,6 +574,13 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
 
                             return (
                                 <PendoloRotatingLine
+                                    hubX={centerX}
+                                    hubY={centerY}
+                                    waveRadius={beatFx.waveRadius}
+                                    waveBand={beatFx.waveBand}
+                                    waveStrength={beatFx.waveStrength}
+                                    waveX={beatFx.waveX}
+                                    waveY={beatFx.waveY}
                                     key={item.line.id ?? `pendolo-line-${item.index}`}
                                     wheelRotationDeg={wheelRotationDeg}
                                     baseAngleDeg={item.angleDeg}
@@ -629,6 +713,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                         })}
                     </motion.div>
                 )}
+                </motion.div>
             </div>
         </VisualizerShell>
     );

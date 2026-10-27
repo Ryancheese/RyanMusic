@@ -1,5 +1,6 @@
 import React from 'react';
 import { defineVisualizer } from '../definition';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import { DioramaSettingsPanel } from '../settingsPanels';
 import VisualizerDiorama from './VisualizerDiorama';
 
@@ -14,6 +15,12 @@ export default defineVisualizer({
     previewSeed: 'diorama',
     previewStartOffset: 0,
     tuningKind: 'diorama',
+    beatEffects: [{
+        id: BEAT_EFFECT_IDS.dioramaRipple,
+        nameKey: 'options.beatEffect_dioramaRipple',
+        descKey: 'options.beatEffect_dioramaRippleDesc',
+        source: 'beats',
+    }],
     render: props => <VisualizerDiorama {...props} />,
     renderSettingsPanel: props => <DioramaSettingsPanel {...props} />,
     resetSettings: ({ resetDioramaTuning }) => {

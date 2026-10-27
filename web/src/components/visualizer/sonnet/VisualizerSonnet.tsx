@@ -6,6 +6,8 @@ import type { Line } from '../../../types';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import type { VisualizerSharedProps } from '../definition';
+import { useVisualizerSettingsStore } from '../../../store/visualizerSettingsStore';
+import { smartBeatActive } from '../../../services/beatFx/beatEffects';
 import { useVisualizerRuntime } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
@@ -44,6 +46,9 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
         sonnetTuning = DEFAULT_SONNET_TUNING,
     } = props;
     const { t } = useTranslation();
+    const smartBeatEnabled = useVisualizerSettingsStore((state) => smartBeatActive(state.smartBeat));
+    const smartBeatEnabledRef = useRef(smartBeatEnabled);
+    smartBeatEnabledRef.current = smartBeatEnabled;
     const hostRef = useRef<HTMLDivElement>(null);
     const runtimeRef = useRef<SonnetPixiRuntime | null>(null);
     const pausedRef = useRef(paused);
@@ -134,6 +139,7 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
                     program,
                     theme,
                     tuning: sonnetTuning,
+                    smartBeatEnabled: smartBeatEnabledRef.current,
                     currentTime,
                     audioPower,
                     audioBands,
@@ -154,6 +160,7 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
                 createdRuntime = runtime;
                 runtimeRef.current = runtime;
                 runtime.setSongMetadata(latestSongMetadataRef.current);
+                runtime.setSmartBeatEnabled(smartBeatEnabledRef.current);
                 // The pause state may have changed while Pixi was importing or initializing.
                 runtime.setPaused(pausedRef.current);
             })
@@ -190,6 +197,10 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
     useEffect(() => {
         runtimeRef.current?.setPaused(paused);
     }, [paused]);
+
+    useEffect(() => {
+        runtimeRef.current?.setSmartBeatEnabled(smartBeatEnabled);
+    }, [smartBeatEnabled]);
 
     useEffect(() => currentTime.on('change', () => {
         if (paused) runtimeRef.current?.renderOnce();

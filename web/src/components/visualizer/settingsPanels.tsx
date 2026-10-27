@@ -9,7 +9,6 @@ import { DioramaSettingsToggle } from './diorama/DioramaSettingsToggle';
 import { resolveDioramaMoteCircumference, resolveDioramaMoteRadial } from './diorama/dioramaMoteField';
 import VisualizerPresetGroup, { type VisualizerPresetOption } from './VisualizerPresetGroup';
 import VisualizerSettingsIntro from './VisualizerSettingsIntro';
-
 // src/components/visualizer/settingsPanels.tsx
 // Mode-owned preview settings panels used by discoverable visualizer entries.
 type PresetOption<T> = VisualizerPresetOption<T>;

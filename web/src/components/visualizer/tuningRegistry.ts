@@ -5,6 +5,7 @@ import type {
     CladdaghTuning,
     DioramaTuning,
     FumeTuning,
+    HanabiTuning,
     MonetTuning,
     PartitaTuning,
     PendoloTuning,
@@ -34,6 +35,7 @@ export interface VisualizerTuningMap {
     sonnet: SonnetTuning;
     tempera: TemperaTuning;
     lumiere: LumiereTuning;
+    hanabi: HanabiTuning;
     lake: LakeTuning;
     jizura: JizuraTuning;
 }

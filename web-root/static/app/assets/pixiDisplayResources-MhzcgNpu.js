@@ -1,0 +1,1 @@
+const l=i=>{const e=[...i.children??[]];for(;e.length>0;){const s=e.pop();s.children?.length&&e.push(...s.children),s.unload?.()}},t=(i,e)=>{const s=i.visible!==!1;i.visible=e,s&&!e&&l(i)},c=i=>{const e=[],s=[i];for(;s.length>0;){const n=s.pop();e.push(n),n.children?.length&&s.push(...n.children)}for(let n=e.length-1;n>=0;n-=1)e[n].destroy?.()};export{c as d,t as s,l as u};

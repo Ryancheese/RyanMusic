@@ -5,7 +5,6 @@ import type { VisualizerSettingsPanelProps } from '../definition';
 import VisualizerPresetGroup, { type VisualizerPresetOption } from '../VisualizerPresetGroup';
 import VisualizerSettingsIntro from '../VisualizerSettingsIntro';
 import { SonnetRangeControl, SonnetSettingsSection } from './SonnetSettingsControls';
-
 // src/components/visualizer/sonnet/SonnetSettingsPanel.tsx
 // Keeps Sonnet's tuning controls adjacent to the mode implementation.
 const SonnetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({

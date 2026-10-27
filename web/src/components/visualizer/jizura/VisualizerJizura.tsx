@@ -45,12 +45,21 @@ const VisualizerJizura: React.FC<VisualizerSharedProps> = ({
     if (!host) return;
     return mountJizuraStage(host, (): JizuraSnap => {
       const latest = latestRef.current;
+      const tuning = { ...DEFAULT_JIZURA_TUNING, ...latest.jizuraTuning };
       return {
         time: latest.currentTime.get(),
         lines: latest.lines,
         title: latest.songTitle || '',
         artist: latest.songArtist || '',
-        style: latest.jizuraTuning.style,
+        style: tuning.style,
+        omakase: tuning.omakase,
+        theme: tuning.theme,
+        extra: tuning.extra,
+        wa: tuning.wa,
+        horror: tuning.horror,
+        typo: tuning.typo,
+        kinetic: tuning.kinetic,
+        roll: tuning.roll,
       };
     });
   }, []);

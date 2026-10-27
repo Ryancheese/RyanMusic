@@ -50,6 +50,30 @@ function jizuraEnginePlugin() {
   };
 }
 
+function staticModelsPlugin() {
+  const modelsDir = path.resolve(rootDir, '../web-root/static/models');
+  return {
+    name: 'ryanmusic-static-models',
+    apply: 'serve' as const,
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use((req, res, next) => {
+        const pathname = (req.url || '/').split('?')[0];
+        if (!pathname.startsWith('/static/models/')) {
+          next();
+          return;
+        }
+        const file = path.join(modelsDir, pathname.slice('/static/models/'.length));
+        if (!file.startsWith(modelsDir) || !fs.existsSync(file)) {
+          next();
+          return;
+        }
+        res.setHeader('Content-Type', 'application/octet-stream');
+        fs.createReadStream(file).pipe(res);
+      });
+    },
+  };
+}
+
 function proxyApiPlugin() {
   return {
     name: 'ryanmusic-api-proxy',
@@ -102,7 +126,7 @@ function proxyApiPlugin() {
 }
 
 export default defineConfig(({ command }) => ({
-  plugins: [react(), tailwindcss(), jizuraEnginePlugin(), proxyApiPlugin(), copyManifestPlugin()],
+  plugins: [react(), tailwindcss(), jizuraEnginePlugin(), staticModelsPlugin(), proxyApiPlugin(), copyManifestPlugin()],
   base: command === 'build' ? '/static/app/' : '/',
   build: {
     outDir: path.resolve(rootDir, '../web-root/static/app'),

@@ -1,12 +1,12 @@
 /** 当前应用版本（与 Info.plist / Windows Version / server package 保持一致） */
-export const APP_VERSION = '2.0.11';
+export const APP_VERSION = '2.0.12';
 
 const SEEN_KEY = 'ryanmusic-whats-new-seen';
 
 /** 本版启动后弹窗展示的更新说明 */
-export const WHATS_NEW_NOTES = `• 新增字面舞台
-• 湖面纯音乐按整首时长演出，进鼓时画面继续走
-• 歌词过滤去掉纯音乐占位句、制作信息和平台水印`;
+export const WHATS_NEW_NOTES = `• 新增花火舞台，支持随机舞台与字面随机
+• 智能动感接入鼓点模型，舞台背景设置对齐 Folia
+• 会员取链首播更快，去掉重复的加载提示`;
 
 export function shouldShowWhatsNew(currentVersion = APP_VERSION): boolean {
   try {

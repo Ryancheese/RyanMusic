@@ -1,5 +1,5 @@
 import * as LucideIcons from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import type { IconNode, LucideIcon } from 'lucide-react';
 
 // src/utils/lucideIconResolver.ts
 // Resolves a theme's lyricsIcons entry (a PascalCase lucide name coming from AI output or the
@@ -45,3 +45,26 @@ export const resolveLucideIconNames = (names: readonly string[] | undefined): st
         .map(name => (typeof name === 'string' ? iconNamesByLowercase().get(name.toLowerCase()) : undefined))
         .filter(Boolean)),
 ] as string[];
+
+/**
+ * Folia loads icons on demand; here every lucide icon is already in the bundle, so this only exists so
+ * renderers ported from Folia (hanabi) can `await` it before they build a scene.
+ */
+export const loadLucideIcons = async (_names: readonly unknown[] | undefined): Promise<void> => undefined;
+
+/**
+ * The icon's SVG node data (lucide's IconNode: [tag, attrs, children?][]) for an exact export name, or null
+ * when it is unknown. For Pixi renderers that draw the shapes themselves (hanabi's icon stickers).
+ * lucide icons are forwardRef objects whose render only builds an element carrying the node data, with no hooks.
+ */
+export const resolveLucideIconNode = (name: string | null | undefined): IconNode | null => {
+    const icon = resolveLucideIcon(name) as unknown as { render?: (props: object, ref: null) => unknown } | null;
+    if (!icon || typeof icon.render !== 'function') return null;
+    try {
+        const element = icon.render({}, null) as { props?: { iconNode?: unknown; icon?: { node?: unknown } } } | null;
+        const node = element?.props?.iconNode ?? element?.props?.icon?.node;
+        return Array.isArray(node) ? node as IconNode : null;
+    } catch {
+        return null;
+    }
+};

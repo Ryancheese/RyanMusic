@@ -8,7 +8,7 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// server/src/config.ts
+// src/config.ts
 import { createHash } from "node:crypto";
 function randomCnIp() {
   const a = CN_IP_A[Math.floor(Math.random() * CN_IP_A.length)];
@@ -21,6 +21,11 @@ function withOsPcCookie(cookie) {
   if (!cookie) return "os=pc; appver=3.1.29.205117";
   if (/(?:^|;\s*)os=/.test(cookie)) return cookie;
   return `${cookie}; os=pc; appver=3.1.29.205117`;
+}
+function parseFreePlaySource(raw2) {
+  const value = String(raw2 || "").trim();
+  if (value === "private" || value === "official" || value === "kuwo" || value === "auto") return value;
+  return "auto";
 }
 function bootstrapBase() {
   const raw2 = process.env.MC_QQ_PYQ_BOOTSTRAP ?? "https://music.90svip.cn/";
@@ -40,16 +45,16 @@ function apiSecret(coreMarker) {
 }
 var VERSION, UA, NETEASE_UA, CN_IP_A;
 var init_config = __esm({
-  "server/src/config.ts"() {
+  "src/config.ts"() {
     "use strict";
-    VERSION = "2.0.11";
+    VERSION = "2.0.12";
     UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     NETEASE_UA = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.29.205117";
     CN_IP_A = [36, 58, 111, 112, 114, 117, 120, 123, 183, 218, 223];
   }
 });
 
-// server/src/http.ts
+// src/http.ts
 var http_exports = {};
 __export(http_exports, {
   PROXY_ENV_KEYS: () => PROXY_ENV_KEYS,
@@ -131,10 +136,10 @@ async function dohResolve(host) {
   ]);
 }
 async function raceFirstNonNull(tasks) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     let pending = tasks.length;
     if (!pending) {
-      resolve(null);
+      resolve2(null);
       return;
     }
     let settled = false;
@@ -142,14 +147,14 @@ async function raceFirstNonNull(tasks) {
       void task.then((value) => {
         if (!settled && value) {
           settled = true;
-          resolve(value);
+          resolve2(value);
           return;
         }
         pending -= 1;
-        if (!settled && pending === 0) resolve(null);
+        if (!settled && pending === 0) resolve2(null);
       }).catch(() => {
         pending -= 1;
-        if (!settled && pending === 0) resolve(null);
+        if (!settled && pending === 0) resolve2(null);
       });
     }
   });
@@ -174,10 +179,10 @@ function firstLookupIp(address) {
   return v4?.address || null;
 }
 function systemLookup(hostname, opts) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     const forced = { ...opts, family: opts.family || 4 };
     originalLookup(hostname, forced, (err, address, family) => {
-      resolve({ err, address, family });
+      resolve2({ err, address, family });
     });
   });
 }
@@ -202,9 +207,9 @@ function patchedLookup(hostname, options, callback) {
     finish(null, ip2, 4);
   };
   const system = systemLookup(hostname, opts);
-  const publicDns = new Promise((resolve) => {
+  const publicDns = new Promise((resolve2) => {
     setTimeout(() => {
-      void resolveHost(hostname).then(resolve).catch(() => resolve(null));
+      void resolveHost(hostname).then(resolve2).catch(() => resolve2(null));
     }, SYSTEM_DNS_GRACE_MS);
   });
   void Promise.race([
@@ -415,7 +420,7 @@ async function followLocation(url, referer, timeoutMs = REDIRECT_TIMEOUT_MS) {
 }
 var FAKE_IP_MASK, FAKE_IP_NET, DEFAULT_TIMEOUT_MS, BUFFER_TIMEOUT_MS, REDIRECT_TIMEOUT_MS, DNS_TIMEOUT_MS, DOH_TIMEOUT_MS, SYSTEM_DNS_GRACE_MS, hostCache, dnsPatched, originalLookup, cnResolver, intlResolver, PROXY_ENV_KEYS;
 var init_http = __esm({
-  "server/src/http.ts"() {
+  "src/http.ts"() {
     "use strict";
     init_config();
     FAKE_IP_MASK = 4294836224;
@@ -453,7 +458,7 @@ var init_http = __esm({
   }
 });
 
-// server/src/util.ts
+// src/util.ts
 function decodeEntities(str) {
   return str.replace(/&#13;/g, "").replace(/&#10;/g, "\n").replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))).replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&nbsp;/g, " ").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
@@ -467,7 +472,7 @@ function timedLyricScore(text2) {
 function isPureMusicLyricText(text2) {
   const raw2 = String(text2 || "").replace(/\[[^\]]+\]/g, "").replace(/\(\d+,\d+(?:,\d+)?\)/g, "").replace(/<\d+,\d+[^>]*>/g, "").replace(/\s+/g, " ").trim();
   if (!raw2) return false;
-  return raw2.includes(PURE_MUSIC_NOTICE) || raw2.includes("\u7EAF\u97F3\u4E50,\u8BF7\u6B23\u8D4F");
+  return raw2.includes(PURE_MUSIC_NOTICE) || raw2.includes("\u7EAF\u97F3\u4E50,\u8BF7\u6B23\u8D4F") || raw2.includes("\u7EAF\u97F3\u4E50\uFF0C\u8BF7\u60A8\u6B23\u8D4F") || raw2.includes("\u7EAF\u97F3\u4E50,\u8BF7\u60A8\u6B23\u8D4F") || raw2.includes("\u6CA1\u6709\u586B\u8BCD\u7684\u7EAF\u97F3\u4E50");
 }
 function isPlaceholderLyricText(text2) {
   const raw2 = String(text2 || "").replace(/\[[^\]]+\]/g, "").replace(/\(\d+,\d+(?:,\d+)?\)/g, "").replace(/<\d+,\d+[^>]*>/g, "").replace(/\s+/g, " ").trim();
@@ -539,25 +544,25 @@ function nameSearchSourcePage(page) {
   return n < 1 || Number.isNaN(n) ? 1 : n;
 }
 function firstTruthy(tasks) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     let pending = tasks.length;
     let settled = false;
     if (!pending) {
-      resolve(null);
+      resolve2(null);
       return;
     }
     for (const task of tasks) {
       void task().then((value) => {
         if (!settled && value) {
           settled = true;
-          resolve(value);
+          resolve2(value);
           return;
         }
         pending -= 1;
-        if (!settled && pending === 0) resolve(null);
+        if (!settled && pending === 0) resolve2(null);
       }).catch(() => {
         pending -= 1;
-        if (!settled && pending === 0) resolve(null);
+        if (!settled && pending === 0) resolve2(null);
       });
     }
   });
@@ -675,14 +680,14 @@ function parseSongUrl(url) {
 }
 var PLACEHOLDER_LYRIC_RE, PURE_MUSIC_NOTICE;
 var init_util = __esm({
-  "server/src/util.ts"() {
+  "src/util.ts"() {
     "use strict";
-    PLACEHOLDER_LYRIC_RE = /^(?:暂无歌词|无歌词|纯音乐(?:[，,]?\s*请欣赏)?|此歌曲为没有填词的纯音乐|instrumental|not\s*available|no\s*lyrics?)[\s.…]*$/iu;
+    PLACEHOLDER_LYRIC_RE = /^(?:暂无歌词|无歌词|纯音乐(?:[，,]?\s*请您?欣赏)?|此歌曲为没有填词的纯音乐(?:[，,]?\s*请您?欣赏)?|instrumental|not\s*available|no\s*lyrics?)[\s.…]*$/iu;
     PURE_MUSIC_NOTICE = "\u7EAF\u97F3\u4E50\uFF0C\u8BF7\u6B23\u8D4F";
   }
 });
 
-// server/src/kugouLyrics.ts
+// src/kugouLyrics.ts
 import { createHash as createHash2 } from "node:crypto";
 import { inflateRawSync, inflateSync, unzipSync } from "node:zlib";
 function md5(value) {
@@ -895,7 +900,7 @@ async function fetchKugouLyricText(song) {
 }
 var KRC_KEY, SIGN_SALT;
 var init_kugouLyrics = __esm({
-  "server/src/kugouLyrics.ts"() {
+  "src/kugouLyrics.ts"() {
     "use strict";
     init_http();
     init_util();
@@ -904,7 +909,7 @@ var init_kugouLyrics = __esm({
   }
 });
 
-// server/src/crypto/netease.ts
+// src/crypto/netease.ts
 import { createCipheriv, createHash as createHash4, randomInt } from "node:crypto";
 function modPow(base, exp, mod) {
   let result = 1n;
@@ -1079,7 +1084,7 @@ async function eapiRequest(apiPath, data, cookie = "") {
 }
 var LINUX_KEY, WEAPI_PRESET, WEAPI_IV, EAPI_KEY, BASE62, RSA_N, RSA_E;
 var init_netease = __esm({
-  "server/src/crypto/netease.ts"() {
+  "src/crypto/netease.ts"() {
     "use strict";
     init_config();
     init_http();
@@ -1096,7 +1101,7 @@ var init_netease = __esm({
   }
 });
 
-// server/src/crossPlay.ts
+// src/crossPlay.ts
 function normalizeMatchText2(value) {
   return String(value || "").toLowerCase().replace(/[\(\[（【].*?[\)\]）】]/g, "").replace(/[\s\p{P}\p{S}]/gu, "").trim();
 }
@@ -1159,14 +1164,14 @@ function pickBestCrossPlayTrack(target, tracks, mode = "strict") {
 }
 var AUTO_MATCH_MIN_SCORE2, AUTO_MATCH_SEARCH_LIMIT2;
 var init_crossPlay = __esm({
-  "server/src/crossPlay.ts"() {
+  "src/crossPlay.ts"() {
     "use strict";
     AUTO_MATCH_MIN_SCORE2 = 72;
     AUTO_MATCH_SEARCH_LIMIT2 = 8;
   }
 });
 
-// server/src/sign.ts
+// src/sign.ts
 var sign_exports = {};
 __export(sign_exports, {
   proxyUrl: () => proxyUrl,
@@ -1199,12 +1204,12 @@ function proxyUrl(secret, get, type, id) {
   return `api.php?${params.toString()}`;
 }
 var init_sign = __esm({
-  "server/src/sign.ts"() {
+  "src/sign.ts"() {
     "use strict";
   }
 });
 
-// server/src/comments.ts
+// src/comments.ts
 var comments_exports = {};
 __export(comments_exports, {
   commentSourceOrder: () => commentSourceOrder,
@@ -1216,11 +1221,11 @@ __export(comments_exports, {
   mapNeteaseComment: () => mapNeteaseComment,
   mapQqComment: () => mapQqComment
 });
-import { createHash as createHash6 } from "node:crypto";
-function ok5(data) {
+import { createHash as createHash8 } from "node:crypto";
+function ok6(data) {
   return { code: 200, error: "", data };
 }
-function fail5(code, error) {
+function fail6(code, error) {
   return { code, error, data: "" };
 }
 function isPlaceholderCommentContent(content) {
@@ -1293,7 +1298,7 @@ function pageCacheKey(songid, offset, limit) {
   return `${songid}_${offset}_${limit}`;
 }
 function hashKey(value) {
-  return createHash6("sha1").update(value).digest("hex");
+  return createHash8("sha1").update(value).digest("hex");
 }
 function isCommentSource(value) {
   return value === "netease" || value === "qq" || value === "kugou";
@@ -1391,7 +1396,7 @@ async function resolveQqSong(qq, cache, post) {
   if (!songmid) {
     const title = String(post.title || "").trim();
     const artist = String(post.artist || "").trim();
-    if (!title) return { error: fail5(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D QQ \u97F3\u4E50\u8BC4\u8BBA") };
+    if (!title) return { error: fail6(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D QQ \u97F3\u4E50\u8BC4\u8BBA") };
     const matchKey = hashKey(`qq:${title}|${artist}`);
     const cachedMatch = cache.read(
       "qq_comment_match_v1",
@@ -1404,7 +1409,7 @@ async function resolveQqSong(qq, cache, post) {
       const query = [title, artist].filter(Boolean).join(" ");
       const found = await qq.searchByName(query, 1).catch(() => null);
       const best = pickBestCrossPlayTrack({ title, artist }, found?.tracks || []);
-      if (!best?.songid) return { error: fail5(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684 QQ \u97F3\u4E50\u8BC4\u8BBA") };
+      if (!best?.songid) return { error: fail6(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684 QQ \u97F3\u4E50\u8BC4\u8BBA") };
       songmid = String(best.songid);
       matched = { type: "qq", songid: songmid, title: best.title, author: best.author };
       cache.write("qq_comment_match_v1", matchKey, {
@@ -1416,7 +1421,7 @@ async function resolveQqSong(qq, cache, post) {
     }
   }
   const numeric = await qq.songNumericId(songmid).catch(() => 0);
-  if (!numeric) return { error: fail5(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684 QQ \u97F3\u4E50\u8BC4\u8BBA") };
+  if (!numeric) return { error: fail6(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684 QQ \u97F3\u4E50\u8BC4\u8BBA") };
   return { songmid, songid: String(numeric), matched };
 }
 async function fetchQqCommentPage(songid, offset, limit) {
@@ -1446,7 +1451,7 @@ async function fetchQqCommentPage(songid, offset, limit) {
 async function resolveKugouSong(cache, post) {
   const title = String(post.title || "").trim();
   const artist = String(post.artist || "").trim();
-  if (!title) return { error: fail5(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D\u9177\u72D7\u8BC4\u8BBA") };
+  if (!title) return { error: fail6(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D\u9177\u72D7\u8BC4\u8BBA") };
   const matchKey = hashKey(`kugou:${title}|${artist}`);
   const cachedMatch = cache.read(
     "kugou_comment_match_v1",
@@ -1466,7 +1471,7 @@ async function resolveKugouSong(cache, post) {
     toMatchTracks(found.map((item) => ({ songid: item.kgHash, title: item.name, author: item.artists })))
   );
   const hit = found.find((item) => item.kgHash === best?.songid) || found[0];
-  if (!hit?.kgHash || !best) return { error: fail5(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684\u9177\u72D7\u8BC4\u8BBA") };
+  if (!hit?.kgHash || !best) return { error: fail6(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684\u9177\u72D7\u8BC4\u8BBA") };
   cache.write("kugou_comment_match_v1", matchKey, {
     expires: Math.floor(Date.now() / 1e3) + 6 * 3600,
     hash: hit.kgHash,
@@ -1502,12 +1507,12 @@ async function resolveNeteaseSong(netease, cache, post) {
   const type = (post.type || "netease").trim();
   const id = String(post.id || "").trim();
   if (type === "netease" || !type && /^\d+$/.test(id)) {
-    if (!/^\d+$/.test(id)) return { error: fail5(400, "\u6B4C\u66F2 ID \u65E0\u6548") };
+    if (!/^\d+$/.test(id)) return { error: fail6(400, "\u6B4C\u66F2 ID \u65E0\u6548") };
     return { songid: id, matched: null };
   }
   const title = String(post.title || "").trim();
   const artist = String(post.artist || "").trim();
-  if (!title) return { error: fail5(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D\u7F51\u6613\u4E91\u8BC4\u8BBA") };
+  if (!title) return { error: fail6(400, "\u7F3A\u5C11\u6B4C\u540D\uFF0C\u65E0\u6CD5\u5339\u914D\u7F51\u6613\u4E91\u8BC4\u8BBA") };
   const matchKey = hashKey(`${type}:${title}|${artist}`);
   const cachedMatch = cache.read(
     "netease_comment_match_v1",
@@ -1523,7 +1528,7 @@ async function resolveNeteaseSong(netease, cache, post) {
   const found = await netease.searchByName(query, 1).catch(() => null);
   const best = pickBestCrossPlayTrack({ title, artist }, found?.tracks || []);
   if (!best?.songid || !/^\d+$/.test(String(best.songid))) {
-    return { error: fail5(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684\u7F51\u6613\u4E91\u6B4C\u66F2\u8BC4\u8BBA") };
+    return { error: fail6(404, "\u672A\u627E\u5230\u5BF9\u5E94\u7684\u7F51\u6613\u4E91\u6B4C\u66F2\u8BC4\u8BBA") };
   }
   cache.write("netease_comment_match_v1", matchKey, {
     expires: Math.floor(Date.now() / 1e3) + 6 * 3600,
@@ -1543,10 +1548,10 @@ async function loadNeteaseComments(netease, cache, post, offset, limit, cookie) 
   const cacheKey = pageCacheKey(`netease:${songid}`, offset, limit);
   const cached = cache.read("song_comments_v1", cacheKey);
   if (cached?.payload && cached.expires > Date.now() / 1e3) {
-    return ok5({ ...cached.payload, matched: cached.payload.matched || matched });
+    return ok6({ ...cached.payload, matched: cached.payload.matched || matched });
   }
   const page = await fetchNeteaseCommentPage(songid, offset, limit, cookie);
-  if (!page) return fail5(502, "\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+  if (!page) return fail6(502, "\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
   const payload = {
     total: Number(page.json.total || 0) || 0,
     more: Boolean(page.json.more),
@@ -1564,7 +1569,7 @@ async function loadNeteaseComments(netease, cache, post, offset, limit, cookie) 
     expires: Math.floor(Date.now() / 1e3) + 90,
     payload
   });
-  return ok5(payload);
+  return ok6(payload);
 }
 async function loadQqComments(qq, cache, post, offset, limit) {
   const resolved = await resolveQqSong(qq, cache, post);
@@ -1572,10 +1577,10 @@ async function loadQqComments(qq, cache, post, offset, limit) {
   const cacheKey = pageCacheKey(`qq:${resolved.songid}`, offset, limit);
   const cached = cache.read("song_comments_v1", cacheKey);
   if (cached?.payload && cached.expires > Date.now() / 1e3) {
-    return ok5({ ...cached.payload, matched: cached.payload.matched || resolved.matched });
+    return ok6({ ...cached.payload, matched: cached.payload.matched || resolved.matched });
   }
   const page = await fetchQqCommentPage(resolved.songid, offset, limit);
-  if (!page) return fail5(502, "QQ \u97F3\u4E50\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+  if (!page) return fail6(502, "QQ \u97F3\u4E50\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
   const comments = mapQqList(page.json.comment?.commentlist || page.json.comment?.commentList);
   const hotComments = offset === 0 ? mapQqList(page.json.hot_comment?.commentlist || page.json.hot_comment?.commentList) : [];
   const total = Number(page.json.comment?.commenttotal || page.json.comment?.commentTotal || comments.length) || 0;
@@ -1596,7 +1601,7 @@ async function loadQqComments(qq, cache, post, offset, limit) {
     expires: Math.floor(Date.now() / 1e3) + 90,
     payload
   });
-  return ok5(payload);
+  return ok6(payload);
 }
 async function loadKugouComments(cache, post, offset, limit) {
   const resolved = await resolveKugouSong(cache, post);
@@ -1604,10 +1609,10 @@ async function loadKugouComments(cache, post, offset, limit) {
   const cacheKey = pageCacheKey(`kugou:${resolved.hash}`, offset, limit);
   const cached = cache.read("song_comments_v1", cacheKey);
   if (cached?.payload && cached.expires > Date.now() / 1e3) {
-    return ok5({ ...cached.payload, matched: cached.payload.matched || resolved.matched });
+    return ok6({ ...cached.payload, matched: cached.payload.matched || resolved.matched });
   }
   const page = await fetchKugouCommentPage(resolved.hash, resolved.mixsongid, offset, limit);
-  if (!page) return fail5(502, "\u9177\u72D7\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+  if (!page) return fail6(502, "\u9177\u72D7\u8BC4\u8BBA\u6682\u65F6\u62C9\u4E0D\u5230\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
   const json = page.json;
   const comments = mapKugouList(json.list || json.data?.list || json.comments || json.data?.comments);
   const hotComments = offset === 0 ? mapKugouList(json.weightList || json.data?.weightList || json.hotList || json.data?.hotList) : [];
@@ -1629,14 +1634,14 @@ async function loadKugouComments(cache, post, offset, limit) {
     expires: Math.floor(Date.now() / 1e3) + 90,
     payload
   });
-  return ok5(payload);
+  return ok6(payload);
 }
 async function loadSongComments(netease, qq, cache, post, cookies = {}) {
   const id = String(post.id || post.songid || "").trim();
   const title = String(post.title || "").trim();
   const artist = String(post.artist || post.author || "").trim();
   const type = String(post.type || "").trim();
-  if (!id && !title) return fail5(400, "\u7F3A\u5C11\u6B4C\u66F2\u4FE1\u606F");
+  if (!id && !title) return fail6(400, "\u7F3A\u5C11\u6B4C\u66F2\u4FE1\u606F");
   let offset = Math.max(0, Number(post.offset || 0) || 0);
   let limit = Number(post.limit || 20) || 20;
   if (limit < 1) limit = 20;
@@ -1667,10 +1672,10 @@ async function loadSongComments(netease, qq, cache, post, cookies = {}) {
       } else if (result.code !== 200) {
         lastError2 = result;
       } else {
-        lastError2 = fail5(404, "\u6682\u65E0\u8BC4\u8BBA");
+        lastError2 = fail6(404, "\u6682\u65E0\u8BC4\u8BBA");
       }
     }
-    return best || lastError2 || fail5(404, "\u6682\u65E0\u8BC4\u8BBA");
+    return best || lastError2 || fail6(404, "\u6682\u65E0\u8BC4\u8BBA");
   }
   const order = commentSourceOrder(preferred);
   let lastError = null;
@@ -1678,13 +1683,13 @@ async function loadSongComments(netease, qq, cache, post, cookies = {}) {
     const result = await loadOne(source);
     if (result.code === 400 && source === order[0] && !title) return result;
     if (result.code === 200 && result.data && hasUsableComments(result.data)) return result;
-    lastError = result.code === 200 ? fail5(404, "\u6682\u65E0\u8BC4\u8BBA") : result;
+    lastError = result.code === 200 ? fail6(404, "\u6682\u65E0\u8BC4\u8BBA") : result;
   }
-  return lastError || fail5(404, "\u6682\u65E0\u8BC4\u8BBA");
+  return lastError || fail6(404, "\u6682\u65E0\u8BC4\u8BBA");
 }
 var MOBILE_ONLY_COMMENT_RE, DELETED_COMMENT_RE, COMMENT_SOURCE_FALLBACK;
 var init_comments = __esm({
-  "server/src/comments.ts"() {
+  "src/comments.ts"() {
     "use strict";
     init_crossPlay();
     init_netease();
@@ -1697,12 +1702,17 @@ var init_comments = __esm({
   }
 });
 
-// server/src/app.ts
+// src/index.ts
+import { createServer } from "node:http";
+import { dirname as dirname2, join as join10, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// src/app.ts
 import { createReadStream, existsSync as existsSync4, statSync as statSync2 } from "node:fs";
-import { join as join8, normalize, extname } from "node:path";
+import { join as join9, normalize, extname } from "node:path";
 import { Readable } from "node:stream";
 
-// server/node_modules/hono/dist/compose.js
+// node_modules/hono/dist/compose.js
 var compose = (middleware, onError, onNotFound) => {
   return (context, next) => {
     let index = -1;
@@ -1746,10 +1756,10 @@ var compose = (middleware, onError, onNotFound) => {
   };
 };
 
-// server/node_modules/hono/dist/request/constants.js
+// node_modules/hono/dist/request/constants.js
 var GET_MATCH_RESULT = /* @__PURE__ */ Symbol();
 
-// server/node_modules/hono/dist/utils/buffer.js
+// node_modules/hono/dist/utils/buffer.js
 var bufferToFormData = (arrayBuffer, contentType) => {
   const response = new Response(arrayBuffer, {
     headers: {
@@ -1760,7 +1770,7 @@ var bufferToFormData = (arrayBuffer, contentType) => {
   return response.formData();
 };
 
-// server/node_modules/hono/dist/utils/body.js
+// node_modules/hono/dist/utils/body.js
 var isRawRequest = (request2) => "headers" in request2;
 var parseBody = async (request2, options = /* @__PURE__ */ Object.create(null)) => {
   const { all = false, dot = false } = options;
@@ -1846,7 +1856,7 @@ var handleParsingNestedValues = (form, key, value) => {
   });
 };
 
-// server/node_modules/hono/dist/utils/url.js
+// node_modules/hono/dist/utils/url.js
 var splitPath = (path) => {
   const paths = path.split("/");
   if (paths[0] === "") {
@@ -2048,7 +2058,7 @@ var getQueryParams = (url, key) => {
 };
 var decodeURIComponent_ = decodeURIComponent;
 
-// server/node_modules/hono/dist/request.js
+// node_modules/hono/dist/request.js
 var HonoRequest = class {
   /**
    * `.raw` can get the raw Request object.
@@ -2329,7 +2339,7 @@ var HonoRequest = class {
   }
 };
 
-// server/node_modules/hono/dist/utils/html.js
+// node_modules/hono/dist/utils/html.js
 var HtmlEscapedCallbackPhase = {
   Stringify: 1,
   BeforeStream: 2,
@@ -2371,7 +2381,7 @@ var resolveCallback = async (str, phase, preserveCallbacks, context, buffer) => 
   }
 };
 
-// server/node_modules/hono/dist/context.js
+// node_modules/hono/dist/context.js
 var TEXT_PLAIN = "text/plain; charset=UTF-8";
 var setDefaultContentType = (contentType, headers) => {
   return {
@@ -2643,11 +2653,11 @@ var Context = class {
     }
     return Object.fromEntries(this.#var);
   }
-  #newResponse(data, arg, headers) {
+  #newResponse(data, arg2, headers) {
     let responseHeaders = this.#res ? new Headers(this.#res.headers) : this.#preparedHeaders;
-    if (typeof arg === "object" && arg.headers) {
+    if (typeof arg2 === "object" && arg2.headers) {
       responseHeaders ??= new Headers();
-      for (const [key, value] of new Headers(arg.headers)) {
+      for (const [key, value] of new Headers(arg2.headers)) {
         if (key === "set-cookie") {
           responseHeaders.append(key, value);
         } else {
@@ -2679,7 +2689,7 @@ var Context = class {
         }
       }
     }
-    const status = typeof arg === "number" ? arg : arg?.status ?? this.#status;
+    const status = typeof arg2 === "number" ? arg2 : arg2?.status ?? this.#status;
     return createResponseInstance(data, {
       status,
       headers: responseHeaders ?? headers
@@ -2707,7 +2717,7 @@ var Context = class {
    * })
    * ```
    */
-  body = (data, arg, headers) => this.#newResponse(data, arg, headers);
+  body = (data, arg2, headers) => this.#newResponse(data, arg2, headers);
   /**
    * `.text()` can render text as `Content-Type:text/plain`.
    *
@@ -2720,10 +2730,10 @@ var Context = class {
    * })
    * ```
    */
-  text = (text2, arg, headers) => {
-    return !this.#preparedHeaders && !this.#status && !arg && !headers && !this.finalized ? new Response(text2) : this.#newResponse(
+  text = (text2, arg2, headers) => {
+    return !this.#preparedHeaders && !this.#status && !arg2 && !headers && !this.finalized ? new Response(text2) : this.#newResponse(
       text2,
-      arg,
+      arg2,
       setDefaultContentType(TEXT_PLAIN, headers)
     );
   };
@@ -2739,15 +2749,15 @@ var Context = class {
    * })
    * ```
    */
-  json = (object, arg, headers) => {
+  json = (object, arg2, headers) => {
     return this.#newResponse(
       JSON.stringify(object),
-      arg,
+      arg2,
       setDefaultContentType("application/json", headers)
     );
   };
-  html = (html, arg, headers) => {
-    const res = (html2) => this.#newResponse(html2, arg, setDefaultContentType("text/html; charset=UTF-8", headers));
+  html = (html, arg2, headers) => {
+    const res = (html2) => this.#newResponse(html2, arg2, setDefaultContentType("text/html; charset=UTF-8", headers));
     return typeof html === "object" ? resolveCallback(html, HtmlEscapedCallbackPhase.Stringify, false, {}).then(res) : res(html);
   };
   /**
@@ -2793,7 +2803,7 @@ var Context = class {
   };
 };
 
-// server/node_modules/hono/dist/router.js
+// node_modules/hono/dist/router.js
 var METHOD_NAME_ALL = "ALL";
 var METHOD_NAME_ALL_LOWERCASE = "all";
 var METHODS = ["get", "post", "put", "delete", "options", "patch", "query"];
@@ -2801,10 +2811,10 @@ var MESSAGE_MATCHER_IS_ALREADY_BUILT = "Can not add a route since the matcher is
 var UnsupportedPathError = class extends Error {
 };
 
-// server/node_modules/hono/dist/utils/constants.js
+// node_modules/hono/dist/utils/constants.js
 var COMPOSED_HANDLER = "__COMPOSED_HANDLER";
 
-// server/node_modules/hono/dist/hono-base.js
+// node_modules/hono/dist/hono-base.js
 var notFoundHandler = (c) => {
   return c.text("404 Not Found", 404);
 };
@@ -2910,14 +2920,14 @@ var Hono = class _Hono {
    * app.route("/api", app2) // GET /api/user
    * ```
    */
-  route(path, app) {
+  route(path, app2) {
     const subApp = this.basePath(path);
-    app.routes.map((r) => {
+    app2.routes.map((r) => {
       let handler;
-      if (app.errorHandler === errorHandler) {
+      if (app2.errorHandler === errorHandler) {
         handler = r.handler;
       } else {
-        handler = async (c, next) => (await compose([], app.errorHandler)(c, () => r.handler(c, next))).res;
+        handler = async (c, next) => (await compose([], app2.errorHandler)(c, () => r.handler(c, next))).res;
         handler[COMPOSED_HANDLER] = r.handler;
       }
       subApp.#addRoute(r.method, r.path, handler, r.basePath);
@@ -3181,7 +3191,7 @@ var Hono = class _Hono {
   };
 };
 
-// server/node_modules/hono/dist/router/reg-exp-router/matcher.js
+// node_modules/hono/dist/router/reg-exp-router/matcher.js
 var emptyParam = [];
 function match(method, path) {
   const matchers = this.buildAllMatchers();
@@ -3202,7 +3212,7 @@ function match(method, path) {
   return match2(method, path);
 }
 
-// server/node_modules/hono/dist/router/reg-exp-router/node.js
+// node_modules/hono/dist/router/reg-exp-router/node.js
 var LABEL_REG_EXP_STR = "[^/]+";
 var ONLY_WILDCARD_REG_EXP_STR = ".*";
 var TAIL_WILDCARD_REG_EXP_STR = "(?:|/.*)";
@@ -3309,7 +3319,7 @@ var Node = class _Node {
   }
 };
 
-// server/node_modules/hono/dist/router/reg-exp-router/trie.js
+// node_modules/hono/dist/router/reg-exp-router/trie.js
 var Trie = class {
   #context = { varIndex: 0 };
   #root = new Node();
@@ -3373,7 +3383,7 @@ var Trie = class {
   }
 };
 
-// server/node_modules/hono/dist/router/reg-exp-router/router.js
+// node_modules/hono/dist/router/reg-exp-router/router.js
 var wildcardRegExpCache = /* @__PURE__ */ Object.create(null);
 function buildWildcardRegExp(path) {
   return wildcardRegExpCache[path] ??= new RegExp(
@@ -3531,7 +3541,7 @@ var RegExpRouter = class {
   }
 };
 
-// server/node_modules/hono/dist/router/smart-router/router.js
+// node_modules/hono/dist/router/smart-router/router.js
 var SmartRouter = class {
   name = "SmartRouter";
   #routers = [];
@@ -3586,7 +3596,7 @@ var SmartRouter = class {
   }
 };
 
-// server/node_modules/hono/dist/router/trie-router/node.js
+// node_modules/hono/dist/router/trie-router/node.js
 var emptyParams = /* @__PURE__ */ Object.create(null);
 var hasChildren = (children) => {
   for (const _ in children) {
@@ -3770,7 +3780,7 @@ var Node2 = class _Node2 {
   }
 };
 
-// server/node_modules/hono/dist/router/trie-router/router.js
+// node_modules/hono/dist/router/trie-router/router.js
 var TrieRouter = class {
   name = "TrieRouter";
   #node;
@@ -3792,7 +3802,7 @@ var TrieRouter = class {
   }
 };
 
-// server/node_modules/hono/dist/hono.js
+// node_modules/hono/dist/hono.js
 var Hono2 = class extends Hono {
   /**
    * Creates an instance of the Hono class.
@@ -3807,13 +3817,13 @@ var Hono2 = class extends Hono {
   }
 };
 
-// server/src/accounts/kugou.ts
+// src/accounts/kugou.ts
 init_http();
 init_kugouLyrics();
 import { createHash as createHash3 } from "node:crypto";
 import { join as join2 } from "node:path";
 
-// server/src/accounts/session.ts
+// src/accounts/session.ts
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 function readJson(path) {
@@ -3882,7 +3892,7 @@ function qqGuid() {
   }).toUpperCase();
 }
 
-// server/src/accounts/kugou.ts
+// src/accounts/kugou.ts
 var WEB_SIGN_KEY = "NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt";
 var QR_APPID = "1014";
 var QR_SRCAPPID = "2919";
@@ -4162,7 +4172,7 @@ function fail(code, error, data = "") {
   return { code, error, data };
 }
 
-// server/src/accounts/netease.ts
+// src/accounts/netease.ts
 init_netease();
 import { join as join3 } from "node:path";
 var NeteaseAccount = class {
@@ -4590,96 +4600,1247 @@ function fail2(code, error, data = "") {
   return { code, error, data };
 }
 
-// server/src/accounts/qishui.ts
-init_http();
+// src/accounts/qishuiBridge.ts
 import { join as join4 } from "node:path";
+import {
+  createQishuiApi,
+  createQishuiDeviceId,
+  isQishuiDeviceId,
+  isAccountId
+} from "qishui-music-api";
+var QishuiBridge = class {
+  deviceFile;
+  sessionFile;
+  deviceId;
+  current = null;
+  loaded = false;
+  revision = 0;
+  api;
+  constructor(cache) {
+    const dir = cache.dir("qishui_auth");
+    this.deviceFile = join4(dir, "device.json");
+    this.sessionFile = join4(dir, "ticket-session.json");
+    this.deviceId = this.loadDeviceId();
+    const bridge = this;
+    this.api = createQishuiApi({
+      deviceId: this.deviceId,
+      sessions: {
+        deviceId: this.deviceId,
+        get revision() {
+          return bridge.revision;
+        },
+        get: () => bridge.getSession(),
+        set: (value) => bridge.setSession(value),
+        clear: () => bridge.clearSession()
+      },
+      log: (message) => console.info(message),
+      warn: (message) => console.warn(message)
+    });
+  }
+  loggedIn() {
+    return Boolean(this.getSession()?.ticket);
+  }
+  user() {
+    const session = this.getSession();
+    if (!session?.user) return null;
+    return {
+      id: String(session.user.id || ""),
+      nickname: String(session.user.nickname || "\u6C7D\u6C34\u97F3\u4E50"),
+      avatar: qishuiImage(session.user.avatar),
+      vip: session.user.isVip ? 1 : 0
+    };
+  }
+  async request(operation, params = {}) {
+    return this.api.request(operation, params);
+  }
+  loadDeviceId() {
+    const saved = readJson(this.deviceFile);
+    if (isQishuiDeviceId(saved?.deviceId)) return saved.deviceId;
+    const deviceId = createQishuiDeviceId();
+    writeJson(this.deviceFile, { deviceId });
+    return deviceId;
+  }
+  getSession() {
+    if (!this.loaded) {
+      this.loaded = true;
+      try {
+        const value = readJson(this.sessionFile);
+        if (value && value.version === 1 && isAccountId(value.userId) && value.ticket && value.guardKey && value.guardCert && value.guardTsSign && value.accessCode && Number.isFinite(value.expiresAt)) {
+          this.current = value;
+        }
+      } catch {
+        this.current = null;
+      }
+    }
+    return this.current;
+  }
+  setSession(value) {
+    this.loaded = true;
+    this.current = { ...value, version: 1 };
+    this.revision += 1;
+    writeJson(this.sessionFile, this.current);
+  }
+  clearSession() {
+    this.loaded = true;
+    this.current = null;
+    this.revision += 1;
+    removeFile(this.sessionFile);
+  }
+};
+function qishuiImage(raw2) {
+  if (typeof raw2 === "string") {
+    const text2 = raw2.trim();
+    return /^https?:\/\//i.test(text2) ? text2 : "";
+  }
+  if (!raw2 || typeof raw2 !== "object") return "";
+  const value = raw2;
+  const urls = Array.isArray(value.urls) ? value.urls : [];
+  const url = urls.find((item) => typeof item === "string" && /^https?:\/\//i.test(item));
+  if (typeof url !== "string" || !url) return "";
+  if (value.uri && url.endsWith("/")) {
+    const joined = `${url}${String(value.uri).replace(/^\//, "")}`;
+    return value.template_prefix ? `${joined}~${value.template_prefix}-image.image` : joined.includes("~") ? joined : `${joined}~tplv-b829550vbb-1:1.jpeg`;
+  }
+  return url;
+}
+function mapQishuiTrack(raw2) {
+  const track = raw2?.track_entity || raw2?.entity?.media?.track_entity || raw2?.entity?.track || raw2?.track || raw2;
+  const base = track?.base_info || {};
+  const id = String(base.id || track?.id || "").trim();
+  const title = String(base.name || track?.name || "").trim();
+  if (!id || !title) return null;
+  const related = track?.related_info || {};
+  const artists = Array.isArray(related.artist_links) ? related.artist_links : [];
+  const author = artists.map((item) => String(item?.name || "").trim()).filter(Boolean).join(" / ") || String(base.artist_name || "\u6C7D\u6C34\u97F3\u4E50");
+  return {
+    type: "qishui",
+    songid: id,
+    title,
+    author,
+    pic: qishuiImage(track?.display_info?.cover_url || related.album_link?.url_cover),
+    album: String(related.album_link?.name || ""),
+    durationMs: Math.max(0, Number(base.duration_ms) || 0) || void 0
+  };
+}
+function mapQishuiPlaylist(raw2, index) {
+  const base = raw2?.base_info || {};
+  const id = String(base.id || "").trim();
+  const name = String(base.title || base.name || "").trim();
+  if (!id || !name) return null;
+  const owner = raw2?.relation_info?.owner || {};
+  return {
+    id,
+    name,
+    cover: qishuiImage(raw2?.display_info?.url_cover || base.url_cover),
+    trackCount: Number(raw2?.resource_cnt?.track_cnt || base.count_tracks || 0) || 0,
+    order: index,
+    ownerId: String(base.owner_id || owner.id || ""),
+    createTime: Number(base.create_time || 0) || void 0
+  };
+}
+
+// src/accounts/qishui.ts
 function ok3(data) {
   return { code: 200, error: "", data };
 }
 function fail3(code, error, data = "") {
   return { code, error, data };
 }
-function hasLoginCookie(cookie) {
-  return /(?:^|;\s*)(?:sessionid|sessionid_ss|sid_guard|sid_tt)=[^;\s]+/i.test(cookie);
+function loginMessage(error) {
+  if (!error) return "\u6C7D\u6C34\u767B\u5F55\u5931\u8D25";
+  if (error.stage === "access-code") return "\u6296\u97F3\u5DF2\u786E\u8BA4\uFF0C\u4F46\u6C7D\u6C34\u6388\u6743\u7801\u4EA4\u6362\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5";
+  if (error.stage === "ticket") return "\u6C7D\u6C34\u767B\u5F55\u7968\u636E\u83B7\u53D6\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5";
+  if (error.stage === "account") return "\u6C7D\u6C34\u8D26\u53F7\u4FE1\u606F\u8BFB\u53D6\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5";
+  if (error.code === "network") return "\u65E0\u6CD5\u8FDE\u63A5\u6C7D\u6C34\u767B\u5F55\u670D\u52A1\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC";
+  if (error.code === "unavailable") return "\u767B\u5F55\u5DF2\u53D6\u6D88\u6216\u8FC7\u671F\uFF0C\u8BF7\u5173\u95ED\u540E\u91CD\u5F00";
+  return error.message || "\u6C7D\u6C34\u767B\u5F55\u5931\u8D25";
 }
 var QishuiAccount = class {
+  bridge;
   constructor(cache) {
-    this.cache = cache;
-    this.authFile = join4(cache.dir("qishui_auth"), "session.json");
+    this.bridge = new QishuiBridge(cache);
   }
-  authFile;
+  /** 兼容旧调用点；票证登录没有 Cookie。 */
   sessionCookie() {
-    const auth = this.read();
-    return auth?.cookie && hasLoginCookie(auth.cookie) ? auth.cookie : null;
+    return null;
+  }
+  loggedIn() {
+    return this.bridge.loggedIn();
+  }
+  async resolvePlayUrl(id) {
+    if (!this.bridge.loggedIn()) return null;
+    const trackId = String(id || "").trim();
+    if (!/^\d{1,30}$/.test(trackId)) return null;
+    const result = await this.bridge.request("audio", {
+      id: trackId,
+      quality: "standard"
+    });
+    if (!result.ok) return null;
+    const url = String(result.data?.url || "").trim();
+    return /^https?:\/\//i.test(url) ? url : null;
   }
   async handle(action, post) {
     switch (action) {
       case "qishui_status":
         return ok3(this.status());
       case "qishui_logout":
-        removeFile(this.authFile);
+        await this.bridge.request("logout");
         return ok3({ ok: true });
       case "qishui_cookie_save":
-        return this.cookieSave(post.cookie || "");
+        return fail3(400, "\u6C7D\u6C34\u73B0\u5DF2\u6539\u4E3A\u6296\u97F3\u626B\u7801\u767B\u5F55\uFF0C\u8BF7\u5173\u6389\u6539\u7528 Cookie\uFF0C\u76F4\u63A5\u626B\u7801");
+      case "qishui_qr_key":
+        return this.qrKey();
+      case "qishui_qr_check":
+        return this.qrCheck(post.key || "");
+      case "qishui_qr_cancel":
+        return this.qrCancel(post.key || "");
+      case "qishui_playlists":
+        return this.playlists();
+      case "qishui_playlist_detail":
+        return this.playlistDetail(post.id || "", Number(post.offset || 0), Number(post.limit || 80), post.ownerId || "");
+      case "qishui_recommend_feed":
+        return this.recommendFeed();
+      case "qishui_recent_songs":
+        return this.recentSongs();
       default:
         return fail3(400, "\u672A\u77E5\u64CD\u4F5C");
     }
   }
-  read() {
-    return readJson(this.authFile);
-  }
   status() {
-    const auth = this.read();
-    if (!auth?.cookie || !hasLoginCookie(auth.cookie)) return { loggedIn: false };
+    if (!this.bridge.loggedIn()) return { loggedIn: false };
+    const user = this.bridge.user();
     return {
       loggedIn: true,
-      nickname: auth.nickname || "\u6C7D\u6C34\u97F3\u4E50",
-      avatar: auth.avatar || "",
-      vip: auth.vip || 0
+      nickname: user?.nickname || "\u6C7D\u6C34\u97F3\u4E50",
+      avatar: user?.avatar || "",
+      vip: user?.vip || 0
     };
   }
-  async cookieSave(raw2) {
-    const cookie = normalizeCookie(raw2);
-    if (!hasLoginCookie(cookie)) {
-      return fail3(400, "Cookie \u91CC\u6CA1\u6709\u6C7D\u6C34\u767B\u5F55\u6001\uFF0C\u8BF7\u4ECE\u6C7D\u6C34\u7535\u8111\u7248\u590D\u5236\u5B8C\u6574 Cookie");
+  async qrKey() {
+    const keyResult = await this.bridge.request("login_qr_key");
+    if (!keyResult.ok) return fail3(502, loginMessage(keyResult.error));
+    const key = String(keyResult.data?.key || "");
+    if (!key) return fail3(502, "\u65E0\u6CD5\u83B7\u53D6\u6C7D\u6C34\u4E8C\u7EF4\u7801");
+    const imageResult = await this.bridge.request("login_qr_create", { key });
+    if (!imageResult.ok) return fail3(502, loginMessage(imageResult.error));
+    const qrimg = String(imageResult.data?.imageUrl || "");
+    if (!qrimg.startsWith("data:image/")) return fail3(502, "\u6C7D\u6C34\u4E8C\u7EF4\u7801\u56FE\u7247\u65E0\u6548");
+    return ok3({ key, qrimg });
+  }
+  async qrCheck(key) {
+    const token = String(key || "").trim();
+    if (!/^[a-f0-9]{32}$/.test(token)) return fail3(400, "\u7F3A\u5C11\u4E8C\u7EF4\u7801 key");
+    const result = await this.bridge.request("login_qr_check", { key: token });
+    if (!result.ok) {
+      if (result.error?.code === "unavailable") {
+        return ok3({ status: 800, message: "\u4E8C\u7EF4\u7801\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u5173\u95ED\u540E\u91CD\u5F00" });
+      }
+      return fail3(502, loginMessage(result.error));
     }
-    let nickname = "\u6C7D\u6C34\u97F3\u4E50";
-    let avatar = "";
-    try {
-      const res = await request("GET", "https://api.qishui.com/luna/pc/user/me", {
-        headers: {
-          Accept: "application/json",
-          Cookie: cookie,
-          "User-Agent": "LunaPC/3.3.0(359450208)",
-          Referer: "https://www.qishui.com/"
-        },
-        timeoutMs: 6e3
-      });
-      const user = res.json?.data?.user || res.json?.data || {};
-      nickname = String(user.nickname || user.name || nickname);
-      avatar = String(user.avatar_url || user.avatar || user.avatar_thumb || "");
-    } catch {
+    const state = String(result.data?.state || "");
+    if (state === "waiting" || state === "new") {
+      return ok3({ status: 801, message: "\u7B49\u5F85\u626B\u7801\u2026" });
     }
-    writeJson(this.authFile, {
-      cookie,
-      nickname,
-      avatar,
-      vip: 0,
-      updatedAt: Date.now()
+    if (state === "scanned") {
+      return ok3({ status: 802, message: "\u5DF2\u626B\u7801\uFF0C\u8BF7\u5728\u6296\u97F3\u4E0A\u786E\u8BA4\u6388\u6743" });
+    }
+    if (state === "expired") {
+      return ok3({ status: 800, message: "\u4E8C\u7EF4\u7801\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u5173\u95ED\u540E\u91CD\u5F00" });
+    }
+    if (state === "error" || result.data?.failure?.case === "refused") {
+      return ok3({ status: 800, message: "\u5DF2\u62D2\u7EDD\u6388\u6743\uFF0C\u8BF7\u5173\u95ED\u540E\u91CD\u5F00" });
+    }
+    if (state === "confirmed") {
+      return ok3({ status: 803, message: "\u767B\u5F55\u6210\u529F", ...this.status(), loggedIn: true });
+    }
+    return ok3({ status: 801, message: "\u7B49\u5F85\u626B\u7801\u2026" });
+  }
+  async qrCancel(key) {
+    const token = String(key || "").trim();
+    if (/^[a-f0-9]{32}$/.test(token)) {
+      await this.bridge.request("login_qr_cancel", { key: token });
+    }
+    return ok3({ ok: true });
+  }
+  async playlists() {
+    if (!this.bridge.loggedIn()) return fail3(401, "\u672A\u767B\u5F55\u6C7D\u6C34");
+    const status = await this.bridge.request("login_status");
+    if (!status.ok) return fail3(401, "\u672A\u767B\u5F55\u6C7D\u6C34");
+    const result = await this.bridge.request("user_playlists", {
+      limit: 80,
+      offset: 0
     });
-    return ok3(this.status());
+    if (!result.ok) return fail3(502, result.error?.message || "\u65E0\u6CD5\u8BFB\u53D6\u6C7D\u6C34\u6B4C\u5355");
+    const playlists = (result.data?.items || []).map((item, index) => mapQishuiPlaylist(item, index)).filter(Boolean);
+    const user = this.bridge.user();
+    return ok3({ playlists, nickname: user?.nickname || "\u6C7D\u6C34\u97F3\u4E50" });
+  }
+  async playlistDetail(id, offset = 0, limit = 80, ownerId = "") {
+    if (!this.bridge.loggedIn()) return fail3(401, "\u672A\u767B\u5F55\u6C7D\u6C34");
+    const playlistId = String(id || "").trim();
+    if (!playlistId) return fail3(400, "\u7F3A\u5C11\u6B4C\u5355 id");
+    if (playlistId === "__qishui_recent__") return this.recentSongs();
+    const pageSize = Math.min(100, Math.max(1, limit || 80));
+    const start = Math.max(0, offset || 0);
+    const result = await this.bridge.request("playlist_tracks", {
+      id: playlistId,
+      ownerId: String(ownerId || "").trim(),
+      limit: pageSize,
+      offset: start
+    });
+    if (!result.ok) return fail3(502, result.error?.message || "\u65E0\u6CD5\u8BFB\u53D6\u6C7D\u6C34\u6B4C\u5355\u6B4C\u66F2");
+    const collection = result.data?.collection || {};
+    const mapped = mapQishuiPlaylist(collection, 0);
+    const tracks = (result.data?.items || []).map((item) => mapQishuiTrack(item)).filter(Boolean);
+    return ok3({
+      id: playlistId,
+      playlistId,
+      name: mapped?.name || String(collection?.base_info?.title || "\u6C7D\u6C34\u6B4C\u5355"),
+      cover: mapped?.cover || "",
+      ownerId: mapped?.ownerId || ownerId,
+      total: Number(collection?.resource_cnt?.track_cnt || tracks.length) || tracks.length,
+      tracks,
+      hasMore: Boolean(result.data?.hasMore),
+      nextOffset: Number(result.data?.nextOffset || start + tracks.length)
+    });
+  }
+  async recentSongs() {
+    if (!this.bridge.loggedIn()) return fail3(401, "\u672A\u767B\u5F55\u6C7D\u6C34");
+    const result = await this.bridge.request("recent_played", {
+      limit: 50,
+      offset: 0
+    });
+    if (!result.ok) return fail3(502, result.error?.message || "\u65E0\u6CD5\u8BFB\u53D6\u6700\u8FD1\u64AD\u653E");
+    const tracks = (result.data?.items || []).map((item) => mapQishuiTrack(item)).filter(Boolean);
+    return ok3({
+      id: "__qishui_recent__",
+      playlistId: "__qishui_recent__",
+      name: "\u6700\u8FD1\u64AD\u653E",
+      cover: tracks[0]?.pic || "",
+      total: tracks.length,
+      tracks
+    });
+  }
+  async recommendFeed() {
+    if (!this.bridge.loggedIn()) return fail3(401, "\u672A\u767B\u5F55\u6C7D\u6C34");
+    const [recent, library] = await Promise.all([
+      this.recentSongs().catch(() => ok3({ tracks: [] })),
+      this.playlists().catch(() => ok3({ playlists: [] }))
+    ]);
+    const items = [];
+    const recentTracks = Array.isArray(recent.data?.tracks) ? recent.data.tracks : [];
+    if (recentTracks.length) {
+      items.push({
+        id: "__qishui_fm__",
+        name: "\u6C7D\u6C34\u7535\u53F0",
+        description: "\u4ECE\u6700\u8FD1\u64AD\u653E\u7EE7\u7EED\u542C",
+        cover: recentTracks[0]?.pic || "",
+        trackCount: recentTracks.length,
+        recommendKind: "fm"
+      });
+      items.push({
+        id: "__qishui_recent__",
+        name: "\u6700\u8FD1\u64AD\u653E",
+        description: "\u4F60\u6700\u8FD1\u542C\u8FC7\u7684\u6B4C",
+        cover: recentTracks[0]?.pic || "",
+        trackCount: recentTracks.length,
+        recommendKind: "daily"
+      });
+    }
+    const playlists = Array.isArray(library.data?.playlists) ? library.data.playlists : [];
+    for (const playlist of playlists.slice(0, 16)) {
+      items.push({
+        ...playlist,
+        recommendKind: "playlist"
+      });
+    }
+    return ok3({ items });
   }
 };
 
-// server/src/accounts/qq.ts
-init_http();
-import { createHash as createHash5 } from "node:crypto";
+// src/accounts/spotify/bridge.ts
+import { createHash as createHash6 } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { join as join5 } from "node:path";
+
+// src/accounts/spotify/errors.ts
+var CODES = /* @__PURE__ */ new Set([
+  "auth-required",
+  "unsupported",
+  "unavailable",
+  "not-playable",
+  "preview-only",
+  "subscription-required",
+  "region-restricted",
+  "network",
+  "invalid-response"
+]);
+var SpotifyError = class extends Error {
+  code;
+  detail;
+  reason;
+  constructor(code, message, detail, reason) {
+    super(message);
+    this.name = "SpotifyError";
+    this.code = code;
+    if (detail) this.detail = detail;
+    if (reason) this.reason = reason;
+  }
+};
+function spotifyError(code, message, detail, reason) {
+  return new SpotifyError(code, message, detail, reason);
+}
+var ASKED_TO_WAIT = "Spotify asked to wait before trying again";
+function statusError(status, code, message, detail) {
+  if (status === 429) return spotifyError("network", ASKED_TO_WAIT, detail);
+  return spotifyError(status >= 500 ? "network" : code, message, detail);
+}
+function toErrorResult(error) {
+  if (error instanceof SpotifyError && CODES.has(error.code)) {
+    return {
+      ok: false,
+      error: {
+        code: error.code,
+        message: error.message,
+        ...error.reason ? { reason: error.reason } : {}
+      }
+    };
+  }
+  const text2 = `${error?.name ?? ""} ${error?.message ?? ""}`;
+  if (/fetch failed|net::|ECONN|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|network|socket|TimeoutError|AbortError/i.test(text2)) {
+    return { ok: false, error: { code: "network", message: "Spotify could not be reached" } };
+  }
+  return { ok: false, error: { code: "invalid-response", message: "Spotify operation failed" } };
+}
+function lineReason(error) {
+  if (error?.name === "TimeoutError" || error?.name === "AbortError") return "no-answer";
+  const { code, message } = toErrorResult(error).error;
+  if (code !== "network") return void 0;
+  return message === ASKED_TO_WAIT ? "asked-to-wait" : "unreachable";
+}
+function plainWords(text2) {
+  return String(text2).replace(/https?:\\*\/\\*\/\S+/gi, "<address>").replace(/[\w.~+/=%-]{32,}/g, "<long>").slice(0, 160);
+}
+function describeError(error) {
+  return `${toErrorResult(error).error.code} (${plainWords(error?.detail ?? error?.message ?? error)})`;
+}
+
+// src/accounts/spotify/signIn.ts
+import { createHash as createHash5, randomBytes as nodeRandomBytes } from "node:crypto";
+import http from "node:http";
+var CLIENT_ID = "65b708073fc0480ea92a077233ca87bd";
+var PORT = 5588;
+var REDIRECT_URI = `http://127.0.0.1:${PORT}/login`;
+var AUTHORIZE_URL = "https://accounts.spotify.com/authorize";
+var TOKEN_URL = "https://accounts.spotify.com/api/token";
+var ATTEMPT_MS = 10 * 60 * 1e3;
+var REQUEST_LIMIT_MS = 30 * 1e3;
+var SCOPES = [
+  "app-remote-control",
+  "playlist-modify",
+  "playlist-modify-private",
+  "playlist-modify-public",
+  "playlist-read",
+  "playlist-read-collaborative",
+  "playlist-read-private",
+  "streaming",
+  "ugc-image-upload",
+  "user-follow-modify",
+  "user-follow-read",
+  "user-library-modify",
+  "user-library-read",
+  "user-modify",
+  "user-modify-playback-state",
+  "user-modify-private",
+  "user-personalized",
+  "user-read-birthdate",
+  "user-read-currently-playing",
+  "user-read-email",
+  "user-read-play-history",
+  "user-read-playback-position",
+  "user-read-playback-state",
+  "user-read-private",
+  "user-read-recently-played",
+  "user-top-read"
+].join(" ");
+var PAGE_TEXT = Object.freeze({
+  "zh-CN": {
+    done: "\u5DF2\u767B\u5F55 Spotify\uFF0C\u53EF\u4EE5\u56DE\u5230 RyanMusic \u4E86\u3002",
+    refused: "\u672A\u6388\u6743\u3002\u8BF7\u56DE\u5230 RyanMusic \u91CD\u8BD5\u3002",
+    failed: "\u767B\u5F55\u672A\u5B8C\u6210\u3002\u8BF7\u56DE\u5230 RyanMusic \u91CD\u8BD5\u3002"
+  },
+  en: {
+    done: "Signed in to Spotify. You can go back to RyanMusic.",
+    refused: "Not authorized. Try again in RyanMusic.",
+    failed: "Sign-in not completed. Try again in RyanMusic."
+  }
+});
+var pageOf = (text2) => `<!doctype html><meta charset="utf-8"><title>RyanMusic</title><body style="margin:0;display:grid;place-items:center;height:100vh;background:#121212;color:#fff;font:16px system-ui,sans-serif">${text2}</body>`;
+var PAGE_HEADERS = Object.freeze({
+  "Content-Type": "text/html; charset=utf-8",
+  "Cache-Control": "no-store",
+  Connection: "close"
+});
+var RETURN_REASONS = Object.freeze({
+  access_denied: "access-denied",
+  server_error: "unreachable",
+  temporarily_unavailable: "asked-to-wait"
+});
+var base64url = (buffer) => buffer.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+function createSpotifySignIn({
+  fetch: fetchFn = globalThis.fetch,
+  openExternal: openExternal2,
+  language = () => "zh-CN",
+  now = Date.now,
+  createServer: createServer2 = () => http.createServer(),
+  randomBytes = (size) => nodeRandomBytes(size),
+  log = (...args) => console.log(...args),
+  warn = (...args) => console.warn(...args)
+}) {
+  let pending = null;
+  const tokens = async (fields, kept) => {
+    const response = await fetchFn(TOKEN_URL, {
+      method: "POST",
+      signal: AbortSignal.timeout(REQUEST_LIMIT_MS),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ client_id: CLIENT_ID, ...fields }).toString()
+    });
+    const body = await response.json().catch(() => null);
+    if (body?.error === "invalid_grant") {
+      throw spotifyError("auth-required", "Spotify no longer accepts the sign-in", "invalid_grant");
+    }
+    const refreshToken = body?.refresh_token ?? kept;
+    if (!response.ok || typeof body?.access_token !== "string" || typeof refreshToken !== "string") {
+      throw statusError(response.status, "invalid-response", "Spotify did not issue a token", `HTTP ${response.status} ${body?.error ?? ""}`);
+    }
+    return {
+      access_token: body.access_token,
+      refresh_token: refreshToken,
+      expires_at: now() + Math.max(60, Number(body.expires_in) || 3600) * 1e3
+    };
+  };
+  const stopListening = (attempt) => {
+    if (attempt.timer) clearTimeout(attempt.timer);
+    attempt.server.close();
+    attempt.server.closeAllConnections?.();
+  };
+  const drop = () => {
+    if (pending) stopListening(pending);
+    pending = null;
+  };
+  const answer = (attempt, request2, response) => {
+    let url = null;
+    try {
+      url = new URL(request2.url || "", REDIRECT_URI);
+    } catch {
+    }
+    if (!url || request2.method !== "GET" || url.pathname !== "/login") {
+      response.writeHead(404).end();
+      return;
+    }
+    const text2 = PAGE_TEXT[language()] ?? PAGE_TEXT.en;
+    if (url.searchParams.get("state") !== attempt.state) {
+      response.writeHead(200, PAGE_HEADERS).end(pageOf(text2.failed));
+      return;
+    }
+    if (attempt.settling) {
+      response.writeHead(404).end();
+      return;
+    }
+    attempt.settling = true;
+    const leave = (words, outcome) => {
+      attempt.outcome = outcome;
+      response.writeHead(200, PAGE_HEADERS);
+      response.end(pageOf(words), () => stopListening(attempt));
+    };
+    const code = url.searchParams.get("code");
+    if (!code) {
+      const said = url.searchParams.get("error");
+      const reason = Object.hasOwn(RETURN_REASONS, said ?? "") ? RETURN_REASONS[said] : said ? "refused" : "sign-in-failed";
+      warn(`[Spotify] Sign-in was not completed: ${reason}`);
+      leave(reason === "access-denied" ? text2.refused : text2.failed, { error: reason });
+      return;
+    }
+    tokens({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: REDIRECT_URI,
+      code_verifier: attempt.verifier
+    }).then(
+      (issued) => leave(text2.done, { tokens: issued }),
+      (error) => {
+        warn(`[Spotify] The code Spotify sent back was not exchanged: ${describeError(error)}`);
+        leave(text2.failed, {
+          error: lineReason(error) ?? (error?.code === "auth-required" ? "refused" : "sign-in-failed")
+        });
+      }
+    );
+  };
+  return {
+    async start() {
+      drop();
+      const verifier = base64url(randomBytes(64));
+      const attempt = {
+        key: randomBytes(16).toString("hex"),
+        verifier,
+        state: base64url(randomBytes(16)),
+        page: "",
+        server: createServer2(),
+        expiresAt: now() + ATTEMPT_MS,
+        outcome: null,
+        settling: false,
+        timer: null
+      };
+      attempt.page = `${AUTHORIZE_URL}?${new URLSearchParams({
+        response_type: "code",
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        scope: SCOPES,
+        code_challenge_method: "S256",
+        code_challenge: base64url(createHash5("sha256").update(verifier).digest()),
+        state: attempt.state
+      })}`;
+      attempt.server.on("request", (request2, response) => answer(attempt, request2, response));
+      await new Promise((resolve2, reject) => {
+        attempt.server.once("error", (error) => reject(spotifyError("unavailable", "Spotify sign-in could not listen for the answer", error?.code, "cannot-listen")));
+        attempt.server.listen(PORT, "127.0.0.1", () => resolve2());
+      });
+      attempt.timer = setTimeout(() => stopListening(attempt), ATTEMPT_MS);
+      attempt.timer.unref?.();
+      pending = attempt;
+      log(`[Spotify] Sign-in is waiting on 127.0.0.1:${PORT} for ${ATTEMPT_MS / 6e4} min`);
+      return { key: attempt.key, expiresInMs: ATTEMPT_MS };
+    },
+    async open(key) {
+      if (pending?.key !== key || pending.outcome) return false;
+      await openExternal2(pending.page);
+      return true;
+    },
+    check(key) {
+      if (pending?.key !== key) return { state: "expired" };
+      if (pending.outcome?.tokens) return { state: "approved", tokens: pending.outcome.tokens };
+      if (pending.outcome) {
+        const message = pending.outcome.error;
+        drop();
+        return { state: "error", message };
+      }
+      if (now() >= pending.expiresAt) {
+        drop();
+        return { state: "expired" };
+      }
+      return { state: "waiting" };
+    },
+    holds: (key) => pending?.key === key,
+    finish(key) {
+      if (pending?.key === key) drop();
+    },
+    cancel() {
+      drop();
+    },
+    renew: (refreshToken) => tokens({ grant_type: "refresh_token", refresh_token: refreshToken }, refreshToken)
+  };
+}
+
+// src/accounts/spotify/bridge.ts
+var execFileAsync = promisify(execFile);
+var QUERY_URL = "https://api-partner.spotify.com/pathfinder/v2/query";
+var SPCLIENT_URL = "https://spclient.wg.spotify.com";
+var RENEW_AHEAD_MS = 60 * 1e3;
+var REQUEST_LIMIT_MS2 = 30 * 1e3;
+var ACCOUNT_MAX_AGE_MS = 10 * 60 * 1e3;
+var ACCOUNT_RETRY_MS = 60 * 1e3;
+var PAGE_LANGUAGES = { "zh-CN": "zh-CN", en: "en" };
+var QUERIES = Object.freeze({
+  profileAttributes: "53bcb064f6cd18c23f752bc324a791194d20df612d8e1239c735144ab0399ced",
+  libraryV3: "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455",
+  fetchLibraryTracks: "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240",
+  fetchPlaylist: "cd2275433b29f7316176e7b5b5e098ae7744724e1a52d63549c76636b3257749",
+  searchTracks: "bc1ca2fcd0ba1013a0fc88e6cc4f190af501851e3dafd3e1ef85840297694428",
+  getTrack: "612585ae06ba435ad26369870deaae23b5c8800a256cd8a57e08eddc25a37294"
+});
+var SPOTIFY_LIKED_ID = "liked";
+var TRACK_ID = /^[0-9A-Za-z]{22}$/;
+var PLAYLIST_ID = /^[0-9A-Za-z]{22}$/;
+function publicAccountId(username) {
+  return createHash6("sha256").update(`ryanmusic-spotify:${username}`).digest("hex").slice(0, 24);
+}
+function isCredentials(value) {
+  return Boolean(
+    value && typeof value.access_token === "string" && value.access_token && typeof value.refresh_token === "string" && value.refresh_token && Number.isFinite(value.expires_at)
+  );
+}
+function isUser(value) {
+  return Boolean(value && typeof value.id === "string" && value.id && typeof value.nickname === "string");
+}
+function pictureOf(sources) {
+  return (sources ?? []).reduce((best, source) => source?.url && (!best || (source.width ?? 0) > (best.width ?? 0)) ? source : best, null)?.url ?? "";
+}
+function spotifyId(uri, kind) {
+  if (typeof uri !== "string") return "";
+  return new RegExp(`^spotify:(?:user:[^:]+:)?${kind}:([0-9A-Za-z]{22})$`).exec(uri)?.[1] ?? "";
+}
+async function openExternal(url) {
+  await execFileAsync("open", [url]);
+}
+var SpotifyBridge = class {
+  sessionFile;
+  current = null;
+  loaded = false;
+  renewing = null;
+  adopting = false;
+  approved = null;
+  accountReadAt = 0;
+  accountRead = null;
+  planKnown = false;
+  signIn = createSpotifySignIn({
+    openExternal,
+    language: () => "zh-CN",
+    log: (...args) => console.info(...args),
+    warn: (...args) => console.warn(...args)
+  });
+  constructor(cache) {
+    const dir = cache.dir("spotify_auth");
+    this.sessionFile = join5(dir, "session.json");
+  }
+  loggedIn() {
+    return Boolean(this.getSession()?.credentials.access_token);
+  }
+  user() {
+    const session = this.getSession();
+    if (!session?.user) return null;
+    return {
+      id: session.user.id,
+      nickname: session.user.nickname,
+      avatar: session.user.avatarUrl || "",
+      vip: session.user.premium ? 1 : 0
+    };
+  }
+  async request(operation, params = {}) {
+    try {
+      switch (operation) {
+        case "login_start":
+          return { ok: true, data: await this.signIn.start() };
+        case "login_open":
+          return { ok: true, data: await this.signIn.open(String(params.key || "")) };
+        case "login_check":
+          return { ok: true, data: await this.loginCheck(String(params.key || "")) };
+        case "login_cancel":
+          if (this.signIn.holds(String(params.key || ""))) this.signIn.cancel();
+          return { ok: true, data: true };
+        case "login_status":
+          return { ok: true, data: await this.loginStatus() };
+        case "logout":
+          this.signIn.cancel();
+          this.clearSession();
+          return { ok: true, data: true };
+        case "user_playlists":
+          return { ok: true, data: await this.userPlaylists(Number(params.limit || 50), Number(params.offset || 0)) };
+        case "playlist_tracks":
+          return { ok: true, data: await this.playlistTracks(String(params.id || ""), Number(params.offset || 0), Number(params.limit || 80)) };
+        case "liked_tracks":
+          return { ok: true, data: await this.likedTracks(Number(params.offset || 0), Number(params.limit || 80)) };
+        case "search":
+          return { ok: true, data: await this.searchTracks(String(params.q || ""), Number(params.limit || 30), Number(params.offset || 0)) };
+        case "track":
+          return { ok: true, data: await this.trackDetail(String(params.id || "")) };
+        default:
+          return { ok: false, error: { code: "unsupported", message: "Unsupported Spotify operation" } };
+      }
+    } catch (error) {
+      console.warn(`[Spotify] ${operation} failed: ${describeError(error)}`);
+      return toErrorResult(error);
+    }
+  }
+  getSession() {
+    if (!this.loaded) {
+      this.loaded = true;
+      try {
+        const value = readJson(this.sessionFile);
+        if (value?.version === 1 && isCredentials(value.credentials) && isUser(value.user)) {
+          this.current = value;
+        }
+      } catch {
+        this.current = null;
+      }
+    }
+    return this.current;
+  }
+  setSession(session) {
+    this.loaded = true;
+    this.current = session;
+    writeJson(this.sessionFile, session);
+  }
+  updateSession(patch) {
+    const current = this.getSession();
+    if (!current) return;
+    if (patch.credentials && !isCredentials(patch.credentials)) return;
+    if (patch.user && !isUser(patch.user)) return;
+    this.current = {
+      ...current,
+      ...patch.credentials ? { credentials: { ...patch.credentials } } : {},
+      ...patch.user ? { user: { ...patch.user } } : {}
+    };
+    writeJson(this.sessionFile, this.current);
+  }
+  clearSession() {
+    this.loaded = true;
+    this.current = null;
+    this.accountReadAt = 0;
+    this.planKnown = false;
+    removeFile(this.sessionFile);
+  }
+  renew(session) {
+    const token = session.credentials.refresh_token;
+    if (this.renewing?.token === token) return this.renewing.answer;
+    const answer = this.signIn.renew(token).then((credentials) => {
+      if (this.getSession()?.credentials.refresh_token === token) {
+        this.updateSession({ credentials });
+        console.info(`[Spotify] Token renewed, good for ${Math.round((credentials.expires_at - Date.now()) / 1e3)} s`);
+      }
+      return credentials.access_token;
+    }, (error) => {
+      if (error instanceof Error && error.code === "auth-required" && this.getSession()?.credentials.refresh_token === token) {
+        this.clearSession();
+        console.warn("[Spotify] Spotify no longer accepts the stored sign-in; it was removed");
+      }
+      throw error;
+    }).finally(() => {
+      if (this.renewing?.answer === answer) this.renewing = null;
+    });
+    this.renewing = { token, answer };
+    return answer;
+  }
+  async accessToken(fresh = false) {
+    const session = this.getSession();
+    if (!session) throw spotifyError("auth-required", "Spotify sign-in is required");
+    if (!fresh && session.credentials.expires_at - Date.now() > RENEW_AHEAD_MS) {
+      return session.credentials.access_token;
+    }
+    return this.renew(session);
+  }
+  async call(url, init = {}) {
+    const { token, absent, ...rest } = init;
+    const send = async (bearer) => fetch(url, {
+      ...rest,
+      signal: AbortSignal.timeout(REQUEST_LIMIT_MS2),
+      headers: {
+        Accept: "application/json",
+        "Accept-Language": PAGE_LANGUAGES["zh-CN"],
+        ...rest.headers || {},
+        Authorization: `Bearer ${bearer}`
+      }
+    });
+    let response = await send(token ?? await this.accessToken());
+    if (response.status === 401 && !token) response = await send(await this.accessToken(true));
+    if (response.status === 404 && absent !== void 0) return absent;
+    if (!response.ok) throw statusError(response.status, "unavailable", "Spotify refused the request", `HTTP ${response.status}`);
+    return response.json();
+  }
+  async ask(name, variables, token) {
+    const answer = await this.call(QUERY_URL, {
+      token,
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        variables,
+        operationName: name,
+        extensions: { persistedQuery: { version: 1, sha256Hash: QUERIES[name] } }
+      })
+    });
+    const said = Array.isArray(answer?.errors) ? answer.errors.map((error) => error?.message).filter(Boolean).join(" | ").slice(0, 160) : "";
+    return { data: answer?.data, said, refused: Array.isArray(answer?.errors) && answer.errors.length > 0 };
+  }
+  async query(name, variables, token) {
+    const { data, said } = await this.ask(name, variables, token);
+    if (!data) throw spotifyError("invalid-response", "Spotify did not answer the query", `${name}: ${said || "no data"}`);
+    if (said) console.warn(`[Spotify] ${name} was answered in part: ${said}`);
+    return data;
+  }
+  async readAccount(token) {
+    const [profile, state] = await Promise.all([
+      this.query("profileAttributes", {}, token),
+      this.call(`${SPCLIENT_URL}/melody/v1/product_state?market=from_token`, { token }).catch((error) => {
+        console.warn(`[Spotify] The account's plan could not be read: ${describeError(error)}`);
+        return null;
+      })
+    ]);
+    const me = profile?.me?.profile;
+    if (typeof me?.username !== "string" || !me.username) {
+      throw spotifyError("invalid-response", "Spotify did not name the account");
+    }
+    const pictures = Array.isArray(me.avatar?.sources) ? me.avatar.sources : [];
+    const largest = pictures.reduce((best, picture) => (picture?.width ?? 0) > (best?.width ?? -1) ? picture : best, null);
+    return {
+      id: publicAccountId(me.username),
+      nickname: String(me.name || "Spotify"),
+      avatarUrl: typeof largest?.url === "string" ? largest.url : "",
+      premium: state ? state.catalogue === "premium" || state.product === "premium" : void 0
+    };
+  }
+  refreshAccount(maxAgeMs = ACCOUNT_MAX_AGE_MS) {
+    const session = this.getSession();
+    if (!session) return Promise.resolve();
+    if (this.accountRead) return this.accountRead;
+    if (Date.now() - this.accountReadAt < maxAgeMs) return Promise.resolve();
+    this.accountReadAt = Date.now();
+    const reading = this.readAccount().then((read) => {
+      if (this.getSession()?.credentials.refresh_token !== session.credentials.refresh_token) return;
+      this.planKnown = read.premium !== void 0;
+      const user = {
+        id: read.id,
+        nickname: read.nickname,
+        avatarUrl: read.avatarUrl,
+        premium: read.premium ?? session.user.premium
+      };
+      this.updateSession({ user });
+    }, (error) => {
+      this.planKnown = false;
+      console.warn(`[Spotify] The account could not be read again: ${describeError(error)}`);
+    }).finally(() => {
+      if (this.accountRead === reading) this.accountRead = null;
+    });
+    this.accountRead = reading;
+    return reading;
+  }
+  async loginCheck(key) {
+    const state = this.signIn.check(key);
+    if (state.state !== "approved") return state;
+    if (this.adopting) return { state: "waiting" };
+    this.adopting = true;
+    if (this.approved?.key !== key) this.approved = { key, since: Date.now() };
+    try {
+      const tokens = state.tokens;
+      const read = await this.readAccount(tokens.access_token);
+      if (!this.signIn.holds(key)) return { state: "expired" };
+      this.setSession({
+        version: 1,
+        credentials: tokens,
+        user: {
+          id: read.id,
+          nickname: read.nickname,
+          avatarUrl: read.avatarUrl,
+          premium: read.premium === true
+        }
+      });
+      this.accountReadAt = read.premium === void 0 ? 0 : Date.now();
+      this.planKnown = read.premium !== void 0;
+      this.signIn.finish(key);
+      console.info(`[Spotify] Signed in (Premium: ${read.premium === void 0 ? "not known yet" : read.premium ? "yes" : "no"})`);
+      return { state: "confirmed" };
+    } catch (error) {
+      console.warn(`[Spotify] The account could not be read after Spotify approved the sign-in: ${describeError(error)}`);
+      const onTheLine = lineReason(error);
+      if (onTheLine && this.signIn.holds(key) && Date.now() - (this.approved?.since || 0) < ACCOUNT_RETRY_MS) {
+        return { state: "waiting" };
+      }
+      this.signIn.finish(key);
+      const told = toErrorResult(error).error;
+      throw spotifyError(told.code, told.message, error?.detail ?? error?.message, onTheLine ?? "account-not-read");
+    } finally {
+      this.adopting = false;
+    }
+  }
+  async loginStatus() {
+    const user = this.getSession()?.user;
+    if (!user) return null;
+    void this.refreshAccount();
+    return { id: user.id, nickname: user.nickname, avatarUrl: user.avatarUrl, vipType: user.premium ? 1 : 0 };
+  }
+  mapTrack(track, besideUri) {
+    const id = spotifyId(track?.uri ?? besideUri, "track");
+    if (!track || !id || !track.name || track.__typename && track.__typename !== "Track") return null;
+    const artists = Array.isArray(track.artists?.items) ? track.artists.items : [];
+    const author = artists.map((item) => String(item?.profile?.name || "").trim()).filter(Boolean).join(" / ") || "Spotify";
+    return {
+      type: "spotify",
+      songid: id,
+      title: String(track.name),
+      author,
+      pic: pictureOf(track.albumOfTrack?.coverArt?.sources),
+      album: String(track.albumOfTrack?.name || ""),
+      durationMs: Math.max(0, Number(track.duration?.totalMilliseconds ?? track.trackDuration?.totalMilliseconds) || 0) || void 0
+    };
+  }
+  mapPlaylist(playlist, index) {
+    const id = spotifyId(playlist?.uri, "playlist");
+    if (!playlist || !id || playlist.__typename && playlist.__typename !== "Playlist") return null;
+    return {
+      id,
+      name: String(playlist.name || "Spotify"),
+      cover: pictureOf(playlist.images?.items?.[0]?.sources),
+      trackCount: Number(playlist.content?.totalCount || 0) || 0,
+      order: index,
+      description: String(playlist.description || "").replace(/<[^>]+>/g, "")
+    };
+  }
+  async likedHead() {
+    return this.query("fetchLibraryTracks", { offset: 0, limit: 1 });
+  }
+  async userPlaylists(limit = 50, offset = 0) {
+    if (!this.getSession()) throw spotifyError("auth-required", "Spotify sign-in is required");
+    const pageSize = Math.min(50, Math.max(1, limit));
+    const start = Math.max(0, offset);
+    const [page, liked] = await Promise.all([
+      this.query("libraryV3", {
+        filters: ["Playlists"],
+        order: null,
+        textFilter: "",
+        features: [],
+        limit: pageSize,
+        offset: start,
+        flatten: true,
+        expandedFolders: [],
+        folderUri: null,
+        includeFoldersWhenFlattening: true
+      }),
+      start === 0 ? this.likedHead().catch(() => null) : null
+    ]);
+    const rows = page?.me?.libraryV3?.items || [];
+    const playlists = rows.map((row, index) => this.mapPlaylist(row?.item?.data, start + index + (liked ? 1 : 0))).filter(Boolean);
+    if (liked) {
+      const tracks = liked?.me?.library?.tracks;
+      const latest = tracks?.items?.[0]?.track;
+      playlists.unshift({
+        id: SPOTIFY_LIKED_ID,
+        name: "\u5DF2\u70B9\u8D5E\u7684\u6B4C\u66F2",
+        cover: this.mapTrack(latest?.data, latest?._uri)?.pic || "",
+        trackCount: Number(tracks?.totalCount || 0) || 0,
+        order: 0,
+        description: ""
+      });
+    }
+    return {
+      items: playlists,
+      total: Number(page?.me?.libraryV3?.totalCount || playlists.length) + (liked ? 1 : 0)
+    };
+  }
+  async likedTracks(offset = 0, limit = 80) {
+    if (!this.getSession()) throw spotifyError("auth-required", "Spotify sign-in is required");
+    const pageSize = Math.min(100, Math.max(1, limit));
+    const start = Math.max(0, offset);
+    const data = await this.query("fetchLibraryTracks", { offset: start, limit: pageSize });
+    const tracks = data?.me?.library?.tracks;
+    const items = Array.isArray(tracks?.items) ? tracks.items : [];
+    const mapped = items.map((row) => this.mapTrack(row?.track?.data, row?.track?._uri)).filter(Boolean);
+    const total = Number(tracks?.totalCount || mapped.length) || mapped.length;
+    return {
+      id: SPOTIFY_LIKED_ID,
+      name: "\u5DF2\u70B9\u8D5E\u7684\u6B4C\u66F2",
+      cover: mapped[0]?.pic || "",
+      total,
+      tracks: mapped,
+      hasMore: start + items.length < total,
+      nextOffset: start + items.length
+    };
+  }
+  async playlistTracks(id, offset = 0, limit = 80) {
+    if (!this.getSession()) throw spotifyError("auth-required", "Spotify sign-in is required");
+    const playlistId = String(id || "").trim();
+    if (playlistId === SPOTIFY_LIKED_ID) return this.likedTracks(offset, limit);
+    if (!PLAYLIST_ID.test(playlistId)) throw spotifyError("invalid-response", "Invalid Spotify playlist");
+    const pageSize = Math.min(100, Math.max(1, limit));
+    const start = Math.max(0, offset);
+    const data = await this.query("fetchPlaylist", {
+      uri: `spotify:playlist:${playlistId}`,
+      offset: start,
+      limit: pageSize,
+      enableWatchFeedEntrypoint: false
+    });
+    const list = data?.playlistV2;
+    if (!list) throw spotifyError("invalid-response", "Spotify did not give the playlist");
+    const items = Array.isArray(list.content?.items) ? list.content.items : [];
+    const tracks = items.map((item) => this.mapTrack(item?.itemV2?.data)).filter(Boolean);
+    const total = Number(list.content?.totalCount || tracks.length) || tracks.length;
+    return {
+      id: playlistId,
+      name: String(list.name || "Spotify"),
+      cover: pictureOf(list.images?.items?.[0]?.sources),
+      total,
+      tracks,
+      hasMore: start + items.length < total,
+      nextOffset: start + items.length
+    };
+  }
+  async searchTracks(q, limit = 30, offset = 0) {
+    if (!this.getSession()) throw spotifyError("auth-required", "Spotify sign-in is required");
+    const text2 = String(q || "").trim();
+    if (!text2) return { tracks: [], total: 0 };
+    const data = await this.query("searchTracks", {
+      searchTerm: text2,
+      offset: Math.max(0, offset),
+      limit: Math.min(50, Math.max(1, limit)),
+      includePreReleases: false,
+      numberOfTopResults: 20,
+      includeAudiobooks: true,
+      includeAuthors: false
+    });
+    const rows = data?.searchV2?.tracksV2?.items || [];
+    const tracks = rows.map((row) => this.mapTrack(row?.item?.data)).filter(Boolean);
+    return { tracks, total: tracks.length };
+  }
+  async trackDetail(id) {
+    if (!TRACK_ID.test(id)) throw spotifyError("invalid-response", "Invalid Spotify track");
+    const data = await this.query("getTrack", { uri: `spotify:track:${id}` });
+    const track = data?.trackUnion;
+    if (!track) throw spotifyError("invalid-response", "Spotify track missing");
+    const artists = [
+      ...track.firstArtist?.items || [],
+      ...track.otherArtists?.items || []
+    ];
+    return this.mapTrack({ ...track, artists: { items: artists } });
+  }
+};
+
+// src/accounts/spotify.ts
+function ok4(data) {
+  return { code: 200, error: "", data };
+}
+function fail4(code, error, data = "") {
+  return { code, error, data };
+}
+function loginMessage2(error) {
+  if (!error) return "Spotify \u767B\u5F55\u5931\u8D25";
+  if (error.reason === "cannot-listen") return "\u65E0\u6CD5\u5360\u7528\u672C\u673A\u767B\u5F55\u7AEF\u53E3\uFF0C\u8BF7\u5173\u95ED\u5360\u7528 5588 \u7684\u7A0B\u5E8F\u540E\u91CD\u8BD5";
+  if (error.reason === "access-denied" || error.code === "auth-required") return "\u672A\u6388\u6743 Spotify\uFF0C\u8BF7\u91CD\u8BD5";
+  if (error.reason === "account-not-read") return "Spotify \u5DF2\u6388\u6743\uFF0C\u4F46\u8D26\u53F7\u4FE1\u606F\u8BFB\u53D6\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5";
+  if (error.code === "network") return "\u65E0\u6CD5\u8FDE\u63A5 Spotify\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC";
+  if (error.code === "unavailable") return "\u767B\u5F55\u5DF2\u53D6\u6D88\u6216\u8FC7\u671F\uFF0C\u8BF7\u91CD\u8BD5";
+  return error.message || "Spotify \u767B\u5F55\u5931\u8D25";
+}
+var SpotifyAccount = class {
+  bridge;
+  constructor(cache) {
+    this.bridge = new SpotifyBridge(cache);
+  }
+  loggedIn() {
+    return this.bridge.loggedIn();
+  }
+  async handle(action, post) {
+    switch (action) {
+      case "spotify_status":
+        return ok4(this.status());
+      case "spotify_logout":
+        await this.bridge.request("logout");
+        return ok4({ ok: true });
+      case "spotify_login_start":
+        return this.loginStart();
+      case "spotify_login_open":
+        return this.loginOpen(post.key || "");
+      case "spotify_login_check":
+        return this.loginCheck(post.key || "");
+      case "spotify_login_cancel":
+        return this.loginCancel(post.key || "");
+      case "spotify_playlists":
+        return this.playlists();
+      case "spotify_playlist_detail":
+        return this.playlistDetail(post.id || "", Number(post.offset || 0), Number(post.limit || 80));
+      case "spotify_recommend_feed":
+        return this.recommendFeed();
+      case "spotify_recent_songs":
+        return fail4(400, "Spotify \u6682\u4E0D\u63D0\u4F9B\u6700\u8FD1\u64AD\u653E\u5217\u8868");
+      default:
+        return fail4(400, "\u672A\u77E5\u64CD\u4F5C");
+    }
+  }
+  status() {
+    if (!this.bridge.loggedIn()) return { loggedIn: false };
+    const user = this.bridge.user();
+    return {
+      loggedIn: true,
+      nickname: user?.nickname || "Spotify",
+      avatar: user?.avatar || "",
+      vip: user?.vip || 0
+    };
+  }
+  async loginStart() {
+    const result = await this.bridge.request("login_start");
+    if (!result.ok) return fail4(502, loginMessage2(result.error));
+    const key = String(result.data?.key || "");
+    if (!key) return fail4(502, "\u65E0\u6CD5\u5F00\u59CB Spotify \u767B\u5F55");
+    return ok4({ key, expiresInMs: Number(result.data?.expiresInMs || 0) });
+  }
+  async loginOpen(key) {
+    const token = String(key || "").trim();
+    if (!token) return fail4(400, "\u7F3A\u5C11\u767B\u5F55 key");
+    const result = await this.bridge.request("login_open", { key: token });
+    if (!result.ok) return fail4(502, loginMessage2(result.error));
+    return ok4({ opened: Boolean(result.data) });
+  }
+  async loginCheck(key) {
+    const token = String(key || "").trim();
+    if (!/^[a-f0-9]{32}$/.test(token)) return fail4(400, "\u7F3A\u5C11\u767B\u5F55 key");
+    const result = await this.bridge.request("login_check", { key: token });
+    if (!result.ok) return fail4(502, loginMessage2(result.error));
+    const state = String(result.data?.state || "");
+    if (state === "waiting") return ok4({ status: 801, message: "\u8BF7\u5728\u6D4F\u89C8\u5668\u5B8C\u6210 Spotify \u6388\u6743\u2026" });
+    if (state === "expired") return ok4({ status: 800, message: "\u767B\u5F55\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u91CD\u8BD5" });
+    if (state === "error") {
+      return ok4({
+        status: 800,
+        message: loginMessage2({ reason: result.data?.message, message: result.data?.message })
+      });
+    }
+    if (state === "confirmed") {
+      return ok4({ status: 803, message: "\u767B\u5F55\u6210\u529F", ...this.status(), loggedIn: true });
+    }
+    if (state === "approved") return ok4({ status: 801, message: "\u6B63\u5728\u8BFB\u53D6\u8D26\u53F7\u2026" });
+    return ok4({ status: 801, message: "\u8BF7\u5728\u6D4F\u89C8\u5668\u5B8C\u6210 Spotify \u6388\u6743\u2026" });
+  }
+  async loginCancel(key) {
+    const token = String(key || "").trim();
+    if (token) await this.bridge.request("login_cancel", { key: token });
+    return ok4({ ok: true });
+  }
+  async playlists() {
+    if (!this.bridge.loggedIn()) return fail4(401, "\u672A\u767B\u5F55 Spotify");
+    const result = await this.bridge.request("user_playlists", {
+      limit: 80,
+      offset: 0
+    });
+    if (!result.ok) return fail4(502, result.error?.message || "\u65E0\u6CD5\u8BFB\u53D6 Spotify \u6B4C\u5355");
+    const playlists = (result.data?.items || []).filter(Boolean);
+    const user = this.bridge.user();
+    return ok4({ playlists, nickname: user?.nickname || "Spotify" });
+  }
+  async playlistDetail(id, offset = 0, limit = 80) {
+    if (!this.bridge.loggedIn()) return fail4(401, "\u672A\u767B\u5F55 Spotify");
+    const playlistId = String(id || "").trim();
+    if (!playlistId) return fail4(400, "\u7F3A\u5C11\u6B4C\u5355 id");
+    const result = await this.bridge.request("playlist_tracks", { id: playlistId, offset, limit });
+    if (!result.ok) return fail4(502, result.error?.message || "\u65E0\u6CD5\u8BFB\u53D6 Spotify \u6B4C\u5355\u6B4C\u66F2");
+    return ok4({
+      id: result.data?.id || playlistId,
+      playlistId: result.data?.id || playlistId,
+      name: result.data?.name || (playlistId === SPOTIFY_LIKED_ID ? "\u5DF2\u70B9\u8D5E\u7684\u6B4C\u66F2" : "Spotify"),
+      cover: result.data?.cover || "",
+      total: Number(result.data?.total || 0),
+      tracks: result.data?.tracks || [],
+      hasMore: Boolean(result.data?.hasMore),
+      nextOffset: Number(result.data?.nextOffset || offset)
+    });
+  }
+  async recommendFeed() {
+    if (!this.bridge.loggedIn()) return fail4(401, "\u672A\u767B\u5F55 Spotify");
+    const library = await this.playlists().catch(() => ok4({ playlists: [] }));
+    const playlists = Array.isArray(library.data?.playlists) ? library.data.playlists : [];
+    const items = playlists.slice(0, 16).map((playlist) => ({
+      ...playlist,
+      recommendKind: "playlist"
+    }));
+    return ok4({ items });
+  }
+};
+
+// src/accounts/qq.ts
+init_http();
+import { createHash as createHash7 } from "node:crypto";
+import { join as join6 } from "node:path";
 var QqAccount = class {
   constructor(cache, qq) {
     this.qq = qq;
-    this.authFile = join5(cache.dir("qq_auth"), "session.json");
-    this.qrFile = join5(cache.dir("qq_auth"), "qr_session.json");
+    this.authFile = join6(cache.dir("qq_auth"), "session.json");
+    this.qrFile = join6(cache.dir("qq_auth"), "qr_session.json");
   }
   authFile;
   qrFile;
@@ -4707,11 +5868,11 @@ var QqAccount = class {
   async handle(action, post) {
     switch (action) {
       case "qq_status":
-        return ok4(await this.statusFresh());
+        return ok5(await this.statusFresh());
       case "qq_logout":
         removeFile(this.authFile);
         removeFile(this.qrFile);
-        return ok4({ ok: true });
+        return ok5({ ok: true });
       case "qq_cookie_save":
         return this.cookieSave(post.cookie || "");
       case "qq_qr_key":
@@ -4739,7 +5900,7 @@ var QqAccount = class {
       case "qq_playlist_add":
         return this.playlistAdd(post);
       default:
-        return fail4(400, "\u672A\u77E5\u64CD\u4F5C");
+        return fail5(400, "\u672A\u77E5\u64CD\u4F5C");
     }
   }
   extractUin(cookie) {
@@ -4945,15 +6106,15 @@ var QqAccount = class {
   }
   async cookieSave(raw2) {
     let cookie = normalizeCookie(raw2);
-    if (!cookie) return fail4(400, "\u8BF7\u7C98\u8D34 Cookie");
+    if (!cookie) return fail5(400, "\u8BF7\u7C98\u8D34 Cookie");
     const map = cookieToMap(cookie);
     if (Number(map.login_type) === 2 && map.wxuin) {
       cookie = mergeCookies(cookie, `uin=${map.wxuin}`);
     }
     const account = await this.profileValidate(cookie);
-    if (!account) return fail4(401, "Cookie \u65E0\u6548\uFF1A\u9700\u542B uin \u4E0E qm_keyst/qqmusic_key\uFF0C\u8BF7\u4ECE y.qq.com \u590D\u5236");
+    if (!account) return fail5(401, "Cookie \u65E0\u6548\uFF1A\u9700\u542B uin \u4E0E qm_keyst/qqmusic_key\uFF0C\u8BF7\u4ECE y.qq.com \u590D\u5236");
     this.write(await this.withVip(account));
-    return ok4(this.status());
+    return ok5(this.status());
   }
   async qqGet(url, cookie = "", extra = {}) {
     const headers = {
@@ -4995,13 +6156,13 @@ var QqAccount = class {
       headers: { Referer: "https://xui.ptlogin2.qq.com/" }
     });
     const qrsig = cookieGet(buf?.cookies || "", "qrsig");
-    if (!buf || buf.status >= 400 || !qrsig) return fail4(502, "\u65E0\u6CD5\u83B7\u53D6 QQ \u4E8C\u7EF4\u7801\uFF0C\u8BF7\u6539\u7528 Cookie");
+    if (!buf || buf.status >= 400 || !qrsig) return fail5(502, "\u65E0\u6CD5\u83B7\u53D6 QQ \u4E8C\u7EF4\u7801\uFF0C\u8BF7\u6539\u7528 Cookie");
     const img = buf.body.toString("base64");
     const ptqrtoken = hash33(qrsig);
     writeJson(this.qrFile, { qrsig, ptqrtoken, createdAt: Date.now() / 1e3 });
-    return ok4({
+    return ok5({
       qrimg: `data:image/png;base64,${img}`,
-      token: createHash5("sha256").update(qrsig).digest("hex").slice(0, 16)
+      token: createHash7("sha256").update(qrsig).digest("hex").slice(0, 16)
     });
   }
   parsePtui(body) {
@@ -5167,7 +6328,7 @@ ${body}`;
   }
   async qrCheck() {
     const sess = readJson(this.qrFile);
-    if (!sess?.qrsig) return fail4(400, "\u4E8C\u7EF4\u7801\u5DF2\u5931\u6548\uFF0C\u8BF7\u5237\u65B0");
+    if (!sess?.qrsig) return fail5(400, "\u4E8C\u7EF4\u7801\u5DF2\u5931\u6548\uFF0C\u8BF7\u5237\u65B0");
     if (sess.finishFailed) {
       return {
         code: 502,
@@ -5175,7 +6336,7 @@ ${body}`;
         data: { status: 0, loggedIn: false, message: "\u626B\u7801\u6210\u529F\u4F46\u6362\u53D6\u97F3\u4E50\u51ED\u8BC1\u5931\u8D25\uFF0C\u8BF7\u5237\u65B0\u4E8C\u7EF4\u7801\u6216\u6539\u7528 Cookie" }
       };
     }
-    if (sess.finishing) return ok4({ status: 67, message: "\u6B63\u5728\u5B8C\u6210\u767B\u5F55\u2026" });
+    if (sess.finishing) return ok5({ status: 67, message: "\u6B63\u5728\u5B8C\u6210\u767B\u5F55\u2026" });
     const url = `https://ssl.ptlogin2.qq.com/ptqrlogin?${new URLSearchParams({
       u1: "https://graph.qq.com/oauth2.0/login_jump",
       ptqrtoken: String(sess.ptqrtoken || hash33(sess.qrsig)),
@@ -5197,7 +6358,7 @@ ${body}`;
     })}`;
     const res = await this.qqGet(url, `qrsig=${sess.qrsig}`, { Referer: "https://xui.ptlogin2.qq.com/" });
     const parsed = this.parsePtui(res.body);
-    if (!parsed) return ok4({ status: -1, message: "\u8F6E\u8BE2\u5F02\u5E38" });
+    if (!parsed) return ok5({ status: -1, message: "\u8F6E\u8BE2\u5F02\u5E38" });
     const payload = { status: parsed.code, message: "" };
     if (parsed.code === 66) payload.message = "\u7B49\u5F85\u626B\u7801\u2026";
     else if (parsed.code === 67) payload.message = "\u5DF2\u626B\u7801\uFF0C\u8BF7\u5728\u624B\u673A\u4E0A\u786E\u8BA4";
@@ -5226,7 +6387,7 @@ ${body}`;
       payload.nickname = account.nickname;
       payload.message = "\u767B\u5F55\u6210\u529F";
     }
-    return ok4(payload);
+    return ok5(payload);
   }
   async fetchPlaylists(uin, cookie) {
     const out = [];
@@ -5311,14 +6472,14 @@ ${body}`;
   }
   async playlists() {
     const auth = this.read();
-    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
-    return ok4({ playlists: await this.fetchPlaylists(auth.uin, auth.cookie) });
+    if (!auth) return fail5(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    return ok5({ playlists: await this.fetchPlaylists(auth.uin, auth.cookie) });
   }
   async likeSong(post) {
     const auth = this.read();
-    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail5(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const songId = Number(String(post.id || "").replace(/\D/g, ""));
-    if (!songId) return fail4(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    if (!songId) return fail5(400, "\u6B4C\u66F2 ID \u65E0\u6548");
     const like = post.like !== "0" && post.like !== "false";
     const map = cookieToMap(auth.cookie);
     const pSkey = map.p_skey || map.pskey || map.skey || "";
@@ -5377,39 +6538,39 @@ ${body}`;
         );
         const legacyCode = Number(legacy.json?.code ?? -1);
         if (legacyCode === 0 || legacyCode === 1e3) {
-          return ok4({ liked: true, id: String(songId) });
+          return ok5({ liked: true, id: String(songId) });
         }
-        return fail4(502, String(legacy.json?.msg || data?.msg || "\u6DFB\u52A0\u5230\u6211\u559C\u6B22\u5931\u8D25"));
+        return fail5(502, String(legacy.json?.msg || data?.msg || "\u6DFB\u52A0\u5230\u6211\u559C\u6B22\u5931\u8D25"));
       }
-      return fail4(502, String(data?.msg || res.error || "\u53D6\u6D88\u559C\u6B22\u5931\u8D25"));
+      return fail5(502, String(data?.msg || res.error || "\u53D6\u6D88\u559C\u6B22\u5931\u8D25"));
     }
-    return ok4({ liked: like, id: String(songId) });
+    return ok5({ liked: like, id: String(songId) });
   }
   async likeCheck(post) {
     const auth = this.read();
-    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail5(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const songId = String(post.id || "").replace(/\D/g, "");
-    if (!songId) return fail4(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    if (!songId) return fail5(400, "\u6B4C\u66F2 ID \u65E0\u6548");
     const list = await this.fetchPlaylists(auth.uin, auth.cookie);
     const liked = list.find((pl) => Number(pl.dirid) === 201);
-    if (!liked) return ok4({ liked: false, id: songId });
+    if (!liked) return ok5({ liked: false, id: songId });
     const tracks = await this.playlistTracks(liked.id, auth.cookie);
-    return ok4({ liked: tracks.some((t) => String(t.songid) === songId), id: songId });
+    return ok5({ liked: tracks.some((t) => String(t.songid) === songId), id: songId });
   }
   async likelist() {
     const auth = this.read();
-    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail5(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const list = await this.fetchPlaylists(auth.uin, auth.cookie);
     const liked = list.find((pl) => Number(pl.dirid) === 201);
-    if (!liked) return ok4({ playlistId: "", tracks: [], name: "\u6211\u559C\u6B22", total: 0 });
+    if (!liked) return ok5({ playlistId: "", tracks: [], name: "\u6211\u559C\u6B22", total: 0 });
     const tracks = await this.playlistTracks(liked.id, auth.cookie);
-    return ok4({ playlistId: liked.id, name: "\u6211\u559C\u6B22", tracks, total: tracks.length });
+    return ok5({ playlistId: liked.id, name: "\u6211\u559C\u6B22", tracks, total: tracks.length });
   }
   async playlistAdd(post) {
     const auth = this.read();
-    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail5(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const songId = Number(String(post.songid || "").replace(/\D/g, ""));
-    if (!songId) return fail4(400, "\u6B4C\u66F2 ID \u65E0\u6548");
+    if (!songId) return fail5(400, "\u6B4C\u66F2 ID \u65E0\u6548");
     let dirId = Number(String(post.dirid || "").replace(/\D/g, ""));
     const playlistId = String(post.playlistId || post.id || "").replace(/\D/g, "");
     if (!dirId && playlistId) {
@@ -5451,14 +6612,14 @@ ${body}`;
     const data = res.json?.req_1;
     const code = Number(data?.code ?? res.json?.code ?? -1);
     if (!res.ok || code !== 0) {
-      return fail4(502, String(data?.data?.Msg || data?.data?.msg || "\u6DFB\u52A0\u5230\u6B4C\u5355\u5931\u8D25"), {
+      return fail5(502, String(data?.data?.Msg || data?.data?.msg || "\u6DFB\u52A0\u5230\u6B4C\u5355\u5931\u8D25"), {
         playlistId,
         dirId,
         songid: String(songId),
         code
       });
     }
-    return ok4({ playlistId, dirId, songid: String(songId), added: true });
+    return ok5({ playlistId, dirId, songid: String(songId), added: true });
   }
   musiculPayload(auth, reqs) {
     const map = cookieToMap(auth.cookie);
@@ -5720,7 +6881,7 @@ ${body}`;
   }
   async recommendFeed(post) {
     const auth = this.read();
-    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail5(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     let limit = Number(post.limit || 24);
     if (limit <= 0) limit = 24;
     if (limit > 35) limit = 35;
@@ -5771,15 +6932,15 @@ ${body}`;
     });
     items.push(...playlists);
     if (!dailyMix?.id && !radarPreview.length && !radioSongs.length && !playlists.length) {
-      return fail4(502, "\u62C9\u53D6 QQ \u97F3\u4E50\u63A8\u8350\u5931\u8D25");
+      return fail5(502, "\u62C9\u53D6 QQ \u97F3\u4E50\u63A8\u8350\u5931\u8D25");
     }
-    return ok4({ items });
+    return ok5({ items });
   }
   async dailySongs() {
     const auth = this.read();
-    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail5(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const mix = await this.resolveDailyMix(auth);
-    if (!mix?.id) return fail4(502, "\u62C9\u53D6\u6BCF\u65E530\u9996\u5931\u8D25");
+    if (!mix?.id) return fail5(502, "\u62C9\u53D6\u6BCF\u65E530\u9996\u5931\u8D25");
     const tracks = await this.playlistTracks(mix.id, auth.cookie);
     const meta = await this.qqGet(
       `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?${new URLSearchParams({
@@ -5791,7 +6952,7 @@ ${body}`;
       auth.cookie
     );
     const cover = mix.cover?.trim() || this.albumCoverFromTrack(meta.json?.cdlist?.[0]?.songlist?.[0]) || "";
-    return ok4({
+    return ok5({
       id: "__qq_daily__",
       name: String(meta.json?.cdlist?.[0]?.dissname || mix.name || "\u6BCF\u65E530\u9996"),
       cover,
@@ -5801,11 +6962,11 @@ ${body}`;
   }
   async radarSongs() {
     const auth = this.read();
-    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail5(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const rawList = await this.fetchRadarRawList(auth, 30);
-    if (!rawList.length) return fail4(502, "\u62C9\u53D6\u79C1\u4EBA\u96F7\u8FBE\u5931\u8D25");
+    if (!rawList.length) return fail5(502, "\u62C9\u53D6\u79C1\u4EBA\u96F7\u8FBE\u5931\u8D25");
     const tracks = rawList.map((item) => this.qq.trackFromSong(item)).filter(Boolean);
-    return ok4({
+    return ok5({
       id: "__qq_radar__",
       name: "\u79C1\u4EBA\u96F7\u8FBE",
       cover: this.albumCoverFromTrack(rawList[0]),
@@ -5815,19 +6976,19 @@ ${body}`;
   }
   async personalFm() {
     const auth = this.read();
-    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!auth) return fail5(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
     const rawList = await this.fetchRadioRawList(auth, 20);
-    if (!rawList.length) return fail4(502, "\u62C9\u53D6\u731C\u4F60\u559C\u6B22\u5931\u8D25");
+    if (!rawList.length) return fail5(502, "\u62C9\u53D6\u731C\u4F60\u559C\u6B22\u5931\u8D25");
     const tracks = rawList.map((item) => this.qq.trackFromSong(item)).filter(Boolean);
-    return ok4({ tracks });
+    return ok5({ tracks });
   }
   async playlistDetail(id) {
     const trimmed = id.trim();
     if (trimmed === "__qq_radar__") return this.radarSongs();
     if (trimmed === "__qq_daily__") return this.dailySongs();
     const auth = this.read();
-    if (!auth) return fail4(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
-    if (!/^\d+$/.test(trimmed)) return fail4(400, "\u6B4C\u5355 ID \u65E0\u6548");
+    if (!auth) return fail5(401, "\u8BF7\u5148\u767B\u5F55 QQ \u97F3\u4E50");
+    if (!/^\d+$/.test(trimmed)) return fail5(400, "\u6B4C\u5355 ID \u65E0\u6548");
     const tracks = await this.playlistTracks(id.trim(), auth.cookie);
     const meta = await this.qqGet(
       `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?${new URLSearchParams({
@@ -5838,7 +6999,7 @@ ${body}`;
       })}`,
       auth.cookie
     );
-    return ok4({
+    return ok5({
       id: id.trim(),
       name: String(meta.json?.cdlist?.[0]?.dissname || ""),
       tracks,
@@ -5849,17 +7010,17 @@ ${body}`;
 function unescapeRedirect(url) {
   return url.replace(/\\\//g, "/").replace(/&amp;/g, "&");
 }
-function ok4(data) {
+function ok5(data) {
   return { code: 200, error: "", data };
 }
-function fail4(code, error, data = "") {
+function fail5(code, error, data = "") {
   return { code, error, data };
 }
 
-// server/src/cache.ts
+// src/cache.ts
 import { mkdirSync as mkdirSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2, existsSync as existsSync2, readdirSync, rmSync, statSync } from "node:fs";
-import { join as join6 } from "node:path";
-var PRESERVE_DIRS = /* @__PURE__ */ new Set(["netease_auth", "qq_auth", "kugou_auth", "qishui_auth"]);
+import { join as join7 } from "node:path";
+var PRESERVE_DIRS = /* @__PURE__ */ new Set(["netease_auth", "qq_auth", "kugou_auth", "qishui_auth", "spotify_auth"]);
 var CACHE_CATEGORY_IDS = ["lyrics", "play", "comments", "other"];
 function classifyDir(name) {
   const lower = name.toLowerCase();
@@ -5876,13 +7037,13 @@ var FileCache = class {
     mkdirSync2(root, { recursive: true });
   }
   dir(subdir) {
-    const path = join6(this.root, subdir);
+    const path = join7(this.root, subdir);
     mkdirSync2(path, { recursive: true });
     return path;
   }
   file(subdir, key) {
     const safe = key.replace(/[^a-zA-Z0-9]/g, "_");
-    return join6(this.dir(subdir), `${safe}.json`);
+    return join7(this.dir(subdir), `${safe}.json`);
   }
   read(subdir, key) {
     const path = this.file(subdir, key);
@@ -5914,7 +7075,7 @@ var FileCache = class {
       return { removedBytes: 0, removedEntries: 0, preserved, category: target };
     }
     for (const name of readdirSync(this.root)) {
-      const full = join6(this.root, name);
+      const full = join7(this.root, name);
       let st;
       try {
         st = statSync(full);
@@ -5954,7 +7115,7 @@ var FileCache = class {
       };
     }
     for (const name of readdirSync(this.root)) {
-      const full = join6(this.root, name);
+      const full = join7(this.root, name);
       let st;
       try {
         st = statSync(full);
@@ -5990,7 +7151,7 @@ function measurePath(path) {
     if (!st.isDirectory()) return 0;
     let total = 0;
     for (const name of readdirSync(path)) {
-      total += measurePath(join6(path, name));
+      total += measurePath(join7(path, name));
     }
     return total;
   } catch {
@@ -5998,13 +7159,13 @@ function measurePath(path) {
   }
 }
 
-// server/src/app.ts
+// src/app.ts
 init_config();
 
-// server/src/crypto/qrcDecrypt.ts
+// src/crypto/qrcDecrypt.ts
 import { inflateSync as inflateSync2, unzipSync as unzipSync2 } from "node:zlib";
 
-// server/src/crypto/qrcDes.ts
+// src/crypto/qrcDes.ts
 var QQ_KEY = Buffer.from("!@#)(*$%123ZXC!@!@#)(NHL", "ascii");
 var ENCRYPT = 1;
 var DECRYPT = 0;
@@ -6140,7 +7301,7 @@ function qrcTripleDesDecrypt(hexCipher) {
   return out;
 }
 
-// server/src/crypto/qrcDecrypt.ts
+// src/crypto/qrcDecrypt.ts
 function inflateAuto(data) {
   const candidates = [data];
   for (const magic of [Buffer.from([120, 156]), Buffer.from([120, 1]), Buffer.from([120, 218])]) {
@@ -6183,7 +7344,7 @@ function qrcPlainOrDecrypt(raw2) {
   }
 }
 
-// server/src/lyrics.ts
+// src/lyrics.ts
 init_netease();
 init_kugouLyrics();
 init_http();
@@ -6383,26 +7544,30 @@ var LyricsService = class {
     const cached = this.readCache(bucket, songid);
     if (cached && hasUsableLyrics(cached)) return cached;
     let official = null;
-    const officialTask = cookie ? eapiRequest(
-      "/api/song/lyric/v1",
-      {
-        id: Number(songid),
-        cp: false,
-        tv: 0,
-        lv: 0,
-        rv: 0,
-        kv: 0,
-        yv: 0,
-        ytv: 0,
-        yrv: 0
-      },
-      cookie
-    ).catch(() => null) : Promise.resolve(null);
-    const [officialRes, anonymous] = await Promise.all([
-      officialTask,
-      this.netease.fetchLyric(songid, cookie)
-    ]);
-    if (officialRes?.json && (officialRes.json.lrc || officialRes.json.yrc)) official = officialRes.json;
+    let anonymous = null;
+    if (cookie) {
+      const officialRes = await eapiRequest(
+        "/api/song/lyric/v1",
+        {
+          id: Number(songid),
+          cp: false,
+          tv: 0,
+          lv: 0,
+          rv: 0,
+          kv: 0,
+          yv: 0,
+          ytv: 0,
+          yrv: 0
+        },
+        cookie
+      ).catch(() => null);
+      if (officialRes?.json && (officialRes.json.lrc || officialRes.json.yrc)) {
+        official = officialRes.json;
+      }
+    }
+    if (!official || !neteaseLyricText(official, "lrc") && !neteaseLyricText(official, "yrc")) {
+      anonymous = await this.netease.fetchLyric(songid, cookie);
+    }
     if (hasNeteasePureMusicFlag(official) || hasNeteasePureMusicFlag(anonymous) || isPureMusicLyricText(neteaseLyricText(official, "lrc")) || isPureMusicLyricText(neteaseLyricText(anonymous, "lrc"))) {
       return { lrc: "", yrc: "", tlyric: "" };
     }
@@ -6584,7 +7749,10 @@ var LyricsService = class {
         });
       }
     });
-    await Promise.all(jobs);
+    await Promise.race([
+      Promise.all(jobs),
+      new Promise((resolve2) => setTimeout(resolve2, 3500))
+    ]);
     return best;
   }
   async fetchPreferred(options) {
@@ -6829,12 +7997,12 @@ var LyricsService = class {
   }
 };
 
-// server/src/netease.ts
+// src/netease.ts
 init_config();
 init_netease();
 init_http();
 
-// server/src/kuwo.ts
+// src/kuwo.ts
 init_crossPlay();
 init_http();
 init_util();
@@ -6966,7 +8134,7 @@ async function kuwoMatchPlayUrl(title, artist = "") {
   return kuwoPlayUrl(best.songid);
 }
 
-// server/src/netease.ts
+// src/netease.ts
 init_sign();
 init_util();
 var QUALITY_LADDER = ["standard", "higher", "exhigh", "lossless", "hires", "jyeffect", "sky", "jymaster"];
@@ -7222,11 +8390,11 @@ var NeteaseService = class _NeteaseService {
     { level: "standard", label: "\u6807\u51C6", encodeType: "mp3" }
   ];
   static FAST_PLAY_LEVELS = ["exhigh", "higher", "standard"];
-  async resolvePlayUrl(songid, cookie = "", level = "", skipCache = false) {
-    const inflightKey = `${cookie ? "auth" : "private"}:${level || "auto"}:${skipCache ? "fresh" : "cache"}:${songid}`;
+  async resolvePlayUrl(songid, cookie = "", level = "", skipCache = false, freeSource = "auto") {
+    const inflightKey = `${cookie ? "auth" : `free:${freeSource}`}:${level || "auto"}:${skipCache ? "fresh" : "cache"}:${songid}`;
     const inflight = this.playInflight.get(inflightKey);
     if (inflight) return inflight;
-    const pending = this.resolvePlayUrlInner(songid, cookie, level, skipCache).finally(() => {
+    const pending = this.resolvePlayUrlInner(songid, cookie, level, skipCache, freeSource).finally(() => {
       this.playInflight.delete(inflightKey);
     });
     this.playInflight.set(inflightKey, pending);
@@ -7235,8 +8403,8 @@ var NeteaseService = class _NeteaseService {
   forgetCachedPlay(songid) {
     this.cache.setTtl("netease_play_v7", songid, "", -1);
   }
-  async resolvePlayUrlInner(songid, cookie = "", level = "", skipCache = false) {
-    const cacheKey = cookie ? `netease_play_auth_v7_${level || "auto"}` : "netease_play_v7";
+  async resolvePlayUrlInner(songid, cookie = "", level = "", skipCache = false, freeSource = "auto") {
+    const cacheKey = cookie ? `netease_play_auth_v8_${level || "auto"}` : `netease_play_v7_${freeSource}`;
     if (!skipCache) {
       const cached = this.cache.getTtl(cacheKey, songid);
       if (cached && !isNeteaseTrialMediaUrl(cached) && !isKuwoTrialMediaUrl(cached)) return cached;
@@ -7248,41 +8416,27 @@ var NeteaseService = class _NeteaseService {
         return authUrl;
       }
     }
-    const url = await this.bootstrapPlayUrl(songid);
-    if (url && !isBadMediaUrl(url) && !isNeteaseTrialMediaUrl(url) && !isKuwoTrialMediaUrl(url) && !/\/404/i.test(url)) {
-      const safeUrl = httpsNeteaseUrl(url);
-      this.cache.setTtl("netease_play_v7", songid, safeUrl, 1800);
-      return safeUrl;
-    }
-    if (isServerlessEnv()) {
-      const direct = await this.anonymousPlayUrl(songid);
-      if (direct) {
-        this.cache.setTtl("netease_play_v7", songid, direct, 600);
-        return direct;
+    const acceptBoot = async () => {
+      const url2 = await this.bootstrapPlayUrl(songid);
+      if (url2 && !isBadMediaUrl(url2) && !isNeteaseTrialMediaUrl(url2) && !isKuwoTrialMediaUrl(url2) && !/\/404/i.test(url2)) {
+        return httpsNeteaseUrl(url2);
       }
-    } else {
-      const direct = await this.anonymousPlayUrl(songid);
-      if (direct) {
-        this.cache.setTtl("netease_play_v7", songid, direct, 600);
-        return direct;
-      }
+      return null;
+    };
+    const acceptOfficial = async () => this.anonymousPlayUrl(songid);
+    const acceptKuwo = async () => this.kuwoFallbackPlayUrl(songid);
+    let url = null;
+    if (freeSource === "private") url = await acceptBoot();
+    else if (freeSource === "official") url = await acceptOfficial();
+    else if (freeSource === "kuwo") url = await acceptKuwo();
+    else {
+      url = await acceptBoot() || await acceptOfficial() || await acceptKuwo();
     }
-    const kuwo = await this.kuwoFallbackPlayUrl(songid);
-    if (kuwo) {
-      this.cache.setTtl("netease_play_v7", songid, kuwo, 600);
-      return kuwo;
+    if (url) {
+      this.cache.setTtl(cacheKey, songid, url, freeSource === "private" ? 1800 : 600);
+      return url;
     }
     return null;
-  }
-  /** bootstrap 不可达（如 Vercel 美东）时，按歌名匹配酷我取流 */
-  async kuwoFallbackPlayUrl(songid) {
-    try {
-      const [track] = await this.songsByIds([songid]);
-      if (!track?.title) return null;
-      return await kuwoMatchPlayUrl(track.title, track.author || "");
-    } catch {
-      return null;
-    }
   }
   async probePlayQualities(songid, cookie) {
     const id = Number(songid);
@@ -7324,6 +8478,10 @@ var NeteaseService = class _NeteaseService {
     const id = Number(songid);
     if (!id || !cookie) return null;
     const preferred = _NeteaseService.QUALITY_LEVELS.find((item) => item.level === preferredLevel) || _NeteaseService.QUALITY_LEVELS.find((item) => item.level === "exhigh") || _NeteaseService.QUALITY_LEVELS[_NeteaseService.QUALITY_LEVELS.length - 1];
+    const fromEapi = async (item) => {
+      const hit = await this.fetchPlayUrlForLevel(id, cookie, item.level, item.encodeType);
+      return hit?.url || null;
+    };
     const fromWeapi = async () => {
       const weapi = await weapiRequest(
         "/weapi/song/enhance/player/url/v1",
@@ -7337,14 +8495,7 @@ var NeteaseService = class _NeteaseService {
       }
       return null;
     };
-    const fromEapi = async (item) => {
-      const hit = await this.fetchPlayUrlForLevel(id, cookie, item.level, item.encodeType);
-      return hit?.url || null;
-    };
-    const url = await firstTruthy([
-      fromWeapi,
-      () => fromEapi(preferred)
-    ]);
+    const url = await fromEapi(preferred) || await fromWeapi();
     if (url) return url;
     if (preferred.level !== "exhigh") {
       const exhigh = _NeteaseService.QUALITY_LEVELS.find((item) => item.level === "exhigh");
@@ -7374,7 +8525,7 @@ var NeteaseService = class _NeteaseService {
   async bootstrapPlayUrl(songid) {
     const base = bootstrapBase();
     if (!base) return null;
-    const timeoutMs = isServerlessEnv() ? 1e4 : 2500;
+    const timeoutMs = isServerlessEnv() ? 1e4 : 6e3;
     const res = await request("POST", `${base}/`, {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
@@ -7389,10 +8540,18 @@ var NeteaseService = class _NeteaseService {
     const loc = await followLocation(api, `${base}/`, timeoutMs);
     if (!loc || isBadMediaUrl(loc) || isNeteaseTrialMediaUrl(loc)) return null;
     if (/(126\.net|163\.com|music\.163)/i.test(loc)) return loc;
-    const hop = await followLocation(loc, `${base}/`, Math.min(timeoutMs, 4e3));
+    const hop = await followLocation(loc, `${base}/`, timeoutMs);
     return hop && !isNeteaseTrialMediaUrl(hop) ? hop : loc;
   }
-  /** Vercel 等 serverless 环境 bootstrap 不稳定时的直连回退 */
+  async kuwoFallbackPlayUrl(songid) {
+    try {
+      const [track] = await this.songsByIds([songid]);
+      if (!track?.title) return null;
+      return await kuwoMatchPlayUrl(track.title, track.author || "");
+    } catch {
+      return null;
+    }
+  }
   playApiTimeout() {
     return isServerlessEnv() ? 12e3 : 4e3;
   }
@@ -7524,13 +8683,13 @@ var NeteaseService = class _NeteaseService {
   }
 };
 
-// server/src/pages.ts
+// src/pages.ts
 import { existsSync as existsSync3, readFileSync as readFileSync3 } from "node:fs";
-import { join as join7 } from "node:path";
-function spaHtml(webRoot) {
+import { join as join8 } from "node:path";
+function spaHtml(webRoot2) {
   const manifestPath = [
-    join7(webRoot, "static/app/manifest.json"),
-    join7(webRoot, "static/app/.vite/manifest.json")
+    join8(webRoot2, "static/app/manifest.json"),
+    join8(webRoot2, "static/app/.vite/manifest.json")
   ].find((p) => existsSync3(p));
   if (!manifestPath) return null;
   let manifest;
@@ -7568,7 +8727,7 @@ ${cssTags}
 </html>`;
 }
 
-// server/src/qishui.ts
+// src/qishui.ts
 init_http();
 init_sign();
 var PUBLIC_SEARCH_URL = "https://api-vehicle.volcengine.com/v2/search/type";
@@ -7576,7 +8735,7 @@ var PUBLIC_CONTENTS_URL = "https://api-vehicle.volcengine.com/v2/custom/contents
 var PC_TRACK_URL = "https://api.qishui.com/luna/pc/track_v2";
 var PUBLIC_HEADERS = {
   Accept: "application/json,text/plain,*/*",
-  "User-Agent": "RyanMusic/2.0.11 (Qishui catalog)"
+  "User-Agent": "RyanMusic/2.0.12 (Qishui catalog)"
 };
 var PC_UA = "LunaPC/3.3.0(359450208)";
 function text(value) {
@@ -7871,7 +9030,7 @@ var QishuiService = class {
   }
 };
 
-// server/src/qq.ts
+// src/qq.ts
 init_config();
 init_http();
 init_sign();
@@ -8138,11 +9297,11 @@ var QqService = class {
     if (res.json && (res.json.lyric || res.json.trans)) return res.json;
     return jsonpToJson(res.body) || {};
   }
-  async resolvePlayUrl(songmid, cookie = "", skipCache = false) {
-    const inflightKey = `${cookie ? "auth" : "private"}:${skipCache ? "fresh" : "cache"}:${songmid}`;
+  async resolvePlayUrl(songmid, cookie = "", skipCache = false, freeSource = "auto") {
+    const inflightKey = `${cookie ? "auth" : `free:${freeSource}`}:${skipCache ? "fresh" : "cache"}:${songmid}`;
     const inflight = this.playInflight.get(inflightKey);
     if (inflight) return inflight;
-    const pending = this.resolvePlayUrlInner(songmid, cookie, skipCache).finally(() => {
+    const pending = this.resolvePlayUrlInner(songmid, cookie, skipCache, freeSource).finally(() => {
       this.playInflight.delete(inflightKey);
     });
     this.playInflight.set(inflightKey, pending);
@@ -8152,8 +9311,8 @@ var QqService = class {
     this.cache.setTtl("qq_play_v7", songmid, "", -1);
     this.cache.setTtl("qq_play_auth_v7", songmid, "", -1);
   }
-  async resolvePlayUrlInner(songmid, cookie = "", skipCache = false) {
-    const cacheKey = cookie ? "qq_play_auth_v7" : "qq_play_v7";
+  async resolvePlayUrlInner(songmid, cookie = "", skipCache = false, freeSource = "auto") {
+    const cacheKey = cookie ? "qq_play_auth_v7" : `qq_play_v7_${freeSource}`;
     if (!skipCache) {
       const cached = this.cache.getTtl(cacheKey, songmid);
       if (cached && !isQqTrialMediaUrl(cached)) return cached;
@@ -8165,22 +9324,30 @@ var QqService = class {
         return official;
       }
     }
-    if (isServerlessEnv()) {
+    const acceptPrivate = async () => {
+      const url2 = await this.bootstrapPlayUrl(songmid) || await this.pyqPlayUrl(songmid);
+      return url2 && !isBadMediaUrl(url2) && !isKuwoTrialMediaUrl(url2) ? url2 : null;
+    };
+    const acceptOfficial = async () => {
       const official = await this.officialPlayUrl(songmid, "");
-      if (official && !isQqTrialMediaUrl(official)) {
-        this.cache.setTtl("qq_play_v7", songmid, official, 600);
-        return official;
-      }
+      return official && !isQqTrialMediaUrl(official) ? official : null;
+    };
+    const acceptKuwo = async () => {
+      const kuwo = await this.kuwoFallbackPlayUrl(songmid);
+      return kuwo && !isKuwoTrialMediaUrl(kuwo) ? kuwo : null;
+    };
+    let url = null;
+    if (freeSource === "private") url = await acceptPrivate();
+    else if (freeSource === "official") url = await acceptOfficial();
+    else if (freeSource === "kuwo") url = await acceptKuwo();
+    else {
+      url = await acceptPrivate();
+      if (!url && isServerlessEnv()) url = await acceptOfficial();
+      if (!url) url = await acceptKuwo();
     }
-    const url = await this.bootstrapPlayUrl(songmid) || await this.pyqPlayUrl(songmid);
-    if (url && !isBadMediaUrl(url) && !isKuwoTrialMediaUrl(url)) {
-      this.cache.setTtl("qq_play_v7", songmid, url, 600);
+    if (url) {
+      this.cache.setTtl(cacheKey, songmid, url, 600);
       return url;
-    }
-    const kuwo = await this.kuwoFallbackPlayUrl(songmid);
-    if (kuwo && !isKuwoTrialMediaUrl(kuwo)) {
-      this.cache.setTtl("qq_play_v7", songmid, kuwo, 600);
-      return kuwo;
     }
     return null;
   }
@@ -8287,7 +9454,7 @@ var QqService = class {
   async bootstrapPlayUrl(songmid) {
     const base = bootstrapBase();
     if (!base) return null;
-    const timeoutMs = isServerlessEnv() ? 1e4 : 4500;
+    const timeoutMs = isServerlessEnv() ? 1e4 : 6e3;
     const res = await request("POST", `${base}/`, {
       headers: { "X-Requested-With": "XMLHttpRequest", Referer: `${base}/` },
       body: { input: songmid, filter: "id", type: "qq", page: 1 },
@@ -8354,7 +9521,7 @@ function formatCacheStamp() {
   return `${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
-// server/src/app.ts
+// src/app.ts
 init_sign();
 init_util();
 init_crossPlay();
@@ -8370,7 +9537,7 @@ function isAllowedCoverUrl(url) {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
     const host = parsed.hostname.toLowerCase();
-    return host.endsWith("126.net") || host.endsWith("163.com") || host.endsWith("gtimg.cn") || host.endsWith("qlogo.cn") || host.endsWith("qq.com") || host.endsWith("myqcloud.com") || host.endsWith("music.126.net") || host.endsWith("kugou.com") || host.endsWith("kgimg.com") || host.endsWith("mzstatic.com") || host.endsWith("apple.com") || host.endsWith("qishui.com") || host.endsWith("byteimg.com") || host.endsWith("douyin.com") || host.endsWith("toutiao.com") || host.endsWith("volccdn.com") || host.endsWith("volcengine.com");
+    return host.endsWith("126.net") || host.endsWith("163.com") || host.endsWith("gtimg.cn") || host.endsWith("qlogo.cn") || host.endsWith("qq.com") || host.endsWith("myqcloud.com") || host.endsWith("music.126.net") || host.endsWith("kugou.com") || host.endsWith("kgimg.com") || host.endsWith("mzstatic.com") || host.endsWith("apple.com") || host.endsWith("qishui.com") || host.endsWith("byteimg.com") || host.endsWith("douyin.com") || host.endsWith("toutiao.com") || host.endsWith("volccdn.com") || host.endsWith("volcengine.com") || host.endsWith("scdn.co") || host.endsWith("spotifycdn.com") || host.endsWith("spotify.com");
   } catch {
     return false;
   }
@@ -8391,7 +9558,7 @@ async function proxyMedia(url, req, opts) {
   const range = req.headers.get("range");
   if (range) headers.Range = range;
   try {
-    const res = await fetchOpen(url, { headers, redirect: "follow", connectTimeoutMs: 8e3 });
+    const res = await fetchOpen(url, { headers, redirect: "follow", connectTimeoutMs: opts.download ? 2e4 : 8e3 });
     if (res.status >= 400) {
       return new Response(opts.download ? "\u65E0\u6CD5\u83B7\u53D6\u64AD\u653E\u5730\u5740" : "\u4E0A\u6E38\u8D44\u6E90\u4E0D\u53EF\u7528", { status: res.status });
     }
@@ -8423,7 +9590,7 @@ function createApp(options) {
     }
   } catch {
   }
-  const secret = apiSecret(options.coreMarker || join8(options.webRoot, "core"));
+  const secret = apiSecret(options.coreMarker || join9(options.webRoot, "core"));
   const cache = new FileCache(options.cacheDir);
   const netease = new NeteaseService(cache, secret);
   const qq = new QqService(cache, secret);
@@ -8432,6 +9599,7 @@ function createApp(options) {
   const qqAccount = new QqAccount(cache, qq);
   const kugouAccount = new KugouAccount(cache);
   const qishuiAccount = new QishuiAccount(cache);
+  const spotifyAccount = new SpotifyAccount(cache);
   const lyrics = new LyricsService(
     cache,
     netease,
@@ -8443,7 +9611,7 @@ function createApp(options) {
   if (privateBase && !isServerlessEnv()) {
     void request("GET", `${privateBase}/`, { timeoutMs: 2e3 });
   }
-  const app = new Hono2();
+  const app2 = new Hono2();
   const mime = {
     ".js": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
@@ -8460,7 +9628,7 @@ function createApp(options) {
   };
   const sendFile = (rel) => {
     const safe = normalize(rel).replace(/^(\.\.(\/|\\|$))+/, "");
-    const file = join8(options.webRoot, safe);
+    const file = join9(options.webRoot, safe);
     if (!file.startsWith(options.webRoot) || !existsSync4(file) || !statSync2(file).isFile()) {
       return new Response("Not found", { status: 404 });
     }
@@ -8469,13 +9637,13 @@ function createApp(options) {
       headers: { "Content-Type": mime[extname(file).toLowerCase()] || "application/octet-stream" }
     });
   };
-  app.get("/static/*", (c) => sendFile(c.req.path.slice(1)));
-  app.get("/favicon.ico", () => sendFile("favicon.ico"));
-  app.get("/apple-art/:id", (c) => {
+  app2.get("/static/*", (c) => sendFile(c.req.path.slice(1)));
+  app2.get("/favicon.ico", () => sendFile("favicon.ico"));
+  app2.get("/apple-art/:id", (c) => {
     const raw2 = (c.req.param("id") || "").replace(/\.(jpe?g|png|webp)$/i, "");
     if (!/^[A-Za-z0-9._-]+(?:-cover)?$/.test(raw2)) return c.text("Not found", 404);
-    const jpg = join8(options.cacheDir, "apple-art", `${raw2}.jpg`);
-    const png = join8(options.cacheDir, "apple-art", `${raw2}.png`);
+    const jpg = join9(options.cacheDir, "apple-art", `${raw2}.jpg`);
+    const png = join9(options.cacheDir, "apple-art", `${raw2}.png`);
     const file = existsSync4(jpg) ? jpg : existsSync4(png) ? png : "";
     if (!file) return c.text("Not found", 404);
     const stream = Readable.toWeb(createReadStream(file));
@@ -8486,13 +9654,13 @@ function createApp(options) {
       }
     });
   });
-  app.get("/help.php", (c) => c.redirect("/?doc=help", 302));
-  app.get("/help", (c) => c.redirect("/?doc=help", 302));
-  app.get("/disclaimer.php", (c) => c.redirect("/?doc=disclaimer", 302));
-  app.get("/disclaimer", (c) => c.redirect("/?doc=disclaimer", 302));
-  app.get("/privacy.php", (c) => c.redirect("/?doc=privacy", 302));
-  app.get("/privacy", (c) => c.redirect("/?doc=privacy", 302));
-  app.all("/api.php", async (c) => {
+  app2.get("/help.php", (c) => c.redirect("/?doc=help", 302));
+  app2.get("/help", (c) => c.redirect("/?doc=help", 302));
+  app2.get("/disclaimer.php", (c) => c.redirect("/?doc=disclaimer", 302));
+  app2.get("/disclaimer", (c) => c.redirect("/?doc=disclaimer", 302));
+  app2.get("/privacy.php", (c) => c.redirect("/?doc=privacy", 302));
+  app2.get("/privacy", (c) => c.redirect("/?doc=privacy", 302));
+  app2.all("/api.php", async (c) => {
     const get = (c.req.query("get") || "").trim();
     const typeRaw = (c.req.query("type") || "").trim();
     const id = (c.req.query("id") || "").trim();
@@ -8509,13 +9677,17 @@ function createApp(options) {
       const useAuth = Boolean(c.req.query("auth"));
       const skipCache = Boolean(c.req.query("fresh"));
       const level = String(c.req.query("level") || "").trim();
+      const freeSource = parseFreePlaySource(c.req.query("free"));
       const neteaseCookie = useAuth ? neteaseAccount.sessionCookie() || "" : "";
       const qqCookie = useAuth ? qqAccount.sessionCookie() || "" : "";
       const wantCross = c.req.query("cross") === "1";
       const isDelisted = c.req.query("delisted") === "1";
       const resolveCurrent = (auth, fresh = skipCache) => {
-        if (type === "qishui") return qishui.resolvePlayUrl(id, auth ? qishuiAccount.sessionCookie() || "" : "");
-        return type === "qq" ? qq.resolvePlayUrl(id, auth ? qqCookie : "", fresh) : netease.resolvePlayUrl(id, auth ? neteaseCookie : "", level, fresh);
+        if (type === "qishui") {
+          if (auth && qishuiAccount.loggedIn()) return qishuiAccount.resolvePlayUrl(id);
+          return qishui.resolvePlayUrl(id, "");
+        }
+        return type === "qq" ? qq.resolvePlayUrl(id, auth ? qqCookie : "", fresh, freeSource) : netease.resolvePlayUrl(id, auth ? neteaseCookie : "", level, fresh, freeSource);
       };
       const resolveCross = async () => {
         const meta = type === "qishui" ? qishui.meta(id) : void 0;
@@ -8526,7 +9698,7 @@ function createApp(options) {
           const found = altType === "qq" ? await qq.searchByName(query2, 1).catch(() => null) : await netease.searchByName(query2, 1).catch(() => null);
           const best = pickBestCrossPlayTrack({ title, artist }, found?.tracks || [], mode);
           if (!best?.songid) return null;
-          return altType === "qq" ? qq.resolvePlayUrl(String(best.songid), "", true) : netease.resolvePlayUrl(String(best.songid), "", "", true);
+          return altType === "qq" ? qq.resolvePlayUrl(String(best.songid), "", true, freeSource) : netease.resolvePlayUrl(String(best.songid), "", "", true, freeSource);
         };
         const query = [title, artist].filter(Boolean).join(" ");
         return await trySource("netease", query, "strict") || await trySource("qq", query, "strict") || (artist ? await trySource("netease", title, "titleOnly") : null) || (artist ? await trySource("qq", title, "titleOnly") : null);
@@ -8675,6 +9847,10 @@ function createApp(options) {
       }
       if (action.startsWith("qishui_")) {
         const result = await qishuiAccount.handle(action, post);
+        return jsonResponse(result.data, result.code, result.error);
+      }
+      if (action.startsWith("spotify_")) {
+        const result = await spotifyAccount.handle(action, post);
         return jsonResponse(result.data, result.code, result.error);
       }
       if (action === "lyrics_search") {
@@ -8844,14 +10020,84 @@ function createApp(options) {
     }
     return c.html(html);
   };
-  app.get("/", handleIndex);
-  app.post("/", handleIndex);
-  app.get("/index.php", handleIndex);
-  app.post("/index.php", handleIndex);
-  return app;
+  app2.get("/", handleIndex);
+  app2.post("/", handleIndex);
+  app2.get("/index.php", handleIndex);
+  app2.post("/index.php", handleIndex);
+  return app2;
 }
-var app_default = createApp;
-export {
-  createApp,
-  app_default as default
-};
+
+// src/index.ts
+init_http();
+installDirectNetwork();
+function arg(name, fallback) {
+  const prefix = `--${name}=`;
+  const hit = process.argv.find((a) => a.startsWith(prefix));
+  if (hit) return hit.slice(prefix.length);
+  const idx = process.argv.indexOf(`--${name}`);
+  if (idx >= 0 && process.argv[idx + 1]) return process.argv[idx + 1];
+  return fallback;
+}
+var here = dirname2(fileURLToPath(import.meta.url));
+var defaultRoot = resolve(here, "../../web-root");
+var webRoot = resolve(arg("web-root", process.env.RYANMUSIC_WEB_ROOT || defaultRoot));
+var cacheDir = resolve(
+  arg("cache-dir", process.env.RYANMUSIC_CACHE_DIR || join10(webRoot, "core/cache"))
+);
+var listen = arg("listen", process.env.RYANMUSIC_LISTEN || "127.0.0.1");
+var port = Number(arg("port", process.env.PORT || process.env.RYANMUSIC_PORT || "18765"));
+var app = createApp({
+  webRoot,
+  cacheDir,
+  coreMarker: join10(webRoot, "core")
+});
+var server = createServer(async (req, res) => {
+  try {
+    const host = req.headers.host || `${listen}:${port}`;
+    const url = new URL(req.url || "/", `http://${host}`);
+    const headers = new Headers();
+    for (const [k, v] of Object.entries(req.headers)) {
+      if (v == null) continue;
+      if (Array.isArray(v)) headers.set(k, v.join(", "));
+      else headers.set(k, v);
+    }
+    const method = req.method || "GET";
+    const body = method === "GET" || method === "HEAD" ? void 0 : await new Promise((resolvePromise, reject) => {
+      const chunks = [];
+      req.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+      req.on("end", () => resolvePromise(Buffer.concat(chunks)));
+      req.on("error", reject);
+    });
+    const request2 = new Request(url, { method, headers, body, duplex: "half" });
+    const response = await app.fetch(request2);
+    res.statusCode = response.status;
+    response.headers.forEach((value, key) => {
+      res.setHeader(key, value);
+    });
+    if (!response.body) {
+      res.end();
+      return;
+    }
+    const reader = response.body.getReader();
+    const pump = async () => {
+      for (; ; ) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) res.write(Buffer.from(value));
+      }
+      res.end();
+    };
+    pump().catch(() => {
+      try {
+        res.end();
+      } catch {
+      }
+    });
+  } catch (err) {
+    res.statusCode = 500;
+    res.end(err instanceof Error ? err.message : "internal error");
+  }
+});
+server.listen(port, listen, () => {
+  console.log(`RyanMusic server http://${listen}:${port}/  webRoot=${webRoot}`);
+});

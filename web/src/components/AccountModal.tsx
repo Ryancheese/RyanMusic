@@ -16,7 +16,7 @@ import {
   type AccountProviderId,
 } from '../lib/accountProviders';
 import { useAppleMusicStore } from '../store/appleMusicStore';
-import { canUseQishuiNativeQr, qishuiNativeLogout, qishuiNativeQrCheck, qishuiNativeQrKey } from '../lib/qishuiNative';
+import { qishuiNativeLogout } from '../lib/qishuiNative';
 
 interface AccountModalProps {
   open: boolean;
@@ -27,6 +27,7 @@ interface AccountModalProps {
   kugou?: AccountStatus | null;
   apple?: AccountStatus | null;
   qishui?: AccountStatus | null;
+  spotify?: AccountStatus | null;
   /** 打开时优先选中的平台 */
   initialProvider?: AccountProviderId;
   onClose: () => void;
@@ -46,6 +47,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
   kugou = null,
   apple = null,
   qishui = null,
+  spotify = null,
   initialProvider = 'netease',
   onClose,
   onChanged,
@@ -62,6 +64,8 @@ const AccountModal: React.FC<AccountModalProps> = ({
   const [busy, setBusy] = useState(false);
   const [cookieOpen, setCookieOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const spotifyLoginKeyRef = useRef('');
+  const spotifyLoginTimerRef = useRef(0);
   const onChangedRef = useRef(onChanged);
   const onLoggedInRef = useRef(onLoggedIn);
   onChangedRef.current = onChanged;
@@ -83,13 +87,14 @@ const AccountModal: React.FC<AccountModalProps> = ({
 
   useEffect(() => {
     if (!open) return;
-    const current = accountOf(tab, netease, qq, kugou, apple, qishui);
-    if (current?.loggedIn || tab === 'apple') {
+    const current = accountOf(tab, netease, qq, kugou, apple, qishui, spotify);
+    if (current?.loggedIn || tab === 'apple' || tab === 'spotify') {
       setQr('');
       return;
     }
     let stop = false;
     let timer = 0;
+    let qrKey = '';
     const start = async () => {
       setBusy(true);
       setStatus('正在生成二维码…');
@@ -107,26 +112,19 @@ const AccountModal: React.FC<AccountModalProps> = ({
           : tab === 'qishui'
             ? 'qishui_qr_check'
             : 'qq_qr_check';
-      const useNativeQishui = tab === 'qishui' && canUseQishuiNativeQr();
       let res: { code: number; error: string; data?: Record<string, string> };
       try {
-        if (useNativeQishui) {
-          const native = await qishuiNativeQrKey();
-          res = { code: 200, error: '', data: native };
-        } else {
-          res = await postAction<Record<string, string>>(keyAction);
-        }
+        res = await postAction<Record<string, string>>(keyAction);
       } catch (error) {
         setBusy(false);
         if (stop) return;
-        setStatus(error instanceof Error ? error.message : '无法生成二维码，请改用 Cookie');
-        setCookieOpen(tab === 'qishui');
+        setStatus(error instanceof Error ? error.message : '无法生成二维码');
         return;
       }
       setBusy(false);
       if (stop) return;
       if (res.code !== 200 || !res.data) {
-        setStatus(res.error || '无法生成二维码，请改用 Cookie');
+        setStatus(res.error || '无法生成二维码');
         return;
       }
       if (tab === 'netease') {
@@ -140,34 +138,18 @@ const AccountModal: React.FC<AccountModalProps> = ({
           : ''));
         setStatus('请使用酷狗 App 扫码');
       } else if (tab === 'qishui') {
-        const qrurl = res.data.qrurl || '';
-        setQr(qrurl
-          ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&ecc=M&data=${encodeURIComponent(qrurl)}`
-          : '');
-        setStatus('请使用汽水 App 扫码');
+        setQr(res.data.qrimg || '');
+        setStatus('请使用抖音 App 扫码并确认授权');
       } else {
         setQr(res.data.qrimg || '');
         setStatus('请使用 QQ / 微信扫码');
       }
-      const key = res.data.key || '';
+      qrKey = res.data.key || '';
+      const key = qrKey;
       timer = window.setInterval(async () => {
         let check: { code: number; error: string; data?: Record<string, unknown> };
         try {
-          if (useNativeQishui) {
-            const native = await qishuiNativeQrCheck(key);
-            if (native.cookie && native.loggedIn) {
-              const saved = await postAction('qishui_cookie_save', { cookie: native.cookie });
-              if (saved.code !== 200) {
-                check = { code: saved.code, error: saved.error || 'Cookie 保存失败', data: native };
-              } else {
-                check = { code: 200, error: '', data: native };
-              }
-            } else {
-              check = { code: 200, error: '', data: native };
-            }
-          } else {
-            check = await postAction<Record<string, unknown>>(checkAction, key ? { key } : {});
-          }
+          check = await postAction<Record<string, unknown>>(checkAction, key ? { key } : {});
         } catch (error) {
           if (stop) return;
           setStatus(error instanceof Error ? error.message : '扫码状态查询失败');
@@ -207,7 +189,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
           }
         } else if (tab === 'qishui') {
           if (st === 801) setStatus(String(data.message || '等待扫码…'));
-          else if (st === 802) setStatus(String(data.message || '已扫码，请在手机上确认'));
+          else if (st === 802) setStatus(String(data.message || '已扫码，请在抖音上确认授权'));
           else if (st === 800) {
             setStatus(String(data.message || '二维码已过期，请关闭后重开'));
             window.clearInterval(timer);
@@ -216,16 +198,9 @@ const AccountModal: React.FC<AccountModalProps> = ({
             window.clearInterval(timer);
             onChangedRef.current();
             onLoggedInRef.current?.(tab);
-          } else if (st === 804) {
-            setStatus(String(data.message || '手机已确认，请改用 Cookie'));
-            setCookieOpen(true);
-            window.clearInterval(timer);
           } else if (check.code !== 200 && check.error) {
             setStatus(check.error);
-            if (/Cookie|二次验证/.test(check.error)) {
-              setCookieOpen(true);
-              window.clearInterval(timer);
-            }
+            window.clearInterval(timer);
           }
         } else if (st === 66) {
           setStatus(String(data.message || '等待扫码…'));
@@ -249,8 +224,30 @@ const AccountModal: React.FC<AccountModalProps> = ({
     return () => {
       stop = true;
       if (timer) window.clearInterval(timer);
+      if (tab === 'qishui' && qrKey) {
+        void postAction('qishui_qr_cancel', { key: qrKey }).catch(() => undefined);
+      }
     };
-  }, [apple, open, tab, netease?.loggedIn, qq?.loggedIn, kugou?.loggedIn, qishui?.loggedIn]);
+  }, [apple, open, tab, netease?.loggedIn, qq?.loggedIn, kugou?.loggedIn, qishui?.loggedIn, spotify?.loggedIn]);
+
+  useEffect(() => {
+    const clearSpotifyLogin = () => {
+      if (spotifyLoginTimerRef.current) {
+        window.clearInterval(spotifyLoginTimerRef.current);
+        spotifyLoginTimerRef.current = 0;
+      }
+      const key = spotifyLoginKeyRef.current;
+      if (key) {
+        void postAction('spotify_login_cancel', { key }).catch(() => undefined);
+        spotifyLoginKeyRef.current = '';
+      }
+    };
+    if (!open || tab !== 'spotify' || spotify?.loggedIn) {
+      clearSpotifyLogin();
+      return;
+    }
+    return clearSpotifyLogin;
+  }, [open, tab, spotify?.loggedIn]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -270,7 +267,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
 
   if (!open) return null;
 
-  const current = accountOf(tab, netease, qq, kugou, apple, qishui);
+  const current = accountOf(tab, netease, qq, kugou, apple, qishui, spotify);
   const loggedIn = Boolean(current?.loggedIn);
   const activeMeta = providerMeta(tab);
   const capsuleAvatar = loggedIn && current?.avatar
@@ -308,11 +305,85 @@ const AccountModal: React.FC<AccountModalProps> = ({
     if (provider === 'qishui') {
       await qishuiNativeLogout();
     }
-    if (provider === 'netease' || provider === 'qq' || provider === 'qishui') {
+    if (provider === 'netease' || provider === 'qq' || provider === 'qishui' || provider === 'spotify') {
       useCloudStore.getState().clearProvider(provider);
     }
     await postAction(meta.logoutAction);
     onChanged();
+  };
+
+  const startSpotifyLogin = async () => {
+    if (spotifyLoginTimerRef.current) {
+      window.clearInterval(spotifyLoginTimerRef.current);
+      spotifyLoginTimerRef.current = 0;
+    }
+    const priorKey = spotifyLoginKeyRef.current;
+    if (priorKey) {
+      void postAction('spotify_login_cancel', { key: priorKey }).catch(() => undefined);
+      spotifyLoginKeyRef.current = '';
+    }
+    setBusy(true);
+    setStatus('正在准备 Spotify 登录…');
+    let start: { code: number; error: string; data?: { key?: string } };
+    try {
+      start = await postAction<{ key: string }>('spotify_login_start');
+    } catch (error) {
+      setBusy(false);
+      setStatus(error instanceof Error ? error.message : '无法开始 Spotify 登录');
+      return;
+    }
+    if (start.code !== 200 || !start.data?.key) {
+      setBusy(false);
+      setStatus(start.error || '无法开始 Spotify 登录');
+      return;
+    }
+    const key = start.data.key;
+    spotifyLoginKeyRef.current = key;
+    const opened = await postAction<{ opened?: boolean }>('spotify_login_open', { key });
+    if (opened.code !== 200) {
+      setBusy(false);
+      setStatus(opened.error || '无法打开浏览器');
+      void postAction('spotify_login_cancel', { key }).catch(() => undefined);
+      spotifyLoginKeyRef.current = '';
+      return;
+    }
+    setBusy(false);
+    setStatus('请在浏览器完成 Spotify 授权…');
+    spotifyLoginTimerRef.current = window.setInterval(async () => {
+      let check: { code: number; error: string; data?: Record<string, unknown> };
+      try {
+        check = await postAction<Record<string, unknown>>('spotify_login_check', { key });
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : '登录状态查询失败');
+        return;
+      }
+      const data = (check.data || {}) as Record<string, unknown>;
+      const st = Number(data.status);
+      if (st === 801) {
+        setStatus(String(data.message || '请在浏览器完成 Spotify 授权…'));
+        return;
+      }
+      if (st === 800) {
+        setStatus(String(data.message || check.error || '登录已过期，请重试'));
+        window.clearInterval(spotifyLoginTimerRef.current);
+        spotifyLoginTimerRef.current = 0;
+        void postAction('spotify_login_cancel', { key }).catch(() => undefined);
+        spotifyLoginKeyRef.current = '';
+        return;
+      }
+      if (st === 803 && data.loggedIn) {
+        setStatus('登录成功，正在同步歌单…');
+        window.clearInterval(spotifyLoginTimerRef.current);
+        spotifyLoginTimerRef.current = 0;
+        spotifyLoginKeyRef.current = '';
+        onChanged();
+        onLoggedIn?.('spotify');
+        return;
+      }
+      if (check.code !== 200 && check.error) {
+        setStatus(check.error);
+      }
+    }, 2000);
   };
 
   const selectProvider = (provider: AccountProviderId) => {
@@ -395,7 +466,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
                 }`}
               >
                 {visibleAccountProviders().map((provider) => {
-                  const account = accountOf(provider.id, netease, qq, kugou, apple, qishui);
+                  const account = accountOf(provider.id, netease, qq, kugou, apple, qishui, spotify);
                   const active = tab === provider.id;
                   const avatar = account?.loggedIn && account.avatar
                     ? (coverImageUrl(account.avatar, 72) || account.avatar)
@@ -496,6 +567,22 @@ const AccountModal: React.FC<AccountModalProps> = ({
             </button>
             {status ? <p className="text-xs opacity-70">{status}</p> : null}
           </div>
+        ) : tab === 'spotify' && !loggedIn ? (
+          <div className="space-y-3 text-sm">
+            <p className="text-xs leading-relaxed opacity-60">
+              将在系统浏览器打开 Spotify 授权页，完成后本机会保存会话并同步你的歌单。
+            </p>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void startSpotifyLogin()}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-white/10 px-4 py-2.5 text-sm"
+            >
+              {busy ? <RyanLoader size={16} /> : null}
+              在浏览器登录 Spotify
+            </button>
+            {status ? <p className="text-xs opacity-70">{status}</p> : null}
+          </div>
         ) : loggedIn ? (
           <div className="space-y-3 text-sm">
             <div
@@ -559,32 +646,36 @@ const AccountModal: React.FC<AccountModalProps> = ({
               )}
               <p className="text-xs opacity-70">{status}</p>
             </div>
-            <details
-              className="rounded-2xl bg-white/5 p-3"
-              open={cookieOpen}
-              onToggle={(event) => setCookieOpen(event.currentTarget.open)}
-            >
-              <summary className="cursor-pointer text-xs opacity-70">扫码不行？改用 Cookie</summary>
-              <p className="mt-2 text-[11px] opacity-50">
-                {tab === 'netease'
-                  ? '浏览器登录 music.163.com，复制请求头 Cookie（需含 MUSIC_U）。仅存本机。'
-                  : tab === 'kugou'
-                    ? '浏览器登录 kugou.com，复制请求头 Cookie（需含 userid 与 token，或 KuGoo）。仅存本机。'
-                    : tab === 'qishui'
-                      ? '打开汽水电脑版并登录，从开发者工具或请求头复制完整 Cookie（需含 sessionid）。仅存本机。'
-                      : '浏览器登录 y.qq.com，复制请求头 Cookie（需含 uin 与 qm_keyst）。仅存本机。'}
+            {tab === 'qishui' ? (
+              <p className="text-[11px] leading-relaxed opacity-50">
+                与 Folia 相同：用抖音 App 扫码授权汽水，会话保存在本机，不再支持粘贴 Cookie。
               </p>
-              <textarea
-                value={cookie}
-                onChange={(event) => setCookie(event.target.value)}
-                rows={4}
-                placeholder="粘贴 Cookie…"
-                className={`mt-2 w-full rounded-xl border border-white/10 p-2 text-xs outline-none ${isDaylight ? 'bg-black/5' : 'bg-black/20'}`}
-              />
-              <button type="button" onClick={() => void saveCookie()} className="mt-2 rounded-full bg-white/10 px-4 py-1.5 text-xs">
-                保存并登录
-              </button>
-            </details>
+            ) : (
+              <details
+                className="rounded-2xl bg-white/5 p-3"
+                open={cookieOpen}
+                onToggle={(event) => setCookieOpen(event.currentTarget.open)}
+              >
+                <summary className="cursor-pointer text-xs opacity-70">扫码不行？改用 Cookie</summary>
+                <p className="mt-2 text-[11px] opacity-50">
+                  {tab === 'netease'
+                    ? '浏览器登录 music.163.com，复制请求头 Cookie（需含 MUSIC_U）。仅存本机。'
+                    : tab === 'kugou'
+                      ? '浏览器登录 kugou.com，复制请求头 Cookie（需含 userid 与 token，或 KuGoo）。仅存本机。'
+                      : '浏览器登录 y.qq.com，复制请求头 Cookie（需含 uin 与 qm_keyst）。仅存本机。'}
+                </p>
+                <textarea
+                  value={cookie}
+                  onChange={(event) => setCookie(event.target.value)}
+                  rows={4}
+                  placeholder="粘贴 Cookie…"
+                  className={`mt-2 w-full rounded-xl border border-white/10 p-2 text-xs outline-none ${isDaylight ? 'bg-black/5' : 'bg-black/20'}`}
+                />
+                <button type="button" onClick={() => void saveCookie()} className="mt-2 rounded-full bg-white/10 px-4 py-1.5 text-xs">
+                  保存并登录
+                </button>
+              </details>
+            )}
           </div>
         )}
       </div>

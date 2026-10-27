@@ -195,8 +195,29 @@ export function fetchQishuiRecentSongs() {
   return postAction<CloudPlaylistDetail>('qishui_recent_songs');
 }
 
-export function fetchQishuiPlaylistDetail(id: string, offset = 0, limit = 80) {
+export function fetchQishuiPlaylistDetail(id: string, offset = 0, limit = 80, ownerId = '') {
   return postAction<CloudPlaylistDetail>('qishui_playlist_detail', {
+    id,
+    offset: String(offset),
+    limit: String(limit),
+    ...(ownerId ? { ownerId } : {}),
+  });
+}
+
+export function fetchSpotifyStatus() {
+  return postAction<AccountStatus>('spotify_status');
+}
+
+export function fetchSpotifyPlaylists() {
+  return postAction<{ playlists: CloudPlaylist[] }>('spotify_playlists');
+}
+
+export function fetchSpotifyRecommendFeed() {
+  return postAction<{ items: NeteaseRecommendItem[] }>('spotify_recommend_feed');
+}
+
+export function fetchSpotifyPlaylistDetail(id: string, offset = 0, limit = 80) {
+  return postAction<CloudPlaylistDetail>('spotify_playlist_detail', {
     id,
     offset: String(offset),
     limit: String(limit),
@@ -217,6 +238,8 @@ export interface CloudPlaylist {
   order?: number;
   createTime?: number;
   description?: string;
+  /** 汽水车机协议：歌单详情需要 ownerId */
+  ownerId?: string;
   /** 网易云 / QQ 推荐区虚拟条目 */
   recommendKind?: 'daily' | 'radar' | 'fm' | 'playlist';
   /** Apple Music：资料库 / 目录 / 专辑 */

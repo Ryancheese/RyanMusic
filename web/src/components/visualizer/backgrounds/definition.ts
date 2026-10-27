@@ -1,11 +1,13 @@
 import React from 'react';
 import type { MotionValue } from 'framer-motion';
+import type { BeatEffectDef } from '../../../services/beatFx/beatEffects';
 import type {
     AudioBands,
     LatentBackgroundTuning,
     MonetBackgroundImage,
     MonetBackgroundTuning,
     NomandBackgroundTuning,
+    SoraBackgroundTuning,
     Theme,
     UrlBackgroundItem,
     VisualizerBackgroundMode,
@@ -36,6 +38,9 @@ export interface VisualizerBackgroundConfig {
     url?: {
         items?: UrlBackgroundItem[];
         selectedId?: string | null;
+    };
+    sora?: {
+        tuning?: SoraBackgroundTuning;
     };
 }
 
@@ -69,6 +74,10 @@ export interface VisualizerBackgroundActions {
         onUpdate?: (id: string, patch: Partial<Omit<UrlBackgroundItem, 'id'>>) => void;
         onDelete?: (id: string) => void;
         onSelect?: (id: string | null) => void;
+    };
+    sora?: {
+        onTuningChange?: (patch: Partial<SoraBackgroundTuning>) => void;
+        onResetTuning?: () => void;
     };
 }
 
@@ -104,6 +113,7 @@ export interface VisualizerBackgroundRegistryEntry {
     render: (props: VisualizerBackgroundRenderProps) => React.ReactNode;
     renderSettingsPanel?: (props: VisualizerBackgroundSettingsProps) => React.ReactNode;
     resetSettings?: (actions?: VisualizerBackgroundActions) => void;
+    beatEffects?: readonly BeatEffectDef[];
 }
 
 export interface VisualizerBackgroundEntryModule {

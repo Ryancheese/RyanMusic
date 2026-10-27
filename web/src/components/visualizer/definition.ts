@@ -10,6 +10,7 @@ import {
     type CladdaghTuning,
     type DioramaTuning,
     type FumeTuning,
+    type HanabiTuning,
     type Line,
     type MonetPortraitImage,
     type MonetTuning,
@@ -27,10 +28,11 @@ import {
 } from '../../types';
 import type { VisualizerTuningBundle } from './tuningRegistry';
 import type { VisualizerBackgroundConfig } from './backgrounds/definition';
+import type { BeatEffectDef } from '../../services/beatFx/beatEffects';
 
 // src/components/visualizer/definition.ts
 // Shared contracts for discoverable visualizer modes.
-export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'claddagh' | 'cappella' | 'tilt' | 'monet' | 'diorama' | 'pendolo' | 'sonnet' | 'tempera' | 'lumiere' | 'lake' | 'jizura';
+export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'claddagh' | 'cappella' | 'tilt' | 'monet' | 'diorama' | 'pendolo' | 'sonnet' | 'tempera' | 'lumiere' | 'hanabi' | 'lake' | 'jizura';
 
 export interface VisualizerSharedProps {
     currentTime: MotionValue<number>;
@@ -93,6 +95,8 @@ export interface VisualizerSharedProps {
     temperaLayerImageAssets?: { id: string; name: string; url: string }[];
     lumiereTuning?: LumiereTuning;
     onLumiereTuningChange?: (patch: Partial<LumiereTuning>) => void;
+    hanabiTuning?: HanabiTuning;
+    onHanabiTuningChange?: (patch: Partial<HanabiTuning>) => void;
     lakeTuning?: LakeTuning;
     onLakeTuningChange?: (patch: Partial<LakeTuning>) => void;
     jizuraTuning?: JizuraTuning;
@@ -146,6 +150,8 @@ export interface VisualizerSettingsPanelProps {
     onTemperaTuningChange?: (patch: Partial<TemperaTuning>) => void;
     lumiereTuning?: LumiereTuning;
     onLumiereTuningChange?: (patch: Partial<LumiereTuning>) => void;
+    hanabiTuning?: HanabiTuning;
+    onHanabiTuningChange?: (patch: Partial<HanabiTuning>) => void;
     lakeTuning?: LakeTuning;
     onLakeTuningChange?: (patch: Partial<LakeTuning>) => void;
     jizuraTuning?: JizuraTuning;
@@ -154,6 +160,8 @@ export interface VisualizerSettingsPanelProps {
     onSliderPointerDown?: () => void;
     /** Commit draft values to persistent store on slider release. */
     onSliderCommit?: () => void;
+    /** Opens the lyrics settings sub-tab where 智能动感模式 lives. */
+    onOpenSmartBeatSettings?: () => void;
 }
 
 export interface VisualizerSettingsResetProps {
@@ -169,6 +177,7 @@ export interface VisualizerSettingsResetProps {
     resetSonnetTuning?: () => void;
     resetTemperaTuning?: () => void;
     resetLumiereTuning?: () => void;
+    resetHanabiTuning?: () => void;
     resetLakeTuning?: () => void;
     resetJizuraTuning?: () => void;
     setDraftFumeTuning?: (tuning: FumeTuning) => void;
@@ -177,6 +186,7 @@ export interface VisualizerSettingsResetProps {
     setDraftSonnetTuning?: (tuning: SonnetTuning) => void;
     setDraftTemperaTuning?: (tuning: TemperaTuning) => void;
     setDraftLumiereTuning?: (tuning: LumiereTuning) => void;
+    setDraftHanabiTuning?: (tuning: HanabiTuning) => void;
 }
 
 export interface VisualizerRegistryEntry {
@@ -190,6 +200,9 @@ export interface VisualizerRegistryEntry {
     render: (props: VisualizerSharedProps) => React.ReactElement;
     renderSettingsPanel?: (props: VisualizerSettingsPanelProps) => React.ReactNode;
     resetSettings?: (props: VisualizerSettingsResetProps) => void;
+    beatEffects?: readonly BeatEffectDef[];
+    /** When false, stage background beat effects are not merged (Folia convention). */
+    background?: false;
 }
 
 export interface VisualizerEntryModule {

@@ -2,6 +2,14 @@ import React, { useEffect, useRef } from 'react';
 import type { MotionValue } from 'framer-motion';
 import { colorWithAlpha } from '../colorMix';
 import type { PendoloMotionProfile } from './pendoloMotionProfile';
+import { isPendoloBeatFxIdle } from './pendoloBeatFx';
+import {
+    drawPendoloBeatFxOverlay2d,
+    drawPendoloWaveLens2d,
+    type PendoloBeatFxDrawFrame,
+} from './pendoloBeatFxDraw';
+import type { PendoloClockworkFrameInput } from './pendoloClockworkScene';
+import type { PendoloBeatFxShared } from './usePendoloBeatFx';
 
 // src/components/visualizer/pendolo/PendoloClockworkCanvas.tsx
 
@@ -23,6 +31,8 @@ export interface PendoloClockworkCanvasProps {
     enableLineGlow?: boolean;
     paused?: boolean;
     motionProfile: PendoloMotionProfile;
+    /** 智能动感模式's drumhead effects (usePendoloBeatFx); nothing is drawn while inactive. */
+    beatFxRef?: React.MutableRefObject<PendoloBeatFxShared>;
 }
 
 /**
@@ -200,6 +210,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
     enableLineGlow = false,
     paused = false,
     motionProfile,
+    beatFxRef,
 }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const phaseRef = useRef(0);
@@ -211,6 +222,8 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
     const secondGearVelocityRef = useRef(0);
 
     const coverImageRef = useRef<HTMLImageElement | null>(null);
+    const beatFxFrameRef = useRef<PendoloBeatFxDrawFrame | null>(null);
+    const waveScratchRef = useRef<HTMLCanvasElement | null>(null);
 
     useEffect(() => {
         if (!showCover || !coverUrl) {
@@ -760,6 +773,56 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             ctx.closePath();
             ctx.fill();
 
+            // 智能动感模式's drumhead: the shockwave lens over the clockwork just drawn, then the lit
+            // dials, jewel flares and sparks on top. Between hits, with nothing lit, the frame is as drawn.
+            const beatFx = beatFxRef?.current.active ? beatFxRef.current : null;
+            if (beatFx && !(beatFx.wave === null && isPendoloBeatFxIdle(beatFx.state, beatFx.now))) {
+                const fxFrame: PendoloBeatFxDrawFrame = beatFxFrameRef.current ?? {
+                    jewelFlare: 0,
+                    smallJewelFlare: 0,
+                    tickDialLight: 0,
+                    outerDialLight: 0,
+                    sparks: beatFx.state.sparks,
+                    offsetX: 0,
+                    offsetY: 0,
+                    wave: null,
+                    color: beatFx.color,
+                };
+                beatFxFrameRef.current = fxFrame;
+                fxFrame.jewelFlare = beatFx.state.jewelFlare;
+                fxFrame.smallJewelFlare = beatFx.state.smallJewelFlare;
+                fxFrame.tickDialLight = beatFx.state.tickDialLight;
+                fxFrame.outerDialLight = beatFx.state.outerDialLight;
+                fxFrame.sparks = beatFx.state.sparks;
+                // The canvas covers the viewport: sparks (viewport px) need no offset.
+                fxFrame.offsetX = 0;
+                fxFrame.offsetY = 0;
+                fxFrame.wave = beatFx.wave;
+                fxFrame.color = beatFx.color;
+                const frameInput: PendoloClockworkFrameInput = {
+                    centerX: p.centerX,
+                    centerY: p.centerY,
+                    baseRadius: p.baseRadius,
+                    lyricRingRadius: p.lyricRingRadius,
+                    escapementAngle: currentGearAngle,
+                    phase: phaseRef.current,
+                    bassOscillation,
+                    secondGearAngle: secondGearAngleRef.current,
+                    primaryTextColor: p.primaryTextColor,
+                    accentTextColor: p.accentTextColor,
+                    backgroundColor: p.backgroundColor || '#000000',
+                    showGearDecor: p.showGearDecor,
+                    showCenterGradient: p.showCenterGradient,
+                    showCover: p.showCover,
+                    coverImage: coverImageRef.current,
+                };
+                if (fxFrame.wave) {
+                    waveScratchRef.current ??= document.createElement('canvas');
+                    drawPendoloWaveLens2d(ctx, canvas, waveScratchRef.current, frameInput, fxFrame.wave, fxFrame.color, width, height);
+                }
+                drawPendoloBeatFxOverlay2d(ctx, frameInput, fxFrame);
+            }
+
             ctx.restore();
 
             animationFrameId = window.requestAnimationFrame(render);
@@ -772,7 +835,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 window.cancelAnimationFrame(animationFrameId);
             }
         };
-    }, [showGearDecor, showCenterGradient, showCover, audioBassMotionValue, escapementAngleMotionValue]);
+    }, [showGearDecor, showCenterGradient, showCover, audioBassMotionValue, escapementAngleMotionValue, beatFxRef]);
 
     if (showGearDecor === 'none' && !showCenterGradient && !showCover) {
         return null;

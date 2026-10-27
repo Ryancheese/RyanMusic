@@ -115,7 +115,7 @@ export interface DualTheme {
 
 export type ThemeMode = 'default' | 'ai' | 'custom';
 
-export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' | 'monet' | 'spotlight' | 'tempera' | 'lumiere';
+export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' | 'monet' | 'spotlight' | 'tempera' | 'lumiere' | 'hanabi';
 
 /** 绘光画质档位。`full` 全分辨率；`balanced` / `low` 把光场与辉光降采样。 */
 export type LumiereRenderQuality = 'full' | 'balanced' | 'low';
@@ -136,6 +136,8 @@ export interface LumiereTuning {
   lineArt: boolean;
   frontBokeh: boolean;
   trails: boolean;
+  /** Hides lyric trajectory lines; glyphs keep flying along the same paths. */
+  hideTrails: boolean;
   seamlessTransitions: boolean;
   overlayFrame: boolean;
   textOnly: boolean;
@@ -144,6 +146,67 @@ export interface LumiereTuning {
   themeColorMix: number;
   renderQuality: LumiereRenderQuality;
 }
+
+/** 花火（hanabi）的用户可调参数；运行时按 hanabiTuning.ts 归一化。 */
+export interface HanabiTuning {
+  /** 配色：跟随主题 / 预设自带的鲜艳配色 / 两者混合。 */
+  colorMode: 'theme' | 'vivid' | 'mixed';
+  /** 烟花粒子数量倍率 0..2。 */
+  sparkAmount: number;
+  /** MG 装饰件数量倍率 0..2。 */
+  ornamentAmount: number;
+  /** 文字动作幅度 0..2。 */
+  textMotion: number;
+  /** 字底色块不透明度 0..1。 */
+  blockOpacity: number;
+  /** 上升速度倍率 0..2（0 = 不上升，镜头原地切换）。 */
+  riseSpeed: number;
+  /** 旋转倍率 0..2：整个世界一直在转，镜头内约 11°/秒，镜头边界随上升再甩 34°–80°（都是 1 时），段落转场也带着转；0 = 不转。 */
+  spin: number;
+  /** 环境粒子（远处星点、火星、远方小烟花）0..2。 */
+  ambient: number;
+  /** 辉光（烟花与火花的 bloom）0..2。 */
+  glow: number;
+  /** 整体辉光：整个画面（不含夜空底）常驻的全屏 bloom 0..2；0 = 没有。 */
+  bloom: number;
+  /** 副歌辉光：副歌时段全屏 bloom 平滑亮起来的强度 0..2；0 = 副歌不亮。 */
+  chorusBloom: number;
+  /** 升空尾迹开关。 */
+  launches: boolean;
+  /** 画框装饰（角标、竖排小字）开关。 */
+  overlayFrame: boolean;
+  /** 仅显示歌词文字：烟花、装饰件、拼贴与夜空都不画。 */
+  textOnly: boolean;
+  /** 夜空底（运行时铺在所有场景之下的渐变）的不透明度 0..1；0 = 直接画在共享背景上。 */
+  sky: number;
+  /** PV 拼贴装饰（跑马灯色带、重复字、贴纸、胶带、拟声字）数量倍率 0..2。 */
+  collage: number;
+  /** 画质：均衡 / 省电降低烟花辉光的分辨率（字与全屏辉光仍按满分辨率），省电再少画一些环境粒子。 */
+  renderQuality: HanabiRenderQuality;
+}
+
+/** 花火画质档位。`full` 全分辨率；`balanced` / `low` 降低烟花辉光的分辨率。 */
+export type HanabiRenderQuality = 'full' | 'balanced' | 'low';
+
+export const DEFAULT_HANABI_TUNING: HanabiTuning = {
+  colorMode: 'mixed',
+  sparkAmount: 1,
+  ornamentAmount: 1,
+  textMotion: 1,
+  blockOpacity: 1,
+  riseSpeed: 1,
+  spin: 1,
+  ambient: 1,
+  glow: 1,
+  bloom: 0.8,
+  chorusBloom: 1.3,
+  launches: true,
+  overlayFrame: true,
+  textOnly: false,
+  sky: 0.85,
+  collage: 1,
+  renderQuality: 'full',
+};
 
 export type LakeOutline = 'lake' | 'orbit' | 'strike' | 'still' | 'screen' | 'flow';
 export type LakeLook = 'rock' | 'pop' | 'electro' | 'hiphop' | 'anime' | 'soft' | 'indie';
@@ -190,13 +253,46 @@ export type JizuraStyle =
   | 'hrNightRec'
   | 'hrCurse';
 
+/** 字面おまかせ主题方向（对齐上游 J.THEMES） */
+export type JizuraThemeId = 'none' | 'lyricpv' | 'kinetic' | 'wa' | 'horror' | 'pop' | 'ballad';
+
 export interface JizuraTuning {
   style: JizuraStyle;
+  /** おまかせ：重建时随机一整套情绪 / 技法 / 配色 */
+  omakase: boolean;
+  theme: JizuraThemeId;
+  /** 追加分素材 */
+  extra: boolean;
+  /** 和風素材 */
+  wa: boolean;
+  horror: boolean;
+  typo: boolean;
+  kinetic: boolean;
+  /** 递增以强制重新随机一局 */
+  roll: number;
 }
 
 export const DEFAULT_JIZURA_TUNING: JizuraTuning = {
   style: 'sakura',
+  omakase: false,
+  theme: 'none',
+  extra: true,
+  wa: true,
+  horror: false,
+  typo: true,
+  kinetic: true,
+  roll: 0,
 };
+
+export const JIZURA_THEME_OPTIONS: { id: JizuraThemeId; label: string }[] = [
+  { id: 'none', label: '不限' },
+  { id: 'lyricpv', label: '文字 PV' },
+  { id: 'kinetic', label: '动能' },
+  { id: 'wa', label: '和风' },
+  { id: 'horror', label: '恐怖' },
+  { id: 'pop', label: '流行' },
+  { id: 'ballad', label: '抒情' },
+];
 
 export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
   lightIntensity: 1,
@@ -214,6 +310,7 @@ export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
   lineArt: true,
   frontBokeh: true,
   trails: true,
+  hideTrails: false,
   seamlessTransitions: true,
   overlayFrame: true,
   textOnly: false,
@@ -702,10 +799,14 @@ export const DEFAULT_TEMPERA_LAYER_IMAGE: Omit<TemperaLayerImage, 'id' | 'name'>
 export interface TemperaTuning {
   cameraIntensity: number;
   glyphMotion: number;
+  /** Keep each source lyric line in one shot instead of slicing it into half-phrases. */
+  wholeLineLyrics: boolean;
   glyphSettleStretch: number;
   colorMode: TemperaColorMode;
   showBlocks: boolean;
   showDecor: boolean;
+  /** 边角线框: the two registration marks in the top-left and bottom-right corners. */
+  showCornerMarks: boolean;
   textInversion: boolean;
   layerImages: TemperaLayerImage[];
   layerImageDepth: 'back' | 'front';
@@ -724,10 +825,12 @@ export interface TemperaTuning {
 export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
   cameraIntensity: 1,
   glyphMotion: 1,
+  wholeLineLyrics: false,
   glyphSettleStretch: 0.5,
   colorMode: 'duo',
   showBlocks: true,
   showDecor: true,
+  showCornerMarks: true,
   textInversion: true,
   layerImages: [],
   layerImageDepth: 'back',
@@ -866,6 +969,7 @@ export type MonetBackgroundLayout = 'full-overlay' | 'half-pane-gradient';
 export type MonetBackgroundWashColorMode = 'theme' | 'custom';
 export type NomandBackgroundSource = 'cover-derived' | 'uploaded-global';
 export type NomandBackgroundDitheringType = '2x2' | '4x4' | '8x8';
+export type NomandBackgroundEffect = 'dithering' | 'fluted-glass' | 'paper-texture' | 'halftone-dots' | 'lens-distortion';
 export type LatentBackgroundDisplayMode = 'dithering' | 'mesh' | 'both';
 export type LatentBackgroundColorSource = 'cover-theme' | 'cover-only';
 export type MonetAudioStyle = 'bar' | 'line';
@@ -890,17 +994,43 @@ export interface MonetBackgroundTuning {
   backgroundHalfPaneOffsetX: number;
   backgroundWashColorMode: MonetBackgroundWashColorMode;
   backgroundWashCustomColor: string;
+  /** Slow scale/drift on the compositor layer; not baked into the background bitmap. */
+  backgroundDriftEnabled: boolean;
+  /** Drift amount 0..1; sets travel distance and pre-scale to avoid edge reveal. */
+  backgroundDriftStrength: number;
+  /** Draw 1px vertical streak lines in the baked overlay. */
+  backgroundStreaksEnabled: boolean;
 }
 
 export interface NomandBackgroundTuning {
   imageSource: NomandBackgroundSource;
+  effect: NomandBackgroundEffect;
   ditheringType: NomandBackgroundDitheringType;
   size: number;
   colorSteps: number;
   originalColors: boolean;
   inverted: boolean;
+  flutedGlassSize: number;
+  flutedGlassDistortion: number;
+  flutedGlassBlur: number;
+  paperTextureContrast: number;
+  paperTextureRoughness: number;
+  paperTextureFiber: number;
+  halftoneDotsSize: number;
+  halftoneDotsRadius: number;
+  halftoneDotsContrast: number;
+  halftoneDotsOriginalColors: boolean;
+  halftoneDotsInverted: boolean;
+  lensDistortionSpread: number;
+  lensDistortionBulge: number;
+  lensDistortionDispersion: number;
   overlayEnabled: boolean;
   overlayOpacity: number;
+}
+
+export interface SoraBackgroundTuning {
+  /** Skip WebGL starfield; show static black (night) / white (daylight). */
+  blank: boolean;
 }
 
 export interface LatentBackgroundTuning {
@@ -942,17 +1072,39 @@ export const DEFAULT_MONET_BACKGROUND_TUNING: MonetBackgroundTuning = {
   backgroundHalfPaneOffsetX: 0,
   backgroundWashColorMode: 'theme',
   backgroundWashCustomColor: '#8fb7ff',
+  backgroundDriftEnabled: true,
+  backgroundDriftStrength: 0.5,
+  backgroundStreaksEnabled: true,
 };
 
 export const DEFAULT_NOMAND_BACKGROUND_TUNING: NomandBackgroundTuning = {
   imageSource: 'cover-derived',
+  effect: 'dithering',
   ditheringType: '8x8',
   size: 3,
   colorSteps: 4,
   originalColors: false,
   inverted: false,
+  flutedGlassSize: 0.5,
+  flutedGlassDistortion: 0.5,
+  flutedGlassBlur: 0.08,
+  paperTextureContrast: 0.32,
+  paperTextureRoughness: 0.42,
+  paperTextureFiber: 0.3,
+  halftoneDotsSize: 0.5,
+  halftoneDotsRadius: 1.25,
+  halftoneDotsContrast: 0.4,
+  halftoneDotsOriginalColors: false,
+  halftoneDotsInverted: false,
+  lensDistortionSpread: 0.45,
+  lensDistortionBulge: 0.3,
+  lensDistortionDispersion: 0.65,
   overlayEnabled: true,
   overlayOpacity: 0.35,
+};
+
+export const DEFAULT_SORA_BACKGROUND_TUNING: SoraBackgroundTuning = {
+  blank: false,
 };
 
 export const DEFAULT_LATENT_BACKGROUND_TUNING: LatentBackgroundTuning = {
@@ -1300,6 +1452,24 @@ export interface UnifiedSong extends SongResult {
 }
 
 export type ReplayGainMode = 'off' | 'track' | 'album';
+
+/** 智能动感模式: off / cached (stored beats only) / on (GPU analysis). */
+export type SmartBeatMode = 'off' | 'cached' | 'on';
+
+export interface BeatEffectSetting {
+  on: boolean;
+  strength: number;
+}
+
+export interface SmartBeatSettings {
+  mode: SmartBeatMode;
+  effects: Readonly<Record<string, BeatEffectSetting>>;
+}
+
+export const DEFAULT_SMART_BEAT_SETTINGS: SmartBeatSettings = {
+  mode: 'off',
+  effects: {},
+};
 
 // Audio Analysis Types
 import { MotionValue } from 'framer-motion';

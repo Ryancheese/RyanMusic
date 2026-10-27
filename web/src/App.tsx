@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import { DAYLIGHT_THEME, MIDNIGHT_THEME, type AppView, type MusicSource, type SearchAlbumHit, type SearchArtistHit, type SearchBundle, type SearchCategory, type SearchPlaylistHit, type Track, type VisualizerMode } from './types';
-import { buildDownloadUrl, canNativeSave, coverImageUrl, coverRefreshUrl, fetchKugouStatus, fetchNeteaseQualities, fetchNeteaseStatus, fetchQishuiStatus, fetchQqStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type CloudPlaylist, type LyricSearchCandidate, type PlayQuality } from './api';
+import { buildDownloadUrl, canNativeSave, coverImageUrl, coverRefreshUrl, fetchKugouStatus, fetchNeteaseQualities, fetchNeteaseStatus, fetchQishuiStatus, fetchQqStatus, fetchSpotifyStatus, fetchSignedMedia, fetchTrackLyrics, nativeSave, searchMusic, type AccountStatus, type CloudPlaylist, type LyricSearchCandidate, type PlayQuality } from './api';
 import { accentWashVars, contrastText, extractAccentFromImage } from './lib/color';
 import {
   canUseAppleMusic,
@@ -21,7 +21,11 @@ import WindowControls from './components/WindowControls';
 import TitlebarDragZone from './components/TitlebarDragZone';
 import { peekTrackProfile, plainBlend, planAutomix, primeTrackProfile, profileFromTail } from './lib/automix';
 import { attachAudioGraph, beginAudioWake, parkAudioGraph, readMixRms, rearmDeckOutput, resetDeckTone, scheduleBlend, snapDeckGain, unlockAudio } from './lib/audioGraph';
-import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig, writeVisualizerMode } from './lib/visualizer';
+import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig } from './lib/visualizer';
+import { useRandomVisualizerMode } from './hooks/useRandomVisualizerMode';
+import { useBeatFxWantedRef } from './hooks/useBeatFxTrack';
+import { tickBeatFx } from './services/beatFx/beatFxLive';
+import { useVisualizerSettingsStore } from './store/visualizerSettingsStore';
 import { loadCustomBackgroundImage } from './lib/customBackgroundImage';
 import { useLibraryStore } from './store/libraryStore';
 import { useAppleMusicStore } from './store/appleMusicStore';
@@ -68,6 +72,14 @@ function readTheme(): boolean {
   return localStorage.getItem(THEME_KEY) === 'daylight';
 }
 
+/** 已登录即走 Cookie 官方链（对齐 Folia）；音质面板仍用 vip 判断 */
+function trackAuthedPlay(track: Track | null, netease: AccountStatus | null, qq: AccountStatus | null) {
+  return Boolean(
+    (track?.type === 'netease' && netease?.loggedIn)
+    || (track?.type === 'qq' && qq?.loggedIn),
+  );
+}
+
 function trackVipPlay(track: Track | null, netease: AccountStatus | null, qq: AccountStatus | null) {
   return Boolean(
     (track?.type === 'netease' && netease?.loggedIn && Number(netease.vip) > 0)
@@ -81,6 +93,7 @@ function buildPlayMediaUrl(
     authed: boolean;
     audioQuality: string;
     crossPlayFallback: boolean;
+    freePlaySource?: string;
     fresh?: number;
   },
 ): string {
@@ -102,6 +115,9 @@ function buildPlayMediaUrl(
   }
   if (track.delisted) params.set('delisted', '1');
   if (options.fresh) params.set('fresh', '1');
+  if (options.freePlaySource && options.freePlaySource !== 'auto') {
+    params.set('free', options.freePlaySource);
+  }
   const query = params.toString();
   if (!query) return track.url;
   const join = track.url.includes('?') ? '&' : '?';
@@ -128,6 +144,26 @@ const App: React.FC = () => {
   const [isDaylight, setIsDaylight] = useState(readTheme);
   const [visualizerMode, setVisualizerMode] = useState<VisualizerMode>(readVisualizerMode);
   const [backgroundConfig, setBackgroundConfig] = useState(() => readBackgroundConfig(prefersLightweightVisualizer()));
+  const randomVisualizerModePerSong = useVisualizerSettingsStore((state) => state.randomVisualizerModePerSong);
+  const randomVisualizerModes = useVisualizerSettingsStore((state) => state.randomVisualizerModes);
+  const applyVisualizerMode = useCallback((mode: VisualizerMode, options?: { preserveRandom?: boolean }) => {
+    useVisualizerSettingsStore.getState().handleSetVisualizerMode(mode, options);
+    setVisualizerMode(mode);
+  }, []);
+  const randomTrack = usePlayerStore((state) => state.queue[state.index] || null);
+  useRandomVisualizerMode({
+    currentSong: randomTrack,
+    enabled: randomVisualizerModePerSong,
+    visualizerMode,
+    modes: randomVisualizerModes,
+    setVisualizerMode: applyVisualizerMode,
+  });
+  useEffect(() => {
+    useVisualizerSettingsStore.getState().setVisualizerMode(visualizerMode);
+  }, [visualizerMode]);
+  useEffect(() => {
+    useVisualizerSettingsStore.getState().setVisualizerBackgroundMode(backgroundConfig.mode ?? null);
+  }, [backgroundConfig.mode]);
   const [buffering, setBuffering] = useState(false);
   const [audioQuality, setAudioQuality] = useState('');
   const [qualityOptions, setQualityOptions] = useState<PlayQuality[]>([]);
@@ -170,6 +206,7 @@ const App: React.FC = () => {
   const [qq, setQq] = useState<AccountStatus | null>(null);
   const [kugou, setKugou] = useState<AccountStatus | null>(null);
   const [qishui, setQishui] = useState<AccountStatus | null>(null);
+  const [spotify, setSpotify] = useState<AccountStatus | null>(null);
   const appleAccount = useAppleMusicStore((state) => state.account);
   const nativeClockRef = useRef({
     active: false,
@@ -215,36 +252,47 @@ const App: React.FC = () => {
   const neteasePlaylists = useCloudStore((state) => state.neteasePlaylists);
   const qqPlaylists = useCloudStore((state) => state.qqPlaylists);
   const qishuiPlaylists = useCloudStore((state) => state.qishuiPlaylists);
+  const spotifyPlaylists = useCloudStore((state) => state.spotifyPlaylists);
   const neteaseRecommendItems = useCloudStore((state) => state.neteaseRecommendItems);
   const qqRecommendItems = useCloudStore((state) => state.qqRecommendItems);
   const qishuiRecommendItems = useCloudStore((state) => state.qishuiRecommendItems);
+  const spotifyRecommendItems = useCloudStore((state) => state.spotifyRecommendItems);
   const neteaseOpen = useCloudStore((state) => state.neteaseOpen);
   const qqOpen = useCloudStore((state) => state.qqOpen);
   const qishuiOpen = useCloudStore((state) => state.qishuiOpen);
+  const spotifyOpen = useCloudStore((state) => state.spotifyOpen);
   const neteaseTracks = useCloudStore((state) => state.neteaseTracks);
   const qqTracks = useCloudStore((state) => state.qqTracks);
   const qishuiTracks = useCloudStore((state) => state.qishuiTracks);
+  const spotifyTracks = useCloudStore((state) => state.spotifyTracks);
   const neteaseSyncing = useCloudStore((state) => state.neteaseSyncing);
   const qqSyncing = useCloudStore((state) => state.qqSyncing);
   const qishuiSyncing = useCloudStore((state) => state.qishuiSyncing);
+  const spotifySyncing = useCloudStore((state) => state.spotifySyncing);
   const neteaseRecommendSyncing = useCloudStore((state) => state.neteaseRecommendSyncing);
   const qqRecommendSyncing = useCloudStore((state) => state.qqRecommendSyncing);
   const qishuiRecommendSyncing = useCloudStore((state) => state.qishuiRecommendSyncing);
+  const spotifyRecommendSyncing = useCloudStore((state) => state.spotifyRecommendSyncing);
   const neteaseLoading = useCloudStore((state) => state.neteaseLoading);
   const qqLoading = useCloudStore((state) => state.qqLoading);
   const qishuiLoading = useCloudStore((state) => state.qishuiLoading);
+  const spotifyLoading = useCloudStore((state) => state.spotifyLoading);
   const neteaseError = useCloudStore((state) => state.neteaseError);
   const qqError = useCloudStore((state) => state.qqError);
   const qishuiError = useCloudStore((state) => state.qishuiError);
+  const spotifyError = useCloudStore((state) => state.spotifyError);
   const neteaseRecommendError = useCloudStore((state) => state.neteaseRecommendError);
   const qqRecommendError = useCloudStore((state) => state.qqRecommendError);
   const qishuiRecommendError = useCloudStore((state) => state.qishuiRecommendError);
+  const spotifyRecommendError = useCloudStore((state) => state.spotifyRecommendError);
   const syncNetease = useCloudStore((state) => state.syncNetease);
   const syncNeteaseRecommend = useCloudStore((state) => state.syncNeteaseRecommend);
   const syncQqRecommend = useCloudStore((state) => state.syncQqRecommend);
   const syncQq = useCloudStore((state) => state.syncQq);
   const syncQishui = useCloudStore((state) => state.syncQishui);
   const syncQishuiRecommend = useCloudStore((state) => state.syncQishuiRecommend);
+  const syncSpotify = useCloudStore((state) => state.syncSpotify);
+  const syncSpotifyRecommend = useCloudStore((state) => state.syncSpotifyRecommend);
   const openNeteasePlaylist = useCloudStore((state) => state.openNeteasePlaylist);
   const openNeteaseRecommend = useCloudStore((state) => state.openNeteaseRecommend);
   const playNeteasePersonalFm = useCloudStore((state) => state.playNeteasePersonalFm);
@@ -258,6 +306,9 @@ const App: React.FC = () => {
   const closeNeteasePlaylist = useCloudStore((state) => state.closeNeteasePlaylist);
   const closeQqPlaylist = useCloudStore((state) => state.closeQqPlaylist);
   const closeQishuiPlaylist = useCloudStore((state) => state.closeQishuiPlaylist);
+  const openSpotifyPlaylist = useCloudStore((state) => state.openSpotifyPlaylist);
+  const openSpotifyRecommend = useCloudStore((state) => state.openSpotifyRecommend);
+  const closeSpotifyPlaylist = useCloudStore((state) => state.closeSpotifyPlaylist);
   const syncAppleLibrary = useAppleMusicStore((state) => state.syncLibrary);
   const syncAppleRecommend = useAppleMusicStore((state) => state.syncRecommend);
   const openApplePlaylist = useAppleMusicStore((state) => state.openPlaylist);
@@ -275,27 +326,34 @@ const App: React.FC = () => {
   const [authFallback, setAuthFallback] = useState(false);
   const [streamFresh, setStreamFresh] = useState(0);
   const crossPlayFallback = usePlaybackSettingsStore((state) => state.crossPlayFallback);
+  const freePlaySource = usePlaybackSettingsStore((state) => state.freePlaySource);
   const preferredQuality = usePlaybackSettingsStore((state) => state.preferredQuality);
   const transitionEnabled = usePlaybackSettingsStore((state) => state.transitionEnabled);
   const transitionMode = usePlaybackSettingsStore((state) => state.transitionMode);
   const transitionSeconds = usePlaybackSettingsStore((state) => state.transitionSeconds);
   const track = queue[index] || null;
   const vipPlay = trackVipPlay(track, netease, qq);
-  const authedPlay = !authFallback && vipPlay;
+  const authedPlay = !authFallback && trackAuthedPlay(track, netease, qq);
+  // Prefer store quality immediately — waiting for the effect to fill `audioQuality`
+  // used to rebuild mediaUrl (no level → level=exhigh) and restart the audio element.
+  const playQuality = vipPlay ? (audioQuality || preferredQuality) : '';
   const mediaUrl = useMemo(
     () => buildPlayMediaUrl(track, {
       authed: authedPlay,
-      audioQuality,
+      audioQuality: playQuality,
       crossPlayFallback,
+      freePlaySource,
       fresh: streamFresh,
     }),
-    [audioQuality, authedPlay, crossPlayFallback, streamFresh, track],
+    [authedPlay, crossPlayFallback, freePlaySource, playQuality, streamFresh, track],
   );
+  const beatFxWantedRef = useBeatFxWantedRef(mediaUrl || null);
   const prefetchTrackMedia = useCallback((item: Track) => {
     const url = buildPlayMediaUrl(item, {
-      authed: !authFallback && trackVipPlay(item, netease, qq),
-      audioQuality: preferredQuality,
+      authed: !authFallback && trackAuthedPlay(item, netease, qq),
+      audioQuality: trackVipPlay(item, netease, qq) ? preferredQuality : '',
       crossPlayFallback,
+      freePlaySource,
     });
     if (!url) return;
     void fetch(url, {
@@ -303,7 +361,7 @@ const App: React.FC = () => {
       headers: { Range: 'bytes=0-1' },
       cache: 'no-store',
     }).catch(() => {});
-  }, [authFallback, crossPlayFallback, netease, preferredQuality, qq]);
+  }, [authFallback, crossPlayFallback, freePlaySource, netease, preferredQuality, qq]);
   const deckList = useCallback((): Array<HTMLAudioElement | null> => (
     [audioRef.current, audioBRef.current]
   ), []);
@@ -379,9 +437,10 @@ const App: React.FC = () => {
       : plainBlend(Math.max(0.8, room), transitionSeconds);
     const token = ++blendTokenRef.current;
     const media = buildPlayMediaUrl(next, {
-      authed: trackVipPlay(next, netease, qq),
-      audioQuality: audioQuality || preferredQuality,
+      authed: trackAuthedPlay(next, netease, qq),
+      audioQuality: trackVipPlay(next, netease, qq) ? (audioQuality || preferredQuality) : '',
       crossPlayFallback,
+      freePlaySource,
     });
     blendRef.current = { token, incomingDeck, incomingKey: key, timer: 0 };
     snapDeckGain(inGraph.fade, 0);
@@ -426,7 +485,7 @@ const App: React.FC = () => {
       snapDeckGain(inGraph.fade, 0);
       resetDeckTone(inGraph);
     });
-  }, [audioQuality, crossPlayFallback, deckList, fadeOf, finishBlend, netease, preferredQuality, qq, transitionSeconds]);
+  }, [audioQuality, crossPlayFallback, deckList, fadeOf, finishBlend, freePlaySource, netease, preferredQuality, qq, transitionSeconds]);
   const maybeCrossfadeRef = useRef<() => void>(() => {});
   maybeCrossfadeRef.current = () => {
     if (!transitionEnabled || blendRef.current) return;
@@ -1048,14 +1107,16 @@ const App: React.FC = () => {
     if (!next?.url || isAppleTrack(next)) return;
     if (track && next.type === track.type && String(next.songid) === String(track.songid)) return;
     const url = buildPlayMediaUrl(next, {
-      authed: trackVipPlay(next, netease, qq),
-      audioQuality: audioQuality || preferredQuality,
+      authed: trackAuthedPlay(next, netease, qq),
+      audioQuality: trackVipPlay(next, netease, qq) ? (audioQuality || preferredQuality) : '',
       crossPlayFallback,
+      freePlaySource,
     });
     if (url) primeTrackProfile(`${next.type}:${next.songid}`, url);
   }, [
     audioQuality,
     crossPlayFallback,
+    freePlaySource,
     index,
     loopMode,
     netease,
@@ -1103,6 +1164,10 @@ const App: React.FC = () => {
         : audio.currentTime;
       currentTime.set(clock.duration > 0 ? Math.min(next, clock.duration) : next);
       pulseAudioBands(audioBands, analyser, clock.active ? clock.playing : !audio.paused);
+      if (beatFxWantedRef.current) {
+        const heardEl = clock.active ? null : audio;
+        tickBeatFx(heardEl, graph?.context ?? null);
+      }
       audioPower.set((
         audioBands.bass.get()
         + audioBands.lowMid.get()
@@ -1331,7 +1396,13 @@ const App: React.FC = () => {
   }, [index, loopMode, prefetchTrackMedia, queue, track]);
 
   useEffect(() => {
-    const list = homeTab === 'qq' ? qqTracks : homeTab === 'qishui' ? qishuiTracks : neteaseTracks;
+    const list = homeTab === 'qq'
+      ? qqTracks
+      : homeTab === 'qishui'
+        ? qishuiTracks
+        : homeTab === 'spotify'
+          ? spotifyTracks
+          : neteaseTracks;
     if (!list.length) return;
     let cancelled = false;
     void (async () => {
@@ -1352,16 +1423,17 @@ const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [homeTab, neteaseTracks, qishuiTracks, qqTracks]);
+  }, [homeTab, neteaseTracks, qishuiTracks, qqTracks, spotifyTracks]);
 
   useEffect(() => {
     let alive = true;
     const load = async () => {
-      const [ne, qqStatus, kgStatus, qsStatus] = await Promise.all([
+      const [ne, qqStatus, kgStatus, qsStatus, spStatus] = await Promise.all([
         fetchNeteaseStatus(),
         fetchQqStatus(),
         fetchKugouStatus(),
         fetchQishuiStatus(),
+        fetchSpotifyStatus(),
       ]);
       void refreshAppleStatus();
       if (!alive) return;
@@ -1369,6 +1441,7 @@ const App: React.FC = () => {
       setQq(qqStatus.code === 200 ? qqStatus.data : { loggedIn: false });
       setKugou(kgStatus.code === 200 ? kgStatus.data : { loggedIn: false });
       setQishui(qsStatus.code === 200 ? qsStatus.data : { loggedIn: false });
+      setSpotify(spStatus.code === 200 ? spStatus.data : { loggedIn: false });
     };
     void load();
     return () => {
@@ -1382,12 +1455,14 @@ const App: React.FC = () => {
       fetchQqStatus(),
       fetchKugouStatus(),
       fetchQishuiStatus(),
+      fetchSpotifyStatus(),
       refreshAppleStatus(),
-    ]).then(([ne, qqStatus, kgStatus, qsStatus]) => {
+    ]).then(([ne, qqStatus, kgStatus, qsStatus, spStatus]) => {
       setNetease(ne.code === 200 ? ne.data : { loggedIn: false });
       setQq(qqStatus.code === 200 ? qqStatus.data : { loggedIn: false });
       setKugou(kgStatus.code === 200 ? kgStatus.data : { loggedIn: false });
       setQishui(qsStatus.code === 200 ? qsStatus.data : { loggedIn: false });
+      setSpotify(spStatus.code === 200 ? spStatus.data : { loggedIn: false });
     });
   }, [refreshAppleStatus]);
 
@@ -1422,6 +1497,16 @@ const App: React.FC = () => {
   }, [qishui?.loggedIn, neteaseLibrarySection, syncQishuiRecommend]);
 
   useEffect(() => {
+    if (spotify?.loggedIn) void syncSpotify();
+  }, [spotify?.loggedIn, syncSpotify]);
+
+  useEffect(() => {
+    if (spotify?.loggedIn && neteaseLibrarySection === 'recommend') {
+      void syncSpotifyRecommend();
+    }
+  }, [spotify?.loggedIn, neteaseLibrarySection, syncSpotifyRecommend]);
+
+  useEffect(() => {
     if (appleAccount.loggedIn) void syncAppleLibrary();
   }, [appleAccount.loggedIn, syncAppleLibrary]);
 
@@ -1436,7 +1521,7 @@ const App: React.FC = () => {
       setHomeTab('netease');
       return;
     }
-    if (homeTab === 'apple' || homeTab === 'qishui') return;
+    if (homeTab === 'apple' || homeTab === 'qishui' || homeTab === 'spotify') return;
     const neIn = Boolean(netease?.loggedIn);
     const qqIn = Boolean(qq?.loggedIn);
     if (neIn && !qqIn && homeTab !== 'netease') setHomeTab('netease');
@@ -1630,14 +1715,11 @@ const App: React.FC = () => {
   useEffect(() => {
     const next = queue[index + 1];
     if (!next?.url) return;
-    const nextVip = Boolean(
-      (next.type === 'netease' && netease?.loggedIn && Number(netease.vip) > 0)
-      || (next.type === 'qq' && qq?.loggedIn && Number(qq.vip) > 0),
-    );
+    const nextAuthed = trackAuthedPlay(next, netease, qq);
     try {
       const url = new URL(next.url, window.location.origin);
       url.searchParams.set('probe', '1');
-      if (nextVip) url.searchParams.set('auth', '1');
+      if (nextAuthed) url.searchParams.set('auth', '1');
       if (crossPlayFallback || next.delisted) {
         url.searchParams.set('cross', '1');
         if (next.title) url.searchParams.set('title', next.title);
@@ -1650,7 +1732,7 @@ const App: React.FC = () => {
     } catch {
       return undefined;
     }
-  }, [crossPlayFallback, index, netease?.loggedIn, netease?.vip, qq?.loggedIn, qq?.vip, queue]);
+  }, [crossPlayFallback, index, netease?.loggedIn, qq?.loggedIn, queue]);
 
   useEffect(() => {
     if (!track) {
@@ -1743,11 +1825,14 @@ const App: React.FC = () => {
             ? qqOpen
             : homeTab === 'qishui'
               ? qishuiOpen
-              : neteaseOpen;
+              : homeTab === 'spotify'
+                ? spotifyOpen
+                : neteaseOpen;
         if (view === 'home' && playlistOpen) {
           if (homeTab === 'apple') closeApplePlaylist();
           else if (homeTab === 'qq') closeQqPlaylist();
           else if (homeTab === 'qishui') closeQishuiPlaylist();
+          else if (homeTab === 'spotify') closeSpotifyPlaylist();
           else closeNeteasePlaylist();
           return;
         }
@@ -1763,6 +1848,7 @@ const App: React.FC = () => {
     closeApplePlaylist,
     closeNeteasePlaylist,
     closeQishuiPlaylist,
+    closeSpotifyPlaylist,
     closeQqPlaylist,
     currentTime,
     duration,
@@ -1771,6 +1857,7 @@ const App: React.FC = () => {
     neteaseOpen,
     panelOpen,
     qishuiOpen,
+    spotifyOpen,
     qqOpen,
     searchOpen,
     seek,
@@ -1786,7 +1873,7 @@ const App: React.FC = () => {
     const type = params.get('type');
     const category = params.get('category');
     const doc = parseLegalTab(params.get('doc'));
-    if (type === 'qq' || type === 'netease' || type === 'qishui' || (type === 'apple' && canUseAppleMusic())) {
+    if (type === 'qq' || type === 'netease' || type === 'qishui' || type === 'spotify' || (type === 'apple' && canUseAppleMusic())) {
       setHomeTab(type);
       setSearchSource(type);
     }
@@ -1807,7 +1894,7 @@ const App: React.FC = () => {
         text,
         1,
         false,
-        type === 'qq' || type === 'netease' || type === 'qishui' || type === 'apple' ? type : undefined,
+        type === 'qq' || type === 'netease' || type === 'qishui' || type === 'spotify' || type === 'apple' ? type : undefined,
       );
     }
     if (doc) {
@@ -1834,8 +1921,9 @@ const App: React.FC = () => {
     const name = `${track.title}-${track.author}`;
     const playUrl = buildPlayMediaUrl(track, {
       authed: authedPlay,
-      audioQuality,
+      audioQuality: playQuality,
       crossPlayFallback,
+      freePlaySource,
       fresh: streamFresh,
     }) || track.url;
     const download = new URL(buildDownloadUrl(playUrl, name), window.location.origin);
@@ -1934,22 +2022,27 @@ const App: React.FC = () => {
           neteasePlaylists={neteasePlaylists}
           qqPlaylists={qqPlaylists}
           qishuiPlaylists={qishuiPlaylists}
+          spotifyPlaylists={spotifyPlaylists}
           neteaseRecommendItems={neteaseRecommendItems}
           qqRecommendItems={qqRecommendItems}
           qishuiRecommendItems={qishuiRecommendItems}
+          spotifyRecommendItems={spotifyRecommendItems}
           neteaseOpen={neteaseOpen}
           qqOpen={qqOpen}
           qishuiOpen={qishuiOpen}
+          spotifyOpen={spotifyOpen}
           neteaseTracks={neteaseTracks}
           qqTracks={qqTracks}
           qishuiTracks={qishuiTracks}
-          cloudLoading={homeTab === 'apple' ? appleLoading : homeTab === 'netease' ? neteaseLoading : homeTab === 'qq' ? qqLoading : homeTab === 'qishui' ? qishuiLoading : false}
-          cloudSyncing={homeTab === 'apple' ? appleSyncing : homeTab === 'netease' ? neteaseSyncing : homeTab === 'qq' ? qqSyncing : homeTab === 'qishui' ? qishuiSyncing : false}
-          recommendSyncing={homeTab === 'apple' ? appleRecommendSyncing : homeTab === 'netease' ? neteaseRecommendSyncing : homeTab === 'qq' ? qqRecommendSyncing : homeTab === 'qishui' ? qishuiRecommendSyncing : false}
-          cloudError={homeTab === 'apple' ? appleError : homeTab === 'netease' ? neteaseError : homeTab === 'qq' ? qqError : homeTab === 'qishui' ? qishuiError : ''}
-          recommendError={homeTab === 'apple' ? appleRecommendError : homeTab === 'netease' ? neteaseRecommendError : homeTab === 'qq' ? qqRecommendError : homeTab === 'qishui' ? qishuiRecommendError : ''}
+          spotifyTracks={spotifyTracks}
+          cloudLoading={homeTab === 'apple' ? appleLoading : homeTab === 'netease' ? neteaseLoading : homeTab === 'qq' ? qqLoading : homeTab === 'qishui' ? qishuiLoading : homeTab === 'spotify' ? spotifyLoading : false}
+          cloudSyncing={homeTab === 'apple' ? appleSyncing : homeTab === 'netease' ? neteaseSyncing : homeTab === 'qq' ? qqSyncing : homeTab === 'qishui' ? qishuiSyncing : homeTab === 'spotify' ? spotifySyncing : false}
+          recommendSyncing={homeTab === 'apple' ? appleRecommendSyncing : homeTab === 'netease' ? neteaseRecommendSyncing : homeTab === 'qq' ? qqRecommendSyncing : homeTab === 'qishui' ? qishuiRecommendSyncing : homeTab === 'spotify' ? spotifyRecommendSyncing : false}
+          cloudError={homeTab === 'apple' ? appleError : homeTab === 'netease' ? neteaseError : homeTab === 'qq' ? qqError : homeTab === 'qishui' ? qishuiError : homeTab === 'spotify' ? spotifyError : ''}
+          recommendError={homeTab === 'apple' ? appleRecommendError : homeTab === 'netease' ? neteaseRecommendError : homeTab === 'qq' ? qqRecommendError : homeTab === 'qishui' ? qishuiRecommendError : homeTab === 'spotify' ? spotifyRecommendError : ''}
           apple={appleAccount}
           qishui={qishui}
+          spotify={spotify}
           hasCurrentTrack={Boolean(track)}
           searchQuery={query}
           updateAvailable={Boolean(updateInfo?.hasUpdate)}
@@ -1964,6 +2057,7 @@ const App: React.FC = () => {
             if (neteaseOpen) closeNeteasePlaylist();
             if (qqOpen) closeQqPlaylist();
             if (qishuiOpen) closeQishuiPlaylist();
+            if (spotifyOpen) closeSpotifyPlaylist();
             if (appleOpen) closeApplePlaylist();
             setNeteaseLibrarySection(section);
           }}
@@ -1976,6 +2070,8 @@ const App: React.FC = () => {
               touchPlaylistRecent('qq', qqOpen.id);
             } else if (homeTab === 'qishui' && qishuiOpen) {
               touchPlaylistRecent('qishui', qishuiOpen.id);
+            } else if (homeTab === 'spotify' && spotifyOpen) {
+              touchPlaylistRecent('spotify', spotifyOpen.id);
             }
             returnToSearchRef.current = false;
             playbackIntentRef.current = 'playing';
@@ -2003,6 +2099,8 @@ const App: React.FC = () => {
               void openQqPlaylist(item);
             } else if (homeTab === 'qishui') {
               void openQishuiPlaylist(item);
+            } else if (homeTab === 'spotify') {
+              void openSpotifyPlaylist(item);
             } else {
               void openNeteasePlaylist(item);
             }
@@ -2028,6 +2126,8 @@ const App: React.FC = () => {
               }
             } else if (homeTab === 'qishui') {
               void openQishuiRecommend(item);
+            } else if (homeTab === 'spotify') {
+              void openSpotifyRecommend(item);
             }
           }}
           onPlayPersonalFm={() => {
@@ -2040,7 +2140,9 @@ const App: React.FC = () => {
               ? playQqPersonalFm
               : homeTab === 'qishui'
                 ? playQishuiRecent
-                : playNeteasePersonalFm;
+                : homeTab === 'spotify'
+                  ? () => Promise.reject(new Error('Spotify 暂不提供私人电台'))
+                  : playNeteasePersonalFm;
             void fm()
               .then((entries) => {
                 if (!entries.length) return;
@@ -2058,6 +2160,7 @@ const App: React.FC = () => {
             if (homeTab === 'apple') closeApplePlaylist();
             else if (homeTab === 'qq') closeQqPlaylist();
             else if (homeTab === 'qishui') closeQishuiPlaylist();
+            else if (homeTab === 'spotify') closeSpotifyPlaylist();
             else closeNeteasePlaylist();
           }}
           onToggleTheme={() => {
@@ -2091,8 +2194,7 @@ const App: React.FC = () => {
           visualizerMode={visualizerMode}
           background={backgroundConfig}
           onVisualizerModeChange={(mode) => {
-            setVisualizerMode(mode);
-            writeVisualizerMode(mode);
+            applyVisualizerMode(mode);
           }}
           audioPower={audioPower}
           audioBands={audioBands}
@@ -2238,11 +2340,12 @@ const App: React.FC = () => {
         kugou={kugou}
         apple={appleAccount}
         qishui={qishui}
+        spotify={spotify}
         initialProvider={accountIntent}
         onClose={() => setAccountOpen(false)}
         onChanged={refreshAccounts}
         onLoggedIn={(provider) => {
-          if (provider === 'netease' || provider === 'qq' || provider === 'apple' || provider === 'qishui') {
+          if (provider === 'netease' || provider === 'qq' || provider === 'apple' || provider === 'qishui' || provider === 'spotify') {
             setHomeTab(provider);
             if (provider === 'netease') {
               void syncNetease();
@@ -2252,6 +2355,9 @@ const App: React.FC = () => {
             } else if (provider === 'qishui') {
               void syncQishui();
               if (neteaseLibrarySection === 'recommend') void syncQishuiRecommend();
+            } else if (provider === 'spotify') {
+              void syncSpotify();
+              if (neteaseLibrarySection === 'recommend') void syncSpotifyRecommend();
             } else if (provider === 'apple') {
               void syncAppleLibrary();
               if (neteaseLibrarySection === 'recommend') void syncAppleRecommend();
@@ -2259,7 +2365,7 @@ const App: React.FC = () => {
           }
         }}
         onSync={async (provider) => {
-          if (provider !== 'netease' && provider !== 'qq' && provider !== 'apple' && provider !== 'qishui') return;
+          if (provider !== 'netease' && provider !== 'qq' && provider !== 'apple' && provider !== 'qishui' && provider !== 'spotify') return;
           setHomeTab(provider);
           if (provider === 'netease') {
             await syncNetease();
@@ -2269,16 +2375,19 @@ const App: React.FC = () => {
           } else if (provider === 'qishui') {
             await syncQishui();
             if (neteaseLibrarySection === 'recommend') await syncQishuiRecommend();
+          } else if (provider === 'spotify') {
+            await syncSpotify();
+            if (neteaseLibrarySection === 'recommend') await syncSpotifyRecommend();
           } else {
             await syncAppleLibrary();
             if (neteaseLibrarySection === 'recommend') await syncAppleRecommend();
           }
         }}
-        syncing={neteaseSyncing || qqSyncing || qishuiSyncing || neteaseRecommendSyncing || appleSyncing || appleRecommendSyncing || qishuiRecommendSyncing}
+        syncing={neteaseSyncing || qqSyncing || qishuiSyncing || spotifySyncing || neteaseRecommendSyncing || appleSyncing || appleRecommendSyncing || qishuiRecommendSyncing || spotifyRecommendSyncing}
         syncMessage={
-          neteaseSyncing || qqSyncing || qishuiSyncing || neteaseRecommendSyncing || qishuiRecommendSyncing
+          neteaseSyncing || qqSyncing || qishuiSyncing || spotifySyncing || neteaseRecommendSyncing || qishuiRecommendSyncing || spotifyRecommendSyncing
             ? '正在同步…'
-            : [neteaseError, qqError, qishuiError, neteaseRecommendError, qishuiRecommendError].filter(Boolean).join(' ')
+            : [neteaseError, qqError, qishuiError, spotifyError, neteaseRecommendError, qishuiRecommendError, spotifyRecommendError].filter(Boolean).join(' ')
         }
       />
 
@@ -2386,8 +2495,7 @@ const App: React.FC = () => {
             lyricsLoading={lyricsLoading}
             onStyleOpenChange={setStyleOpen}
             onVisualizerModeChange={(mode) => {
-              setVisualizerMode(mode);
-              writeVisualizerMode(mode);
+              applyVisualizerMode(mode);
             }}
             onBackgroundChange={(config) => {
               setBackgroundConfig(config);

@@ -1,16 +1,17 @@
 {
   "name": "ryanmusic-server",
   "private": true,
-  "version": "2.0.11",
+  "version": "2.0.12",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts --",
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --packages=bundle --outfile=dist/server.mjs",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --packages=bundle --external:qishui-music-api --outfile=dist/server.mjs",
     "start": "node dist/server.mjs",
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
-    "hono": "^4.7.11"
+    "hono": "^4.7.11",
+    "qishui-music-api": "^0.2.2"
   },
   "devDependencies": {
     "@types/node": "^22.15.29",

@@ -96,6 +96,8 @@ export interface LyricWindowFrame {
     litColor: Rgb;
     unlitColor: Rgb;
     unlitAlpha: number;
+    /** 隐藏全部径迹，不改变字的飞行路径；不给时保持原有效果。 */
+    hideTrails?: boolean;
     /** 整体亮度（进退场）。 */
     intensity: number;
 }
@@ -868,6 +870,7 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
 
     const update = (frame: LyricWindowFrame) => {
         const { time, beams, litColor, unlitColor, unlitAlpha, intensity } = frame;
+        trackLayer.visible = frame.hideTrails !== true;
         trackLayer.clear();
         if (KEYWORDS) refreshKeywordTints(litColor);
         const litHex = hexOf(litColor);

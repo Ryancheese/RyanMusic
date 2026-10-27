@@ -55,9 +55,11 @@ function readPersistedUi(): {
       ? 'qq'
       : parsed.homeTab === 'qishui'
         ? 'qishui'
-        : parsed.homeTab === 'apple' && canUseAppleMusic()
-          ? 'apple'
-          : 'netease';
+        : parsed.homeTab === 'spotify'
+          ? 'spotify'
+          : parsed.homeTab === 'apple' && canUseAppleMusic()
+            ? 'apple'
+            : 'netease';
     const neteaseLibrarySection: NeteaseLibrarySection = parsed.neteaseLibrarySection === 'recommend'
       ? 'recommend'
       : 'playlists';

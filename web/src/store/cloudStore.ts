@@ -20,6 +20,9 @@ import {
   fetchQishuiPlaylistDetail,
   fetchQishuiRecentSongs,
   fetchQishuiRecommendFeed,
+  fetchSpotifyPlaylists,
+  fetchSpotifyPlaylistDetail,
+  fetchSpotifyRecommendFeed,
   type CloudPlaylist,
   type CloudTrack,
   type NeteaseRecommendItem,
@@ -29,6 +32,7 @@ import { touchPlaylistRecent } from './playlistRecentStore';
 const NETEASE_KEY = 'ryanmusic-netease-cloud-v1';
 const QQ_KEY = 'ryanmusic-qq-cloud-v1';
 const QISHUI_KEY = 'ryanmusic-qishui-cloud-v1';
+const SPOTIFY_KEY = 'ryanmusic-spotify-cloud-v1';
 const TRACK_CACHE_KEY = 'ryanmusic-playlist-tracks-v1';
 const TRACK_CACHE_LIMIT = 24;
 
@@ -49,6 +53,7 @@ interface PlaylistTrackCacheStore {
   netease: Record<string, PlaylistTrackCacheEntry>;
   qq: Record<string, PlaylistTrackCacheEntry>;
   qishui: Record<string, PlaylistTrackCacheEntry>;
+  spotify: Record<string, PlaylistTrackCacheEntry>;
 }
 
 function readTrackCache(): PlaylistTrackCacheStore {
@@ -58,9 +63,10 @@ function readTrackCache(): PlaylistTrackCacheStore {
       netease: parsed?.netease && typeof parsed.netease === 'object' ? parsed.netease : {},
       qq: parsed?.qq && typeof parsed.qq === 'object' ? parsed.qq : {},
       qishui: parsed?.qishui && typeof parsed.qishui === 'object' ? parsed.qishui : {},
+      spotify: parsed?.spotify && typeof parsed.spotify === 'object' ? parsed.spotify : {},
     };
   } catch {
-    return { netease: {}, qq: {}, qishui: {} };
+    return { netease: {}, qq: {}, qishui: {}, spotify: {} };
   }
 }
 
@@ -74,7 +80,7 @@ function trimTrackCache(bucket: Record<string, PlaylistTrackCacheEntry>): Record
 }
 
 function putTrackCache(
-  provider: 'netease' | 'qq' | 'qishui',
+  provider: 'netease' | 'qq' | 'qishui' | 'spotify',
   playlistId: string,
   entry: PlaylistTrackCacheEntry,
 ) {
@@ -86,7 +92,7 @@ function putTrackCache(
   writeTrackCache(store);
 }
 
-function getTrackCache(provider: 'netease' | 'qq' | 'qishui', playlistId: string): PlaylistTrackCacheEntry | null {
+function getTrackCache(provider: 'netease' | 'qq' | 'qishui' | 'spotify', playlistId: string): PlaylistTrackCacheEntry | null {
   return readTrackCache()[provider][playlistId] || null;
 }
 
@@ -118,12 +124,23 @@ interface CloudState {
   neteaseRecommendError: string;
   qqRecommendError: string;
   qishuiRecommendError: string;
+  spotifyPlaylists: CloudPlaylist[];
+  spotifyRecommendItems: NeteaseRecommendItem[];
+  spotifyOpen: CloudPlaylist | null;
+  spotifyTracks: LibraryEntry[];
+  spotifySyncing: boolean;
+  spotifyRecommendSyncing: boolean;
+  spotifyLoading: boolean;
+  spotifyError: string;
+  spotifyRecommendError: string;
   syncNetease: () => Promise<void>;
   syncNeteaseRecommend: () => Promise<void>;
   syncQq: () => Promise<void>;
   syncQqRecommend: () => Promise<void>;
   syncQishui: () => Promise<void>;
   syncQishuiRecommend: () => Promise<void>;
+  syncSpotify: () => Promise<void>;
+  syncSpotifyRecommend: () => Promise<void>;
   openNeteasePlaylist: (playlist: CloudPlaylist) => Promise<void>;
   openNeteaseRecommend: (item: NeteaseRecommendItem) => Promise<void>;
   playNeteasePersonalFm: () => Promise<LibraryEntry[]>;
@@ -134,9 +151,12 @@ interface CloudState {
   openQishuiPlaylist: (playlist: CloudPlaylist) => Promise<void>;
   openQishuiRecommend: (item: NeteaseRecommendItem) => Promise<void>;
   playQishuiRecent: () => Promise<LibraryEntry[]>;
+  openSpotifyPlaylist: (playlist: CloudPlaylist) => Promise<void>;
+  openSpotifyRecommend: (item: NeteaseRecommendItem) => Promise<void>;
   closeNeteasePlaylist: () => void;
   closeQqPlaylist: () => void;
   closeQishuiPlaylist: () => void;
+  closeSpotifyPlaylist: () => void;
   clearProvider: (provider: MusicSource) => void;
 }
 
@@ -184,8 +204,14 @@ async function firstTrackCover(playlist: CloudPlaylist, type: MusicSource): Prom
     if (type === 'qishui') {
       const res = playlist.id === '__qishui_recent__'
         ? await fetchQishuiRecentSongs()
-        : await fetchQishuiPlaylistDetail(playlist.id, 0, 1);
+        : await fetchQishuiPlaylistDetail(playlist.id, 0, 1, playlist.ownerId || '');
       return coverFromTrack(res.data?.tracks?.[0], 'qishui');
+    }
+    if (type === 'spotify') {
+      const res = await fetchSpotifyPlaylistDetail(playlist.id, 0, 1);
+      return coverFromTrack(res.data?.tracks?.[0], 'spotify')
+        || playlist.cover?.trim()
+        || '';
     }
     const liked = playlist.dirid === 201;
     const res = liked ? await fetchQqLikelist() : await fetchQqPlaylistDetail(playlist.id);
@@ -203,7 +229,7 @@ async function enrichMissingCovers(
   const next = playlists.map((item) => ({ ...item }));
   const missing = next
     .map((item, index) => ({ item, index }))
-    .filter(({ item }) => !item.cover?.trim() || item.specialType === 5 || item.dirid === 201)
+    .filter(({ item }) => !item.cover?.trim() || item.specialType === 5 || item.dirid === 201 || item.id === 'liked')
     .slice(0, 24);
 
   const queue = [...missing];
@@ -290,9 +316,10 @@ async function collectQqTracks(playlist: CloudPlaylist): Promise<{ name: string;
 }
 
 async function collectQishuiTracks(playlist: CloudPlaylist): Promise<{ name: string; tracks: LibraryEntry[]; cover: string }> {
+  const ownerId = playlist.ownerId || '';
   const first = playlist.id === '__qishui_recent__'
     ? await fetchQishuiRecentSongs()
-    : await fetchQishuiPlaylistDetail(playlist.id, 0, 80);
+    : await fetchQishuiPlaylistDetail(playlist.id, 0, 80, ownerId);
   if (first.code !== 200 || !first.data) {
     throw new Error(first.error || '加载歌单失败');
   }
@@ -300,8 +327,25 @@ async function collectQishuiTracks(playlist: CloudPlaylist): Promise<{ name: str
   let tracks = toEntries(first.data.tracks, 'qishui');
   const cover = playlist.cover?.trim() || first.data.cover?.trim() || coverFromTrack(first.data.tracks?.[0], 'qishui');
   while (playlist.id !== '__qishui_recent__' && tracks.length < total) {
-    const page = await fetchQishuiPlaylistDetail(playlist.id, tracks.length, 80);
+    const page = await fetchQishuiPlaylistDetail(playlist.id, tracks.length, 80, ownerId);
     const more = toEntries(page.data?.tracks, 'qishui');
+    if (!more.length) break;
+    tracks = tracks.concat(more);
+  }
+  return { name: first.data.name || playlist.name, tracks, cover };
+}
+
+async function collectSpotifyTracks(playlist: CloudPlaylist): Promise<{ name: string; tracks: LibraryEntry[]; cover: string }> {
+  const first = await fetchSpotifyPlaylistDetail(playlist.id, 0, 80);
+  if (first.code !== 200 || !first.data) {
+    throw new Error(first.error || '加载歌单失败');
+  }
+  const total = Math.min(Number(first.data.total) || (first.data.tracks?.length ?? 0), 400);
+  let tracks = toEntries(first.data.tracks, 'spotify');
+  const cover = playlist.cover?.trim() || first.data.cover?.trim() || coverFromTrack(first.data.tracks?.[0], 'spotify');
+  while (tracks.length < total) {
+    const page = await fetchSpotifyPlaylistDetail(playlist.id, tracks.length, 80);
+    const more = toEntries(page.data?.tracks, 'spotify');
     if (!more.length) break;
     tracks = tracks.concat(more);
   }
@@ -336,6 +380,15 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   neteaseRecommendError: '',
   qqRecommendError: '',
   qishuiRecommendError: '',
+  spotifyPlaylists: readMeta(SPOTIFY_KEY).playlists,
+  spotifyRecommendItems: [],
+  spotifyOpen: null,
+  spotifyTracks: [],
+  spotifySyncing: false,
+  spotifyRecommendSyncing: false,
+  spotifyLoading: false,
+  spotifyError: '',
+  spotifyRecommendError: '',
   syncNetease: async () => {
     set({ neteaseSyncing: true, neteaseError: '' });
     const res = await fetchNeteasePlaylists();
@@ -476,6 +529,48 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       throw new Error(message);
     }
     return toEntries(res.data.tracks, 'qishui');
+  },
+  syncSpotify: async () => {
+    set({ spotifySyncing: true, spotifyError: '' });
+    const res = await fetchSpotifyPlaylists();
+    if (res.code !== 200 || !res.data) {
+      set({ spotifySyncing: false, spotifyError: res.error || '同步失败' });
+      return;
+    }
+    let playlists = (res.data.playlists || []).map((pl, index) => ({
+      ...pl,
+      order: pl.order ?? index,
+    }));
+    writeMeta(SPOTIFY_KEY, { playlists, syncedAt: Date.now() });
+    set({
+      spotifyPlaylists: playlists,
+      spotifySyncing: false,
+      spotifyOpen: null,
+      spotifyTracks: [],
+      spotifyError: playlists.length ? '' : '账号下没有歌单',
+    });
+    playlists = await enrichMissingCovers(playlists, 'spotify', (partial) => {
+      writeMeta(SPOTIFY_KEY, { playlists: partial, syncedAt: Date.now() });
+      set({ spotifyPlaylists: partial });
+    });
+    writeMeta(SPOTIFY_KEY, { playlists, syncedAt: Date.now() });
+    set({ spotifyPlaylists: playlists });
+  },
+  syncSpotifyRecommend: async () => {
+    set({ spotifyRecommendSyncing: true, spotifyRecommendError: '' });
+    const res = await fetchSpotifyRecommendFeed();
+    if (res.code !== 200 || !res.data) {
+      set({ spotifyRecommendSyncing: false, spotifyRecommendError: res.error || '拉取 Spotify 推荐失败' });
+      return;
+    }
+    const items = (res.data.items || []).filter((item) => item?.id && item.recommendKind);
+    set({
+      spotifyRecommendItems: items,
+      spotifyRecommendSyncing: false,
+      spotifyRecommendError: items.length ? '' : '暂无推荐内容',
+      spotifyOpen: null,
+      spotifyTracks: [],
+    });
   },
   playQqPersonalFm: async () => {
     set({ qqRecommendError: '' });
@@ -676,6 +771,49 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   closeNeteasePlaylist: () => set({ neteaseOpen: null, neteaseError: '', neteaseLoading: false }),
   closeQqPlaylist: () => set({ qqOpen: null, qqError: '', qqLoading: false }),
   closeQishuiPlaylist: () => set({ qishuiOpen: null, qishuiError: '', qishuiLoading: false }),
+  closeSpotifyPlaylist: () => set({ spotifyOpen: null, spotifyError: '', spotifyLoading: false }),
+  openSpotifyRecommend: async (item) => {
+    if (item.recommendKind === 'playlist' || item.id) {
+      await get().openSpotifyPlaylist(item);
+    }
+  },
+  openSpotifyPlaylist: async (playlist) => {
+    touchPlaylistRecent('spotify', playlist.id);
+    const cached = getTrackCache('spotify', playlist.id);
+    set({
+      spotifyLoading: !cached,
+      spotifyError: '',
+      spotifyOpen: cached
+        ? { ...playlist, name: cached.name || playlist.name, cover: cached.cover || playlist.cover }
+        : playlist,
+      spotifyTracks: cached?.tracks || [],
+    });
+    try {
+      const result = await collectSpotifyTracks(playlist);
+      const playlists = patchPlaylistCover(get().spotifyPlaylists, playlist.id, result.cover);
+      writeMeta(SPOTIFY_KEY, { playlists, syncedAt: Date.now() });
+      putTrackCache('spotify', playlist.id, {
+        tracks: result.tracks,
+        name: result.name,
+        cover: result.cover || playlist.cover,
+        savedAt: Date.now(),
+      });
+      set({
+        spotifyLoading: false,
+        spotifyPlaylists: playlists,
+        spotifyOpen: { ...playlist, name: result.name, cover: result.cover || playlist.cover },
+        spotifyTracks: result.tracks,
+        spotifyError: result.tracks.length ? '' : '这个歌单是空的',
+      });
+    } catch (error) {
+      set({
+        spotifyLoading: false,
+        spotifyError: cached?.tracks.length
+          ? ''
+          : (error instanceof Error ? error.message : '加载歌单失败'),
+      });
+    }
+  },
   openQishuiRecommend: async (item) => {
     if (item.recommendKind === 'fm') return;
     if (item.recommendKind === 'playlist' || (item.id && item.id !== '__qishui_recent__' && item.recommendKind !== 'daily')) {
@@ -799,6 +937,24 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       });
       return;
     }
+    if (provider === 'spotify') {
+      localStorage.removeItem(SPOTIFY_KEY);
+      const cache = readTrackCache();
+      cache.spotify = {};
+      writeTrackCache(cache);
+      set({
+        spotifyPlaylists: [],
+        spotifyRecommendItems: [],
+        spotifyOpen: null,
+        spotifyTracks: [],
+        spotifyError: '',
+        spotifyRecommendError: '',
+        spotifyLoading: false,
+        spotifySyncing: false,
+        spotifyRecommendSyncing: false,
+      });
+      return;
+    }
     localStorage.removeItem(QQ_KEY);
     const cache = readTrackCache();
     cache.qq = {};
@@ -844,5 +1000,14 @@ void (async () => {
     });
     writeMeta(QISHUI_KEY, { playlists, syncedAt: Date.now() });
     useCloudStore.setState({ qishuiPlaylists: playlists });
+  }
+  const spotify = readMeta(SPOTIFY_KEY).playlists;
+  if (spotify.some((item) => !item.cover?.trim() || item.id === 'liked')) {
+    const playlists = await enrichMissingCovers(spotify, 'spotify', (partial) => {
+      writeMeta(SPOTIFY_KEY, { playlists: partial, syncedAt: Date.now() });
+      useCloudStore.setState({ spotifyPlaylists: partial });
+    });
+    writeMeta(SPOTIFY_KEY, { playlists, syncedAt: Date.now() });
+    useCloudStore.setState({ spotifyPlaylists: playlists });
   }
 })();

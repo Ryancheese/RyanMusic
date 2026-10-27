@@ -11,6 +11,7 @@ import {
     type Theme,
 } from '../../../../types';
 import { colorWithAlpha } from '../../colorMix';
+import BackgroundToggleRow from '../BackgroundToggleRow';
 
 // src/components/visualizer/backgrounds/monet/MonetBackgroundSettingsCard.tsx
 // Background settings for the shell-level Monet image layer.
@@ -138,6 +139,8 @@ const SliderControl: React.FC<SliderControlProps> = ({
     </div>
 );
 
+const percentLabel = (value: number) => `${Math.round(value * 100)}%`;
+
 const clampValue = (value: number, min: number, max: number, fallback: number) => (
     Number.isFinite(value)
         ? Math.min(max, Math.max(min, value))
@@ -181,6 +184,14 @@ export const MonetBackgroundSettingsCard: React.FC<MonetBackgroundSettingsCardPr
         backgroundHalfPaneOffsetX: clampValue(tuning.backgroundHalfPaneOffsetX ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundHalfPaneOffsetX, -40, 40, DEFAULT_MONET_BACKGROUND_TUNING.backgroundHalfPaneOffsetX),
         backgroundWashColorMode: tuning.backgroundWashColorMode ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundWashColorMode,
         backgroundWashCustomColor: normalizeHexInput(tuning.backgroundWashCustomColor) ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundWashCustomColor,
+        backgroundDriftEnabled: tuning.backgroundDriftEnabled ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftEnabled,
+        backgroundDriftStrength: clampValue(
+            tuning.backgroundDriftStrength ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength,
+            0,
+            1,
+            DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength,
+        ),
+        backgroundStreaksEnabled: tuning.backgroundStreaksEnabled ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundStreaksEnabled,
     };
 
     const sourceOptions = useMemo<PresetOption<MonetBackgroundSource>[]>(() => ([
@@ -360,7 +371,39 @@ export const MonetBackgroundSettingsCard: React.FC<MonetBackgroundSettingsCardPr
                 />
             </div>
 
-            {/* Section 4: Color Tint & Wash */}
+            {/* Section 4: Motion & texture */}
+            <div className="space-y-3.5 rounded-[18px] border border-white/5 p-3.5 bg-black/5 dark:bg-white/5">
+                <BackgroundToggleRow
+                    label={t('options.monetBackgroundDriftEnabled')}
+                    description={t('options.monetBackgroundDriftEnabledDesc')}
+                    checked={resolvedTuning.backgroundDriftEnabled}
+                    onChange={backgroundDriftEnabled => onTuningChange?.({ backgroundDriftEnabled })}
+                    theme={theme}
+                />
+                {resolvedTuning.backgroundDriftEnabled && (
+                    <SliderControl
+                        label={t('options.monetBackgroundDriftStrength')}
+                        valueLabel={percentLabel(resolvedTuning.backgroundDriftStrength)}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={resolvedTuning.backgroundDriftStrength}
+                        onChange={(value) => onTuningChange?.({ backgroundDriftStrength: value })}
+                        rangeInputClass={rangeInputClass}
+                        onSliderPointerDown={onSliderPointerDown}
+                        onSliderCommit={onSliderCommit}
+                    />
+                )}
+                <BackgroundToggleRow
+                    label={t('options.monetBackgroundStreaksEnabled')}
+                    description={t('options.monetBackgroundStreaksEnabledDesc')}
+                    checked={resolvedTuning.backgroundStreaksEnabled}
+                    onChange={backgroundStreaksEnabled => onTuningChange?.({ backgroundStreaksEnabled })}
+                    theme={theme}
+                />
+            </div>
+
+            {/* Section 5: Color Tint & Wash */}
             <div className="space-y-3.5 rounded-[18px] border border-white/5 p-3.5 bg-black/5 dark:bg-white/5">
                 <div className="text-xs font-semibold uppercase tracking-wider opacity-65" style={{ color: theme.accentColor }}>
                     {t('options.monetGroupColorTintWash')}

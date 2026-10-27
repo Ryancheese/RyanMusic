@@ -2,6 +2,7 @@ import {
   bootstrapBase,
   isServerlessEnv,
   UA,
+  type FreePlaySource,
   type MatchSearchTrack,
   type SearchAlbumHit,
   type SearchArtistHit,
@@ -319,11 +320,16 @@ export class QqService {
     return jsonpToJson(res.body) || {};
   }
 
-  async resolvePlayUrl(songmid: string, cookie = '', skipCache = false): Promise<string | null> {
-    const inflightKey = `${cookie ? 'auth' : 'private'}:${skipCache ? 'fresh' : 'cache'}:${songmid}`;
+  async resolvePlayUrl(
+    songmid: string,
+    cookie = '',
+    skipCache = false,
+    freeSource: FreePlaySource = 'auto',
+  ): Promise<string | null> {
+    const inflightKey = `${cookie ? 'auth' : `free:${freeSource}`}:${skipCache ? 'fresh' : 'cache'}:${songmid}`;
     const inflight = this.playInflight.get(inflightKey);
     if (inflight) return inflight;
-    const pending = this.resolvePlayUrlInner(songmid, cookie, skipCache).finally(() => {
+    const pending = this.resolvePlayUrlInner(songmid, cookie, skipCache, freeSource).finally(() => {
       this.playInflight.delete(inflightKey);
     });
     this.playInflight.set(inflightKey, pending);
@@ -335,8 +341,13 @@ export class QqService {
     this.cache.setTtl('qq_play_auth_v7', songmid, '', -1);
   }
 
-  private async resolvePlayUrlInner(songmid: string, cookie = '', skipCache = false): Promise<string | null> {
-    const cacheKey = cookie ? 'qq_play_auth_v7' : 'qq_play_v7';
+  private async resolvePlayUrlInner(
+    songmid: string,
+    cookie = '',
+    skipCache = false,
+    freeSource: FreePlaySource = 'auto',
+  ): Promise<string | null> {
+    const cacheKey = cookie ? 'qq_play_auth_v7' : `qq_play_v7_${freeSource}`;
     if (!skipCache) {
       const cached = this.cache.getTtl(cacheKey, songmid);
       if (cached && !isQqTrialMediaUrl(cached)) return cached;
@@ -350,26 +361,32 @@ export class QqService {
       }
     }
 
-    if (isServerlessEnv()) {
+    const acceptPrivate = async () => {
+      const url = await this.bootstrapPlayUrl(songmid) || await this.pyqPlayUrl(songmid);
+      return url && !isBadMediaUrl(url) && !isKuwoTrialMediaUrl(url) ? url : null;
+    };
+    const acceptOfficial = async () => {
       const official = await this.officialPlayUrl(songmid, '');
-      if (official && !isQqTrialMediaUrl(official)) {
-        this.cache.setTtl('qq_play_v7', songmid, official, 600);
-        return official;
-      }
-    }
+      return official && !isQqTrialMediaUrl(official) ? official : null;
+    };
+    const acceptKuwo = async () => {
+      const kuwo = await this.kuwoFallbackPlayUrl(songmid);
+      return kuwo && !isKuwoTrialMediaUrl(kuwo) ? kuwo : null;
+    };
 
-    // 非会员一刀切 RyanMusic 私链；试听链不再参与竞速。
-    const url = await this.bootstrapPlayUrl(songmid)
-      || await this.pyqPlayUrl(songmid);
-    if (url && !isBadMediaUrl(url) && !isKuwoTrialMediaUrl(url)) {
-      this.cache.setTtl('qq_play_v7', songmid, url, 600);
+    let url: string | null = null;
+    if (freeSource === 'private') url = await acceptPrivate();
+    else if (freeSource === 'official') url = await acceptOfficial();
+    else if (freeSource === 'kuwo') url = await acceptKuwo();
+    else {
+      // auto：原逻辑 —— 私链 →（serverless 时官方）→ 酷我
+      url = await acceptPrivate();
+      if (!url && isServerlessEnv()) url = await acceptOfficial();
+      if (!url) url = await acceptKuwo();
+    }
+    if (url) {
+      this.cache.setTtl(cacheKey, songmid, url, 600);
       return url;
-    }
-
-    const kuwo = await this.kuwoFallbackPlayUrl(songmid);
-    if (kuwo && !isKuwoTrialMediaUrl(kuwo)) {
-      this.cache.setTtl('qq_play_v7', songmid, kuwo, 600);
-      return kuwo;
     }
     return null;
   }
@@ -484,7 +501,7 @@ export class QqService {
   private async bootstrapPlayUrl(songmid: string): Promise<string | null> {
     const base = bootstrapBase();
     if (!base) return null;
-    const timeoutMs = isServerlessEnv() ? 10_000 : 4_500;
+    const timeoutMs = isServerlessEnv() ? 10_000 : 6_000;
     const res = await request('POST', `${base}/`, {
       headers: { 'X-Requested-With': 'XMLHttpRequest', Referer: `${base}/` },
       body: { input: songmid, filter: 'id', type: 'qq', page: 1 },

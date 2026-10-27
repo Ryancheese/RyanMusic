@@ -34,3 +34,20 @@ export const destroyPixiContainerChildren = (container: PixiDisplayNode & {
         child.destroy?.({ children: true });
     });
 };
+
+/**
+ * Destroys a whole display tree, a Graphics' own GraphicsContext included (a context handed in at
+ * construction is left alone). destroy({ children: true }) cannot do this: Pixi 8 only destroys a
+ * Graphics' own context when it is destroyed without an options object, otherwise its GPU batch data
+ * waits for Pixi's idle GC. Nodes are destroyed child-first with no arguments.
+ */
+export const destroyPixiDisplayTree = (root: PixiDisplayNode) => {
+    const order: PixiDisplayNode[] = [];
+    const stack = [root];
+    while (stack.length > 0) {
+        const node = stack.pop()!;
+        order.push(node);
+        if (node.children?.length) stack.push(...node.children);
+    }
+    for (let index = order.length - 1; index >= 0; index -= 1) order[index]!.destroy?.();
+};

@@ -2,9 +2,16 @@ import { motionValue, type MotionValue } from 'framer-motion';
 import type { AudioBands, Theme, ThemeTokens, VisualizerMode } from '../types';
 import type { VisualizerBackgroundConfig } from '../components/visualizer/backgrounds/definition';
 import {
+  DEFAULT_LATENT_BACKGROUND_TUNING,
+  DEFAULT_MONET_BACKGROUND_TUNING,
+  DEFAULT_NOMAND_BACKGROUND_TUNING,
+  DEFAULT_SORA_BACKGROUND_TUNING,
+} from '../types';
+import {
   hasVisualizerBackgroundMode,
 } from '../components/visualizer/backgrounds/registry';
 import { saveCustomBackgroundImage, stripCustomImageUrl } from './customBackgroundImage';
+import { sanitizeUrlBackgroundList } from '../utils/urlBackground';
 import type { LyricsAppearanceState } from '../store/lyricsAppearanceStore';
 
 export const VISUALIZER_MODE_KEY = 'ryanmusic-visualizer-mode';
@@ -95,6 +102,14 @@ export function readBackgroundConfig(lightweight = false): VisualizerBackgroundC
     const mode = hasVisualizerBackgroundMode(parsed.mode)
       ? parsed.mode
       : fallback.mode;
+    const urlItems = parsed.url?.items !== undefined
+      ? sanitizeUrlBackgroundList(parsed.url.items)
+      : parsed.url?.items;
+    const selectedId = parsed.url?.selectedId;
+    const urlSelectedId = selectedId && urlItems?.some(item => item.id === selectedId)
+      ? selectedId
+      : (urlItems?.[0]?.id ?? null);
+
     return {
       ...fallback,
       ...parsed,
@@ -103,6 +118,21 @@ export function readBackgroundConfig(lightweight = false): VisualizerBackgroundC
         ...fallback.common,
         ...parsed.common,
       },
+      monet: parsed.monet?.tuning
+        ? { tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, ...parsed.monet.tuning } }
+        : parsed.monet,
+      nomand: parsed.nomand?.tuning
+        ? { tuning: { ...DEFAULT_NOMAND_BACKGROUND_TUNING, ...parsed.nomand.tuning } }
+        : parsed.nomand,
+      latent: parsed.latent?.tuning
+        ? { tuning: { ...DEFAULT_LATENT_BACKGROUND_TUNING, ...parsed.latent.tuning } }
+        : parsed.latent,
+      sora: parsed.sora?.tuning
+        ? { tuning: { ...DEFAULT_SORA_BACKGROUND_TUNING, ...parsed.sora.tuning } }
+        : parsed.sora,
+      url: parsed.url
+        ? { items: urlItems ?? [], selectedId: urlSelectedId }
+        : parsed.url,
     };
   } catch {
     return fallback;

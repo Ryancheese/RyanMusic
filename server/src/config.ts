@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export const VERSION = '2.0.11';
+export const VERSION = '2.0.12';
 
 export const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -25,6 +25,15 @@ export function withOsPcCookie(cookie: string): string {
 }
 
 export type MusicSource = 'netease' | 'qq' | 'qishui';
+
+/** 非会员免费取流策略（设置里可选） */
+export type FreePlaySource = 'auto' | 'private' | 'official' | 'kuwo';
+
+export function parseFreePlaySource(raw: unknown): FreePlaySource {
+  const value = String(raw || '').trim();
+  if (value === 'private' || value === 'official' || value === 'kuwo' || value === 'auto') return value;
+  return 'auto';
+}
 
 export interface Track {
   type: MusicSource;

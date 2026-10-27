@@ -317,8 +317,10 @@ export class LyricsService {
     if (cached && hasUsableLyrics(cached)) return cached;
 
     let official: any = null;
-    const officialTask = cookie
-      ? eapiRequest(
+    let anonymous: any = null;
+    // Folia：登录态优先 /lyric/v1（对齐 lyric/new），有结果就不再等匿名 linux forward
+    if (cookie) {
+      const officialRes = await eapiRequest(
         '/api/song/lyric/v1',
         {
           id: Number(songid),
@@ -332,13 +334,14 @@ export class LyricsService {
           yrv: 0,
         },
         cookie,
-      ).catch(() => null)
-      : Promise.resolve(null);
-    const [officialRes, anonymous] = await Promise.all([
-      officialTask,
-      this.netease.fetchLyric(songid, cookie),
-    ]);
-    if (officialRes?.json && (officialRes.json.lrc || officialRes.json.yrc)) official = officialRes.json;
+      ).catch(() => null);
+      if (officialRes?.json && (officialRes.json.lrc || officialRes.json.yrc)) {
+        official = officialRes.json;
+      }
+    }
+    if (!official || (!neteaseLyricText(official, 'lrc') && !neteaseLyricText(official, 'yrc'))) {
+      anonymous = await this.netease.fetchLyric(songid, cookie);
+    }
 
     // Folia：纯音乐不落地占位文案，前端歌词区保持空态
     if (

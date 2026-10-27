@@ -23,7 +23,7 @@ BUNDLE_NODE=1
 MAKE_DMG=0
 FORCE_ARCH=""
 # 与官方 Node LTS 对齐；安装包内嵌后用户无需系统安装 Node
-NODE_BUNDLE_VERSION="${NODE_BUNDLE_VERSION:-22.18.0}"
+NODE_BUNDLE_VERSION="${NODE_BUNDLE_VERSION:-24.18.0}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -385,6 +385,10 @@ echo "==> build Node backend"
   npm run build
 )
 cp -f "$ROOT/server/dist/server.mjs" "$RESOURCES_DIR/server.mjs"
+# qishui-music-api 用 Node 原生 require(node:*)，不能打进 ESM bundle；随包旁挂 node_modules。
+mkdir -p "$RESOURCES_DIR/node_modules"
+rm -rf "$RESOURCES_DIR/node_modules/qishui-music-api"
+cp -R "$ROOT/server/node_modules/qishui-music-api" "$RESOURCES_DIR/node_modules/qishui-music-api"
 
 if [[ "$BUNDLE_NODE" -eq 1 ]]; then
   bundle_official_node "$RESOURCES_DIR/node"
@@ -401,10 +405,19 @@ else
 fi
 xattr -cr "$APP_DIR" 2>/dev/null || true
 
+# 装进 /Applications，并取消 dist 副本的 Launch Services 注册，避免 Spotlight 出现两个同名 App。
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+rm -rf "/Applications/${APP_NAME}.app"
+cp -R "$APP_DIR" "/Applications/${APP_NAME}.app"
+if [[ -x "$LSREGISTER" ]]; then
+  "$LSREGISTER" -u "$APP_DIR" >/dev/null 2>&1 || true
+  "$LSREGISTER" -f "/Applications/${APP_NAME}.app" >/dev/null 2>&1 || true
+fi
+
 echo
-echo "App: ${APP_DIR}"
-echo "Run: open ${APP_DIR}"
-echo "Install: cp -R ${APP_DIR} /Applications/"
+echo "App: /Applications/${APP_NAME}.app"
+echo "Run: open /Applications/${APP_NAME}.app"
+echo "Build copy (not registered): ${APP_DIR}"
 
 if [[ "$MAKE_DMG" -eq 1 ]]; then
   make_dmg "$APP_DIR" "$DMG_PATH"

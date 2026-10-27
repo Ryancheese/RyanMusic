@@ -1,5 +1,6 @@
 import React from 'react';
 import { DEFAULT_SONNET_TUNING } from '../../../types';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import { defineVisualizer } from '../definition';
 import SonnetSettingsPanel from './SonnetSettingsPanel';
 import VisualizerSonnet from './VisualizerSonnet';
@@ -14,6 +15,12 @@ export default defineVisualizer({
     previewSeed: 'sonnet',
     previewStartOffset: 0,
     tuningKind: 'sonnet',
+    beatEffects: [{
+        id: BEAT_EFFECT_IDS.sonnetLensTear,
+        nameKey: 'options.beatEffect_sonnetLensTear',
+        descKey: 'options.beatEffect_sonnetLensTearDesc',
+        source: 'beats',
+    }],
     render: props => <VisualizerSonnet key={props.seed} {...props} />,
     renderSettingsPanel: props => <SonnetSettingsPanel {...props} />,
     resetSettings: ({ resetSonnetTuning, setDraftSonnetTuning }) => {

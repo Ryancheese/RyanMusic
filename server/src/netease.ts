@@ -1,6 +1,7 @@
 import {
   bootstrapBase,
   isServerlessEnv,
+  type FreePlaySource,
   type MatchSearchTrack,
   type SearchAlbumHit,
   type SearchArtistHit,
@@ -16,7 +17,6 @@ import { followLocation, request } from './http.ts';
 import { kuwoMatchPlayUrl } from './kuwo.ts';
 import { proxyUrl } from './sign.ts';
 import {
-  firstTruthy,
   httpsNeteaseUrl,
   isBadMediaUrl,
   isKuwoTrialMediaUrl,
@@ -330,11 +330,17 @@ export class NeteaseService {
 
   static readonly FAST_PLAY_LEVELS = ['exhigh', 'higher', 'standard'] as const;
 
-  async resolvePlayUrl(songid: string, cookie = '', level = '', skipCache = false): Promise<string | null> {
-    const inflightKey = `${cookie ? 'auth' : 'private'}:${level || 'auto'}:${skipCache ? 'fresh' : 'cache'}:${songid}`;
+  async resolvePlayUrl(
+    songid: string,
+    cookie = '',
+    level = '',
+    skipCache = false,
+    freeSource: FreePlaySource = 'auto',
+  ): Promise<string | null> {
+    const inflightKey = `${cookie ? 'auth' : `free:${freeSource}`}:${level || 'auto'}:${skipCache ? 'fresh' : 'cache'}:${songid}`;
     const inflight = this.playInflight.get(inflightKey);
     if (inflight) return inflight;
-    const pending = this.resolvePlayUrlInner(songid, cookie, level, skipCache).finally(() => {
+    const pending = this.resolvePlayUrlInner(songid, cookie, level, skipCache, freeSource).finally(() => {
       this.playInflight.delete(inflightKey);
     });
     this.playInflight.set(inflightKey, pending);
@@ -345,79 +351,53 @@ export class NeteaseService {
     this.cache.setTtl('netease_play_v7', songid, '', -1);
   }
 
-  private async resolvePlayUrlInner(songid: string, cookie = '', level = '', skipCache = false): Promise<string | null> {
+  private async resolvePlayUrlInner(
+    songid: string,
+    cookie = '',
+    level = '',
+    skipCache = false,
+    freeSource: FreePlaySource = 'auto',
+  ): Promise<string | null> {
     const cacheKey = cookie
-      ? `netease_play_auth_v7_${level || 'auto'}`
-      : 'netease_play_v7';
+      ? `netease_play_auth_v8_${level || 'auto'}`
+      : `netease_play_v7_${freeSource}`;
     if (!skipCache) {
       const cached = this.cache.getTtl(cacheKey, songid);
       if (cached && !isNeteaseTrialMediaUrl(cached) && !isKuwoTrialMediaUrl(cached)) return cached;
     }
 
+    // Folia：登录态只打官方 song/url，不与私链竞速。私链仅在 Cookie 取链失败后才用。
     if (cookie) {
-      const authTask = this.cookiePlayUrl(songid, cookie, level);
-      const bootTask = this.bootstrapPlayUrl(songid);
-      const authUrl = await Promise.race([
-        authTask,
-        new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 900)),
-      ]);
+      const authUrl = await this.cookiePlayUrl(songid, cookie, level);
       if (authUrl && !isNeteaseTrialMediaUrl(authUrl)) {
         this.cache.setTtl(cacheKey, songid, authUrl, 600);
         return authUrl;
       }
-      const bootUrl = await bootTask;
-      if (bootUrl && !isBadMediaUrl(bootUrl) && !isNeteaseTrialMediaUrl(bootUrl) && !isKuwoTrialMediaUrl(bootUrl) && !/\/404/i.test(bootUrl)) {
-        const safeUrl = httpsNeteaseUrl(bootUrl);
-        this.cache.setTtl('netease_play_v7', songid, safeUrl, 1800);
-        return safeUrl;
-      }
-      const lateAuth = await authTask;
-      if (lateAuth && !isNeteaseTrialMediaUrl(lateAuth)) {
-        this.cache.setTtl(cacheKey, songid, lateAuth, 600);
-        return lateAuth;
-      }
     }
 
-    // 非会员一刀切：只走 RyanMusic 私链（bootstrap 全曲），官方/酷我 antiserver 常为 11s 试听。
-    const url = await this.bootstrapPlayUrl(songid);
-    if (url && !isBadMediaUrl(url) && !isNeteaseTrialMediaUrl(url) && !isKuwoTrialMediaUrl(url) && !/\/404/i.test(url)) {
-      const safeUrl = httpsNeteaseUrl(url);
-      this.cache.setTtl('netease_play_v7', songid, safeUrl, 1800);
-      return safeUrl;
-    }
-
-    if (isServerlessEnv()) {
-      const direct = await this.anonymousPlayUrl(songid);
-      if (direct) {
-        this.cache.setTtl('netease_play_v7', songid, direct, 600);
-        return direct;
+    const acceptBoot = async () => {
+      const url = await this.bootstrapPlayUrl(songid);
+      if (url && !isBadMediaUrl(url) && !isNeteaseTrialMediaUrl(url) && !isKuwoTrialMediaUrl(url) && !/\/404/i.test(url)) {
+        return httpsNeteaseUrl(url);
       }
-    } else {
-      const direct = await this.anonymousPlayUrl(songid);
-      if (direct) {
-        this.cache.setTtl('netease_play_v7', songid, direct, 600);
-        return direct;
-      }
-    }
+      return null;
+    };
+    const acceptOfficial = async () => this.anonymousPlayUrl(songid);
+    const acceptKuwo = async () => this.kuwoFallbackPlayUrl(songid);
 
-    // 仅接受酷我全曲；试听短链不进入缓存。
-    const kuwo = await this.kuwoFallbackPlayUrl(songid);
-    if (kuwo) {
-      this.cache.setTtl('netease_play_v7', songid, kuwo, 600);
-      return kuwo;
+    let url: string | null = null;
+    if (freeSource === 'private') url = await acceptBoot();
+    else if (freeSource === 'official') url = await acceptOfficial();
+    else if (freeSource === 'kuwo') url = await acceptKuwo();
+    else {
+      // auto：原逻辑 —— 私链 → 官方匿名 → 酷我全曲
+      url = await acceptBoot() || await acceptOfficial() || await acceptKuwo();
+    }
+    if (url) {
+      this.cache.setTtl(cacheKey, songid, url, freeSource === 'private' ? 1800 : 600);
+      return url;
     }
     return null;
-  }
-
-  /** bootstrap 不可达（如 Vercel 美东）时，按歌名匹配酷我取流 */
-  private async kuwoFallbackPlayUrl(songid: string): Promise<string | null> {
-    try {
-      const [track] = await this.songsByIds([songid]);
-      if (!track?.title) return null;
-      return await kuwoMatchPlayUrl(track.title, track.author || '');
-    } catch {
-      return null;
-    }
   }
 
   async probePlayQualities(songid: string, cookie: string): Promise<Array<{
@@ -475,6 +455,10 @@ export class NeteaseService {
       || NeteaseService.QUALITY_LEVELS.find((item) => item.level === 'exhigh')
       || NeteaseService.QUALITY_LEVELS[NeteaseService.QUALITY_LEVELS.length - 1];
 
+    const fromEapi = async (item: { level: string; encodeType: string }) => {
+      const hit = await this.fetchPlayUrlForLevel(id, cookie, item.level, item.encodeType);
+      return hit?.url || null;
+    };
     const fromWeapi = async () => {
       const weapi = await weapiRequest(
         '/weapi/song/enhance/player/url/v1',
@@ -488,15 +472,9 @@ export class NeteaseService {
       }
       return null;
     };
-    const fromEapi = async (item: { level: string; encodeType: string }) => {
-      const hit = await this.fetchPlayUrlForLevel(id, cookie, item.level, item.encodeType);
-      return hit?.url || null;
-    };
 
-    const url = await firstTruthy([
-      fromWeapi,
-      () => fromEapi(preferred),
-    ]);
+    // eapi 优先（对齐 Folia /song/url/v1），失败再 weapi；高码率失败时回落 320k
+    const url = await fromEapi(preferred) || await fromWeapi();
     if (url) return url;
     if (preferred.level !== 'exhigh') {
       const exhigh = NeteaseService.QUALITY_LEVELS.find((item) => item.level === 'exhigh');
@@ -533,7 +511,7 @@ export class NeteaseService {
   private async bootstrapPlayUrl(songid: string): Promise<string | null> {
     const base = bootstrapBase();
     if (!base) return null;
-    const timeoutMs = isServerlessEnv() ? 10_000 : 2_500;
+    const timeoutMs = isServerlessEnv() ? 10_000 : 6_000;
     const res = await request('POST', `${base}/`, {
       headers: {
         'X-Requested-With': 'XMLHttpRequest',
@@ -548,11 +526,20 @@ export class NeteaseService {
     const loc = await followLocation(api, `${base}/`, timeoutMs);
     if (!loc || isBadMediaUrl(loc) || isNeteaseTrialMediaUrl(loc)) return null;
     if (/(126\.net|163\.com|music\.163)/i.test(loc)) return loc;
-    const hop = await followLocation(loc, `${base}/`, Math.min(timeoutMs, 4_000));
+    const hop = await followLocation(loc, `${base}/`, timeoutMs);
     return hop && !isNeteaseTrialMediaUrl(hop) ? hop : loc;
   }
 
-  /** Vercel 等 serverless 环境 bootstrap 不稳定时的直连回退 */
+  private async kuwoFallbackPlayUrl(songid: string): Promise<string | null> {
+    try {
+      const [track] = await this.songsByIds([songid]);
+      if (!track?.title) return null;
+      return await kuwoMatchPlayUrl(track.title, track.author || '');
+    } catch {
+      return null;
+    }
+  }
+
   private playApiTimeout(): number {
     return isServerlessEnv() ? 12_000 : 4_000;
   }

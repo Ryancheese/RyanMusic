@@ -100,7 +100,7 @@ const ALIGN_TURN_RATE = 2.6;
 // of the half-FOV (the tighter of vertical/horizontal). If alignment has rotated it further out (big
 // lateral shot offsets in chaotic mode), the orientation is pulled back just enough - the lyric can
 // never leave the frame, in any intensity mode.
-const FRAME_KEEP_FRACTION = 0.7;
+const FRAME_KEEP_FRACTION = 0.42;
 
 const smoothstep01 = (t: number): number => {
     const c = clamp01(t);
@@ -230,6 +230,15 @@ const CameraRig: React.FC<CameraRigProps> = ({
 
         const camera = state.camera as THREE.PerspectiveCamera;
         const aspect = camera.isPerspectiveCamera ? camera.aspect : 1;
+        if (camera.isPerspectiveCamera) {
+            const minHorizontal = 46 * Math.PI / 180;
+            const needed = 2 * Math.atan(Math.tan(minHorizontal / 2) / Math.max(aspect, 0.25)) * 180 / Math.PI;
+            const nextFov = Math.min(96, Math.max(55, needed));
+            if (Math.abs(camera.fov - nextFov) > 0.4) {
+                camera.fov = nextFov;
+                camera.updateProjectionMatrix();
+            }
+        }
         const fov = camera.isPerspectiveCamera ? camera.fov : 55;
         const visibleHalf = frameHalfWidth(DIORAMA_HERO_DISTANCE, fov, aspect) * DIORAMA_SAFE_FRAME_FRACTION;
 
@@ -329,12 +338,14 @@ const CameraRig: React.FC<CameraRigProps> = ({
             posRef.current.z + flight.perp.z * arcMag
         );
 
-        // Aim beside the read-head by the line's compositional look offset (rule-of-thirds framing: the
-        // text sits off-centre, the formation fills the rest), SmoothDamped the same way so the look flows
-        // with the camera. During a flight the aim also SWEEPS sideways (a graceful mid-flight reframe).
-        const lookX = baseX + R.x * placement.lookR + flight.perp.x * sweepMag;
-        const lookY = baseY + R.y * placement.lookR + flight.perp.y * sweepMag;
-        const lookZ = baseZ + R.z * placement.lookR + flight.perp.z * sweepMag;
+        // While a line is being sung, look at the text itself. The compositional offset and the
+        // flight sweep aim beside the line, and on a phone that pushes the whole lyric off-screen.
+        const singing = Boolean(line);
+        const lookShift = singing ? 0 : placement.lookR;
+        const aimSweep = singing ? 0 : sweepMag;
+        const lookX = baseX + R.x * lookShift + flight.perp.x * aimSweep;
+        const lookY = baseY + R.y * lookShift + flight.perp.y * aimSweep;
+        const lookZ = baseZ + R.z * lookShift + flight.perp.z * aimSweep;
         const lookGap = Math.hypot(lookX - lookRef.current.x, lookY - lookRef.current.y, lookZ - lookRef.current.z);
         if (!flying && lookGap > DIORAMA_SNAP_DISTANCE) {
             lookRef.current.set(lookX, lookY, lookZ);

@@ -1,4 +1,6 @@
 import { type VisualizerMode } from '../../types';
+import { normalizeRandomVisualizerModes, setRandomVisualizerModeCatalog } from '../../utils/randomVisualizerModes';
+import { useVisualizerSettingsStore } from '../../store/visualizerSettingsStore';
 import {
     type VisualizerEntryModule,
     type VisualizerRegistryEntry,
@@ -41,6 +43,20 @@ const buildVisualizerRegistry = (modules: Record<string, VisualizerEntryModule>)
 
 const { entries: VISUALIZER_REGISTRY, byMode: VISUALIZER_REGISTRY_BY_MODE } =
     buildVisualizerRegistry(visualizerEntryModules);
+
+// Publish the pool catalog after entries finish loading. Entry modules may have created the
+// settings store early (via smart-beat / sonnet imports); refresh an empty pool once modes exist.
+setRandomVisualizerModeCatalog(VISUALIZER_REGISTRY.map((entry) => entry.mode));
+try {
+    const key = 'ryanmusic-random-visualizer-modes';
+    const raw = JSON.parse(localStorage.getItem(key) || 'null');
+    const modes = normalizeRandomVisualizerModes(raw);
+    if (modes.length > 0) {
+        useVisualizerSettingsStore.setState({ randomVisualizerModes: modes });
+    }
+} catch {
+    // ignore quota / private mode
+}
 
 export { VISUALIZER_REGISTRY };
 

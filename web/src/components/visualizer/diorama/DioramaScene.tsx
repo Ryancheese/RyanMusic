@@ -43,6 +43,9 @@ import {
     resolveDioramaMoteRadial,
     writeDioramaMoteLine,
 } from './dioramaMoteField';
+import { resolveDioramaLyricHop } from './dioramaBeatRipples';
+import { getBeatFxFiredCounts, isBeatFxReady } from '../../../services/beatFx/beatFxLive';
+import { beatImpact, downbeatImpact } from '../../../stores/motionSignals';
 
 // src/components/visualizer/diorama/DioramaScene.tsx
 // Renders the lyric corridor along the winding path. Each nearby lyric line is staged on its path
@@ -436,6 +439,11 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
     // tints it), glow material/mesh (additive cadenza glow raster - 普通辉光), and soul material/mesh
     // (additive crisp ghost copy that drifts out - 灵魂出窍).
     const unitsGroupRef = useRef<THREE.Group>(null);
+    // The beat hop (智能动感模式): which unit of the active line jumps (the one sung when the last beat
+    // fired, -1 none), and the clock's beat count it was picked at.
+    const hopUnitRef = useRef(-1);
+    const hopBeatsRef = useRef<number | null>(null);
+    const unitGroupRefs = useRef<Array<THREE.Group | null>>([]);
     const unitBaseMatRefs = useRef<Array<THREE.MeshBasicMaterial | null>>([]);
     const unitGlowMatRefs = useRef<Array<THREE.MeshBasicMaterial | null>>([]);
     const unitGlowMeshRefs = useRef<Array<THREE.Mesh | null>>([]);
@@ -974,6 +982,8 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
             unitGlowMeshRefs.current.length = activeLineUnits.length;
             unitSoulMatRefs.current.length = activeLineUnits.length;
             unitSoulMeshRefs.current.length = activeLineUnits.length;
+            unitGroupRefs.current.length = activeLineUnits.length;
+            hopUnitRef.current = -1;
         }
         if (unitsGroup && activeUnitsRaster && activeEntry && activeLine) {
             const fit = resolveFrameFitScale(activeUnitsRaster.lineWidth, DIORAMA_HERO_DISTANCE, fov, aspect)
@@ -983,6 +993,27 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
             activeLineWidthRef.current = activeUnitsRaster.lineWidth * fit;
             const life = resolveTextLife(unitsGroup.position.distanceTo(camPos));
             const now = currentTime.get();
+            // 智能动感模式: the word being sung jumps up on each beat and falls back as the beat fades
+            // (dioramaBeatRipples.ts). Picked when the beat fires - the unit sung then, or the last one
+            // begun if the beat lands between words - and kept through its fall, so moving on to the
+            // next word does not cut the hop short. Off, or until the beats are in, every unit rests.
+            const fired = getBeatFxFiredCounts().beats;
+            const beatFxOn = isBeatFxReady();
+            if (beatFxOn && hopBeatsRef.current !== null && fired > hopBeatsRef.current) {
+                let picked = -1;
+                activeLineUnits.forEach((unit, index) => {
+                    if (unit.startTime <= now) picked = index;
+                });
+                hopUnitRef.current = picked;
+            }
+            hopBeatsRef.current = fired;
+            const hop = beatFxOn ? resolveDioramaLyricHop(beatImpact.get(), downbeatImpact.get()) : 0;
+            unitGroupRefs.current.forEach((group, index) => {
+                if (!group) return;
+                const placed = activeUnitsRaster.units[index];
+                const lift = index === hopUnitRef.current && placed ? hop * placed.height : 0;
+                if (group.position.y !== lift) group.position.y = lift;
+            });
             const breath = 0.9 + 0.1 * Math.sin(frameState.clock.elapsedTime * 1.9);
             const lightVals = unitLightValsRef.current;
             const soulVals = unitSoulValsRef.current;
@@ -1206,7 +1237,7 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
                 // from any angle without covering the words.
                 <group key={globalIndex} ref={unitsGroupRef} position={activeEntry.position} quaternion={activeEntry.quaternion}>
                     {activeUnitsRaster.units.map((placed, unitIndex) => (
-                        <React.Fragment key={unitIndex}>
+                        <group key={unitIndex} ref={el => { unitGroupRefs.current[unitIndex] = el; }}>
                             <mesh
                                 ref={el => { unitGlowMeshRefs.current[unitIndex] = el; }}
                                 visible={false}
@@ -1257,7 +1288,7 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
                                     color={colors.primary}
                                 />
                             </mesh>
-                        </React.Fragment>
+                        </group>
                     ))}
                 </group>
             )}

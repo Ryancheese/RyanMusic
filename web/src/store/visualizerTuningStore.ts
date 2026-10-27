@@ -10,6 +10,7 @@ import {
   DEFAULT_PARTITA_TUNING,
   DEFAULT_PENDOLO_TUNING,
   DEFAULT_LUMIERE_TUNING,
+  DEFAULT_HANABI_TUNING,
   DEFAULT_JIZURA_TUNING,
   DEFAULT_LAKE_TUNING,
   DEFAULT_SONNET_TUNING,
@@ -25,12 +26,14 @@ import {
   type PartitaTuning,
   type PendoloTuning,
   type LumiereTuning,
+  type HanabiTuning,
   type JizuraTuning,
   type LakeTuning,
   type SonnetTuning,
   type TemperaTuning,
   type TiltTuning,
 } from '../types';
+import { normalizeHanabiTuning } from '../components/visualizer/hanabi/hanabiTuning';
 import type { VisualizerTuningBundle } from '../components/visualizer/tuningRegistry';
 
 const KEY = 'ryanmusic-visualizer-tunings-v1';
@@ -50,6 +53,7 @@ export interface VisualizerTuningsState {
   sonnet: SonnetTuning;
   tempera: TemperaTuning;
   lumiere: LumiereTuning;
+  hanabi: HanabiTuning;
   lake: LakeTuning;
   jizura: JizuraTuning;
 }
@@ -70,6 +74,7 @@ export const VISUALIZER_TUNING_DEFAULTS: VisualizerTuningsState = {
   pendolo: { ...DEFAULT_PENDOLO_TUNING },
   sonnet: { ...DEFAULT_SONNET_TUNING },
   lumiere: { ...DEFAULT_LUMIERE_TUNING },
+  hanabi: { ...DEFAULT_HANABI_TUNING },
   lake: { ...DEFAULT_LAKE_TUNING },
   jizura: { ...DEFAULT_JIZURA_TUNING },
   tempera: {
@@ -116,6 +121,7 @@ const readTunings = (): VisualizerTuningsState => {
       pendolo: { ...DEFAULT_PENDOLO_TUNING, ...parsed?.pendolo },
       sonnet: { ...DEFAULT_SONNET_TUNING, ...parsed?.sonnet },
       lumiere: { ...DEFAULT_LUMIERE_TUNING, ...parsed?.lumiere },
+      hanabi: normalizeHanabiTuning(parsed?.hanabi),
       lake: { ...DEFAULT_LAKE_TUNING, ...parsed?.lake },
       jizura: { ...DEFAULT_JIZURA_TUNING, ...parsed?.jizura },
       tempera,
@@ -144,6 +150,7 @@ interface VisualizerTuningStore extends VisualizerTuningsState {
   patchDiorama: (patch: Partial<DioramaTuning>) => void;
   patchMonet: (patch: Partial<MonetTuning>) => void;
   patchLumiere: (patch: Partial<LumiereTuning>) => void;
+  patchHanabi: (patch: Partial<HanabiTuning>) => void;
   patchLake: (patch: Partial<LakeTuning>) => void;
   patchJizura: (patch: Partial<JizuraTuning>) => void;
   patchPendolo: (patch: Partial<PendoloTuning>) => void;
@@ -174,6 +181,7 @@ const pick = (state: VisualizerTuningStore): VisualizerTuningsState => ({
   pendolo: state.pendolo,
   sonnet: state.sonnet,
   lumiere: state.lumiere,
+  hanabi: state.hanabi,
   lake: state.lake,
   jizura: state.jizura,
   tempera: state.tempera,
@@ -264,6 +272,11 @@ export const useVisualizerTuningStore = create<VisualizerTuningStore>((set, get)
     set(next);
     persist(next);
   },
+  patchHanabi: (patch) => {
+    const next = { ...pick(get()), hanabi: normalizeHanabiTuning({ ...get().hanabi, ...patch }) };
+    set(next);
+    persist(next);
+  },
   patchLake: (patch) => {
     const next = { ...pick(get()), lake: { ...get().lake, ...patch } };
     set(next);
@@ -307,6 +320,7 @@ export const useVisualizerTuningStore = create<VisualizerTuningStore>((set, get)
       pendolo: { ...DEFAULT_PENDOLO_TUNING },
       sonnet: { ...DEFAULT_SONNET_TUNING },
       lumiere: { ...DEFAULT_LUMIERE_TUNING },
+      hanabi: { ...DEFAULT_HANABI_TUNING },
       lake: { ...DEFAULT_LAKE_TUNING },
       jizura: { ...DEFAULT_JIZURA_TUNING },
       tempera: mergeTempera(null),

@@ -1,4 +1,5 @@
-import type { JizuraStyle, Line } from '../../../types';
+import type { JizuraStyle, JizuraThemeId, Line } from '../../../types';
+import { DEFAULT_JIZURA_TUNING } from '../../../types';
 
 declare module 'jizura-engine' {}
 
@@ -8,6 +9,14 @@ export interface JizuraSnap {
   title: string;
   artist: string;
   style: JizuraStyle;
+  omakase: boolean;
+  theme: JizuraThemeId;
+  extra: boolean;
+  wa: boolean;
+  horror: boolean;
+  typo: boolean;
+  kinetic: boolean;
+  roll: number;
 }
 
 interface JizuraPlan {
@@ -17,9 +26,27 @@ interface JizuraPlan {
   fx: Record<string, unknown>;
 }
 
+interface JizuraProject extends Record<string, unknown> {
+  timing: Record<string, unknown>;
+  fx: Record<string, unknown>;
+  style?: string;
+  seed?: number;
+  mood?: string;
+  enabled?: Record<string, unknown>;
+  fonts?: Record<string, unknown>;
+  colors?: Record<string, unknown>;
+  overrides?: Record<string, unknown>;
+  extra?: boolean;
+  wa?: boolean;
+  horror?: boolean;
+  typo?: boolean;
+  kinetic?: boolean;
+}
+
 interface JizuraApi {
-  defaultProject: () => { timing: Record<string, unknown>; fx: Record<string, unknown> };
-  plan: (project: Record<string, unknown>, audio: null) => JizuraPlan;
+  defaultProject: () => JizuraProject;
+  plan: (project: JizuraProject, audio: null) => JizuraPlan;
+  omakase?: (project: JizuraProject, rnd?: () => number, themeId?: string | null) => Partial<JizuraProject>;
   Renderer: new () => {
     frame: (ctx: CanvasRenderingContext2D, plan: JizuraPlan, t: number, opt?: { scale?: number; noBloom?: boolean }) => void;
   };
@@ -61,9 +88,9 @@ function aspectOf(width: number, height: number): string {
   return best;
 }
 
-function seedOf(title: string, artist: string): number {
+function seedOf(title: string, artist: string, roll = 0): number {
   let hash = 2166136261;
-  const text = `${title}\0${artist}`;
+  const text = `${title}\0${artist}\0${roll}`;
   for (let i = 0; i < text.length; i++) {
     hash ^= text.charCodeAt(i);
     hash = Math.imul(hash, 16777619);
@@ -110,6 +137,16 @@ function lyricKey(lines: Line[]): number {
   return hash >>> 0;
 }
 
+function mulberry32(seed: number) {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export function mountJizuraStage(host: HTMLElement, read: () => JizuraSnap): () => void {
   const canvas = document.createElement('canvas');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;';
@@ -153,26 +190,33 @@ export function mountJizuraStage(host: HTMLElement, read: () => JizuraSnap): () 
     if (!renderer) renderer = new api.Renderer();
     const base = api.defaultProject();
     const lyrics = lyricsOf(snap.lines);
+    const seed = seedOf(snap.title, snap.artist, snap.roll);
+    let project: JizuraProject = {
+      ...base,
+      title: snap.title,
+      artist: snap.artist,
+      lyrics,
+      style: snap.style,
+      lang: 'auto',
+      seed,
+      aspect,
+      extra: snap.extra,
+      wa: snap.wa,
+      horror: snap.horror,
+      typo: snap.typo,
+      kinetic: snap.kinetic,
+      fps: 60,
+      fx: { ...base.fx, koma: 0, onTwos: false },
+      timing: { ...base.timing, snap: false, offset: 0, tail: 1.2, bpm: 0 },
+    };
+    if (snap.omakase && typeof api.omakase === 'function') {
+      const themeId = snap.theme && snap.theme !== 'none' ? snap.theme : null;
+      const rolled = api.omakase(project, mulberry32(seed), themeId);
+      project = { ...project, ...rolled, seed: Number(rolled.seed ?? seed) };
+    }
     let next: JizuraPlan;
     try {
-      next = api.plan({
-        ...base,
-        title: snap.title,
-        artist: snap.artist,
-        lyrics,
-        style: snap.style,
-        lang: 'auto',
-        seed: seedOf(snap.title, snap.artist),
-        aspect,
-        extra: true,
-        wa: true,
-        horror: snap.style.startsWith('hr'),
-        typo: true,
-        kinetic: true,
-        fps: 60,
-        fx: { ...base.fx, koma: 0, onTwos: false },
-        timing: { ...base.timing, snap: false, offset: 0, tail: 1.2, bpm: 0 },
-      }, null);
+      next = api.plan(project, null);
     } catch (error) {
       if (!warned) {
         warned = true;
@@ -197,7 +241,21 @@ export function mountJizuraStage(host: HTMLElement, read: () => JizuraSnap): () 
     if (width < 8 || height < 8) return;
     const snap = read();
     const aspect = aspectOf(width, height);
-    const nextKey = `${snap.style}|${aspect}|${lyricKey(snap.lines)}|${snap.title}|${snap.artist}`;
+    const nextKey = [
+      snap.style,
+      snap.omakase ? 1 : 0,
+      snap.theme,
+      snap.extra ? 1 : 0,
+      snap.wa ? 1 : 0,
+      snap.horror ? 1 : 0,
+      snap.typo ? 1 : 0,
+      snap.kinetic ? 1 : 0,
+      snap.roll,
+      aspect,
+      lyricKey(snap.lines),
+      snap.title,
+      snap.artist,
+    ].join('|');
     if (nextKey !== key) {
       key = nextKey;
       void rebuild(snap, aspect, nextKey);
@@ -228,3 +286,5 @@ export function mountJizuraStage(host: HTMLElement, read: () => JizuraSnap): () 
     canvas.remove();
   };
 }
+
+export { DEFAULT_JIZURA_TUNING };

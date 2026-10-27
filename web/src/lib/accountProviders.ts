@@ -2,7 +2,7 @@ import type { AccountStatus } from '../api';
 import { canUseAppleMusic } from './appleMusic';
 
 /** 账号平台（后续可继续往数组里加） */
-export type AccountProviderId = 'netease' | 'qq' | 'kugou' | 'apple' | 'qishui';
+export type AccountProviderId = 'netease' | 'qq' | 'kugou' | 'apple' | 'qishui' | 'spotify';
 
 export interface AccountProviderMeta {
   id: AccountProviderId;
@@ -62,6 +62,15 @@ export const ACCOUNT_PROVIDERS: AccountProviderMeta[] = [
     logoutAction: 'qishui_logout',
     hasCloudLibrary: true,
   },
+  {
+    id: 'spotify',
+    label: 'Spotify',
+    shortLabel: 'Spotify',
+    mark: 'S',
+    markClass: 'bg-[#22c55e] text-white',
+    logoutAction: 'spotify_logout',
+    hasCloudLibrary: true,
+  },
 ];
 
 export function visibleAccountProviders(): AccountProviderMeta[] {
@@ -79,11 +88,13 @@ export function accountOf(
   kugou: AccountStatus | null = null,
   apple: AccountStatus | null = null,
   qishui: AccountStatus | null = null,
+  spotify: AccountStatus | null = null,
 ): AccountStatus | null {
   if (id === 'qq') return qq;
   if (id === 'kugou') return kugou;
   if (id === 'apple') return apple;
   if (id === 'qishui') return qishui;
+  if (id === 'spotify') return spotify;
   return netease;
 }
 
@@ -98,12 +109,12 @@ export function membershipHeadline(account: AccountStatus | null | undefined): s
 /** 已登录账号的会员说明（副句） */
 export function membershipHint(account: AccountStatus | null | undefined): string {
   if (!account?.loggedIn) {
-    return '登录后会员可走官方音源；非会员将使用外部音源，加载可能会稍慢。Mac 还可授权 Apple Music，汽水可粘贴电脑版 Cookie。';
+    return '登录后会员可走官方音源；非会员取流可在设置里选私链 / 官方 / 酷我。Mac 还可授权 Apple Music；汽水请用抖音扫码登录；Spotify 请在浏览器完成授权。';
   }
   if (Number(account.vip) > 0) {
     return '当前为会员账号，优先使用官方音源与逐字歌词。';
   }
-  return '当前为非会员账号，将使用外部音源，加载可能会稍慢。';
+  return '当前为非会员账号，取流策略见设置 → 播放 → 免费音源。';
 }
 
 export function platformStatusLine(account: AccountStatus | null | undefined): string {

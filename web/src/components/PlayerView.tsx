@@ -93,6 +93,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
     pendolo: state.pendolo,
     sonnet: state.sonnet,
     lumiere: state.lumiere,
+    hanabi: state.hanabi,
     lake: state.lake,
     jizura: state.jizura,
     tempera: state.tempera,
@@ -179,11 +180,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
           <p className="text-sm font-medium opacity-70">{track?.title || '无法播放'}</p>
           <p className="text-sm opacity-45">{playerError}</p>
         </div>
-      ) : track && playerStatus === 'loading' ? (
-        <div className="flex h-full items-center justify-center">
-          <RyanLoader size={36} label="正在加载歌曲" />
-        </div>
-      ) : (
+      ) : track && playerStatus === 'loading' ? null : (
         <div className="flex h-full items-center justify-center text-sm opacity-40">
           选择一首歌开始播放
         </div>

@@ -197,17 +197,37 @@ const isRenderableSegment = (segment: TemperaSegment) => (
 );
 
 /**
- * Slices every lyric line into half-phrase chunks on word boundaries. A chunk closes once it
- * holds a seeded 2..4 words or has run for ~2.2s, so one line usually becomes several shots
- * and the composition keeps moving while the line is still being sung.
+ * Builds the lyric chunks that become shots. The default closes a chunk once it holds a seeded
+ * 2..4 words or has run for ~2.2s, so one line usually becomes several shots and the composition
+ * keeps moving while the line is still being sung; whole-line mode keeps every renderable segment
+ * of a source line in one chunk.
  */
-const buildShotChunks = (lines: TemperaCompiledLine[], seed: string, paragraphIndex: number): ShotChunk[] => {
+const buildShotChunks = (
+    lines: TemperaCompiledLine[],
+    seed: string,
+    paragraphIndex: number,
+    wholeLineLyrics: boolean,
+): ShotChunk[] => {
     const chunks: ShotChunk[] = [];
     lines.forEach(line => {
         const usable = line.segments
             .map((segment, index) => ({ segment, index }))
             .filter(entry => isRenderableSegment(entry.segment));
         if (usable.length === 0) return;
+
+        if (wholeLineLyrics) {
+            const first = usable[0];
+            const last = usable.at(-1)!;
+            chunks.push({
+                lineIndex: line.sourceIndex,
+                segmentStart: first.index,
+                segmentEnd: last.index + 1,
+                startTime: first.segment.startTime,
+                endTime: Math.max(last.segment.endTime, first.segment.startTime + 0.2),
+                lyricEndTime: Math.max(last.segment.endTime, first.segment.startTime + 0.2),
+            });
+            return;
+        }
 
         let segmentStart = usable[0].index;
         let startTime = usable[0].segment.startTime;
@@ -359,6 +379,7 @@ const resolveFlowAngle = (previous: number | null, seed: number) => {
 };
 
 const buildShots = (
+    songLines: TemperaCompiledLine[],
     lines: TemperaCompiledLine[],
     kind: TemperaParagraphKind,
     paragraphIndex: number,
@@ -366,12 +387,13 @@ const buildShots = (
     previousKind: TemperaShotKind | null,
     previousMotif: TemperaDecorMotif | null,
     previousFlow: number | null,
+    wholeLineLyrics: boolean,
 ): TemperaShot[] => {
     let lastKind = previousKind;
     let lastMotif = previousMotif;
     let lastFlow = previousFlow;
     const paragraphEnd = lines.at(-1)?.renderEndTime ?? 0;
-    const chunks = buildShotChunks(lines, seed, paragraphIndex);
+    const chunks = buildShotChunks(lines, seed, paragraphIndex, wholeLineLyrics);
     const byIndex = new Map(lines.map(line => [line.sourceIndex, line]));
 
     return chunks.map((chunk, shotIndex) => {
@@ -398,13 +420,19 @@ const buildShots = (
         lastFlow = flowAngle;
         const { start, end } = buildCameraKeys(shotKind, cameraSeed, flowAngle);
 
-        // Margin fragments come from the rest of the paragraph, never from the words this
-        // shot is already showing.
+        // Margin fragments and the watermark come from the rest of the paragraph, never from the
+        // words this shot is already showing. A one-line paragraph whose shot covers the entire
+        // line - the normal case in whole-line mode - leaves nothing over, so it borrows from the
+        // rest of the song instead of echoing the glyphs on screen. If even that is empty the
+        // pools stay empty and the decor simply drops its fragments and watermark.
         const outsideSlice = lines.flatMap(item => (item.sourceIndex === chunk.lineIndex
             ? item.segments.filter((_, index) => index < chunk.segmentStart || index >= chunk.segmentEnd)
             : item.segments));
-        const fragmentPool = outsideSlice.map(segment => segment.text).join('') || sliceText;
-        const watermarkPool = outsideSlice
+        const decorPool = outsideSlice.length > 0
+            ? outsideSlice
+            : songLines.flatMap(item => (item.sourceIndex === chunk.lineIndex ? [] : item.segments));
+        const fragmentPool = decorPool.map(segment => segment.text).join('');
+        const watermarkPool = decorPool
             .filter(segment => segment.isWordLike)
             .map(segment => segment.text);
         const decor = buildDecorSpec(
@@ -507,7 +535,16 @@ const buildBridgeShots = (
     });
 };
 
-export const compileTemperaProgram = (lines: Line[], seed: string | number = 'tempera'): TemperaProgram => {
+export interface TemperaProgramOptions {
+    /** Keep each source lyric line in one shot instead of slicing it into half-phrases. */
+    wholeLineLyrics?: boolean;
+}
+
+export const compileTemperaProgram = (
+    lines: Line[],
+    seed: string | number = 'tempera',
+    options: TemperaProgramOptions = {},
+): TemperaProgram => {
     const compiled = lines.map((line, sourceIndex) => ({
         sourceIndex,
         line,
@@ -545,7 +582,17 @@ export const compileTemperaProgram = (lines: Line[], seed: string | number = 'te
     let previousTransition: TemperaTransitionKind | null = null;
     const paragraphs: TemperaParagraph[] = drafts.map((draft, index) => {
         const kind = classifyParagraph(draft.lines, index, drafts.length);
-        const lyricShots = buildShots(draft.lines, kind, index, resolvedSeed, previousShot, previousMotif, previousFlow);
+        const lyricShots = buildShots(
+            compiled,
+            draft.lines,
+            kind,
+            index,
+            resolvedSeed,
+            previousShot,
+            previousMotif,
+            previousFlow,
+            options.wholeLineLyrics === true,
+        );
         previousShot = lyricShots.at(-1)?.kind ?? previousShot;
         previousMotif = lyricShots.at(-1)?.decor.motif ?? previousMotif;
         previousFlow = lyricShots.at(-1)?.flowAngle ?? previousFlow;

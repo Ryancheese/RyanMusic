@@ -50,15 +50,19 @@ interface HomeViewProps {
   neteasePlaylists: CloudPlaylist[];
   qqPlaylists: CloudPlaylist[];
   qishuiPlaylists: CloudPlaylist[];
+  spotifyPlaylists: CloudPlaylist[];
   neteaseRecommendItems: NeteaseRecommendItem[];
   qqRecommendItems: NeteaseRecommendItem[];
   qishuiRecommendItems: NeteaseRecommendItem[];
+  spotifyRecommendItems: NeteaseRecommendItem[];
   neteaseOpen: CloudPlaylist | null;
   qqOpen: CloudPlaylist | null;
   qishuiOpen: CloudPlaylist | null;
+  spotifyOpen: CloudPlaylist | null;
   neteaseTracks: LibraryEntry[];
   qqTracks: LibraryEntry[];
   qishuiTracks: LibraryEntry[];
+  spotifyTracks: LibraryEntry[];
   cloudLoading: boolean;
   cloudSyncing: boolean;
   recommendSyncing: boolean;
@@ -89,6 +93,7 @@ interface HomeViewProps {
   kugou?: AccountStatus | null;
   apple?: AccountStatus | null;
   qishui?: AccountStatus | null;
+  spotify?: AccountStatus | null;
 }
 
 const NETEASE_LIBRARY_SECTIONS: { id: NeteaseLibrarySection; label: string }[] = [
@@ -113,15 +118,19 @@ const HomeView: React.FC<HomeViewProps> = ({
   neteasePlaylists,
   qqPlaylists,
   qishuiPlaylists,
+  spotifyPlaylists,
   neteaseRecommendItems,
   qqRecommendItems,
   qishuiRecommendItems,
+  spotifyRecommendItems,
   neteaseOpen,
   qqOpen,
   qishuiOpen,
+  spotifyOpen,
   neteaseTracks,
   qqTracks,
   qishuiTracks,
+  spotifyTracks,
   cloudLoading,
   cloudSyncing,
   recommendSyncing,
@@ -152,6 +161,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   kugou = null,
   apple = null,
   qishui = null,
+  spotify = null,
 }) => {
   const [tabDir, setTabDir] = useState(1);
   const [browseDir, setBrowseDir] = useState(1);
@@ -171,7 +181,9 @@ const HomeView: React.FC<HomeViewProps> = ({
         ? qqOpen
         : homeTab === 'qishui'
           ? qishuiOpen
-          : null;
+          : homeTab === 'spotify'
+            ? spotifyOpen
+            : null;
   const cloudPlaylists = homeTab === 'apple'
     ? applePlaylists
     : homeTab === 'netease'
@@ -180,7 +192,9 @@ const HomeView: React.FC<HomeViewProps> = ({
         ? qqPlaylists
         : homeTab === 'qishui'
           ? qishuiPlaylists
-          : [];
+          : homeTab === 'spotify'
+            ? spotifyPlaylists
+            : [];
   const cloudTracks = homeTab === 'apple'
     ? appleTracks
     : homeTab === 'netease'
@@ -189,7 +203,9 @@ const HomeView: React.FC<HomeViewProps> = ({
         ? qqTracks
         : homeTab === 'qishui'
           ? qishuiTracks
-          : [];
+          : homeTab === 'spotify'
+            ? spotifyTracks
+            : [];
   const activeRecommendItems = homeTab === 'apple'
     ? appleRecommendItems
     : homeTab === 'netease'
@@ -198,23 +214,29 @@ const HomeView: React.FC<HomeViewProps> = ({
         ? qqRecommendItems
         : homeTab === 'qishui'
           ? qishuiRecommendItems
-          : [];
+          : homeTab === 'spotify'
+            ? spotifyRecommendItems
+            : [];
   const librarySection = neteaseLibrarySection;
   const browsingRecommend = librarySection === 'recommend' && !openPlaylist;
   const loggedIn = homeTab === 'apple'
     ? Boolean(apple?.loggedIn)
     : homeTab === 'qishui'
       ? Boolean(qishui?.loggedIn)
-      : homeTab === 'netease'
-        ? Boolean(netease?.loggedIn)
-        : Boolean(qq?.loggedIn);
+      : homeTab === 'spotify'
+        ? Boolean(spotify?.loggedIn)
+        : homeTab === 'netease'
+          ? Boolean(netease?.loggedIn)
+          : Boolean(qq?.loggedIn);
   const activeAccount = homeTab === 'apple'
     ? apple
     : homeTab === 'qishui'
       ? qishui
-      : homeTab === 'qq'
-        ? qq
-        : netease;
+      : homeTab === 'spotify'
+        ? spotify
+        : homeTab === 'qq'
+          ? qq
+          : netease;
   const activeAvatar = activeAccount?.loggedIn && activeAccount.avatar
     ? (coverImageUrl(activeAccount.avatar, 72) || activeAccount.avatar)
     : '';
@@ -226,7 +248,9 @@ const HomeView: React.FC<HomeViewProps> = ({
         ? 'Apple'
         : homeTab === 'qishui'
           ? '汽水'
-          : '网易云';
+          : homeTab === 'spotify'
+            ? 'Spotify'
+            : '网易云';
   const ownerLabel = activeAccount?.nickname?.trim() || '';
   const capsuleLabel = capsuleDisplayName(activeAccount, platformLabel);
   const activeMeta = providerMeta(homeTab);
@@ -246,15 +270,24 @@ const HomeView: React.FC<HomeViewProps> = ({
   };
 
   const qishuiLoginPrompted = useRef(false);
+  const spotifyLoginPrompted = useRef(false);
   useEffect(() => {
     if (homeTab !== 'qishui') {
       qishuiLoginPrompted.current = false;
-      return;
+    } else if (!qishui?.loggedIn && !qishuiLoginPrompted.current) {
+      qishuiLoginPrompted.current = true;
+      onOpenAccount('qishui');
     }
-    if (qishui?.loggedIn || qishuiLoginPrompted.current) return;
-    qishuiLoginPrompted.current = true;
-    onOpenAccount('qishui');
   }, [homeTab, onOpenAccount, qishui?.loggedIn]);
+
+  useEffect(() => {
+    if (homeTab !== 'spotify') {
+      spotifyLoginPrompted.current = false;
+    } else if (!spotify?.loggedIn && !spotifyLoginPrompted.current) {
+      spotifyLoginPrompted.current = true;
+      onOpenAccount('spotify');
+    }
+  }, [homeTab, onOpenAccount, spotify?.loggedIn]);
 
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -285,7 +318,10 @@ const HomeView: React.FC<HomeViewProps> = ({
       qishuiLoginPrompted.current = true;
       await qishuiNativeLogout();
     }
-    if (provider === 'netease' || provider === 'qq' || provider === 'qishui') {
+    if (provider === 'spotify') {
+      spotifyLoginPrompted.current = true;
+    }
+    if (provider === 'netease' || provider === 'qq' || provider === 'qishui' || provider === 'spotify') {
       useCloudStore.getState().clearProvider(provider);
     }
     await postAction(meta.logoutAction);
@@ -345,10 +381,18 @@ const HomeView: React.FC<HomeViewProps> = ({
   const layoutRailStyle = chromeButtonStyle(glassOpacity, glassBlur);
   const syncCopy = cloudSyncing || cloudLoading || recommendSyncing ? '正在同步…' : '';
   const playlistEmptyCopy = !loggedIn
-    ? (homeTab === 'qishui' ? '扫码登录汽水后即可同步歌单' : '登录后即可同步账号歌单')
+    ? (homeTab === 'qishui'
+      ? '扫码登录汽水后即可同步歌单'
+      : homeTab === 'spotify'
+        ? '在浏览器登录 Spotify 后即可同步歌单'
+        : '登录后即可同步账号歌单')
     : syncCopy || cloudError || '还没有歌单，打开登录面板可重新同步';
   const recommendEmptyCopy = !loggedIn
-    ? (homeTab === 'qishui' ? '登录后即可查看最近播放与推荐' : '登录后即可查看每日推荐与私人 FM')
+    ? (homeTab === 'qishui'
+      ? '登录后即可查看最近播放与推荐'
+      : homeTab === 'spotify'
+        ? '登录后即可查看推荐歌单'
+        : '登录后即可查看每日推荐与私人 FM')
     : syncCopy || recommendError || '暂无推荐内容';
   const trackEmptyCopy = syncCopy || cloudError || recommendError || '这个歌单是空的';
   const listSummary = openPlaylist
@@ -434,7 +478,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               }`}
             >
               {visibleAccountProviders().map((provider) => {
-                const account = accountOf(provider.id, netease, qq, kugou, apple, qishui);
+                const account = accountOf(provider.id, netease, qq, kugou, apple, qishui, spotify);
                 const active = provider.hasCloudLibrary && homeTab === provider.id;
                 const avatar = account?.loggedIn && account.avatar
                   ? (coverImageUrl(account.avatar, 72) || account.avatar)
@@ -454,7 +498,7 @@ const HomeView: React.FC<HomeViewProps> = ({
                       role="menuitem"
                       onClick={() => {
                         setAccountMenuOpen(false);
-                        if (provider.hasCloudLibrary && (provider.id === 'netease' || provider.id === 'qq' || provider.id === 'apple' || provider.id === 'qishui')) {
+                        if (provider.hasCloudLibrary && (provider.id === 'netease' || provider.id === 'qq' || provider.id === 'apple' || provider.id === 'qishui' || provider.id === 'spotify')) {
                           if (account?.loggedIn) {
                             switchHomeTab(provider.id);
                           } else {

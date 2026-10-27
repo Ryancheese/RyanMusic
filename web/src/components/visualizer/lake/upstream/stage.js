@@ -169,7 +169,7 @@ export function createStage(canvas, opts = {}) {
   let sky = null, skyP = null;
   // ?nosky: the sky's loops and the aurora are left out (a plain night over the same lake)
   // (loops: false on a phone: no 4K sky videos, the live aurora and haze stay)
-  const skyReady = createSky(renderer, {layers: opts.sky !== false, loops: opts.loops ?? true}).then(s => { sky = s; sky.resize(size.w, size.h); sky.setAuroraLayers?.(Qt.aur || 32); if (track) applySky(); }).catch(e => console.warn('sky', e));
+  const skyReady = createSky(renderer, {layers: opts.sky !== false, loops: opts.loops ?? true}).then(s => { sky = s; const px = skyPixels(size.w, size.h); sky.resize(px[0], px[1]); sky.setAuroraLayers?.(Qt.aur || 32); if (track) applySky(); }).catch(e => console.warn('sky', e));
   let track = null, sig = null, score = null, shots = null, theme = null, world = null, flight = null, shift = 0, aspect = 16 / 9, baseFov = 42;
   const pointer = new THREE.Vector2(-9, -9), pointerSm = new THREE.Vector2(), ZERO2 = new THREE.Vector2(), OFF2 = new THREE.Vector2(-9, -9);
 
@@ -307,7 +307,11 @@ export function createStage(canvas, opts = {}) {
   function flyOut(ms = 900) { flight = {start: performance.now(), dur: ms, dir: 'out'}; return new Promise(r => setTimeout(r, ms)); }
   // the picture's tier (app.js TIERS): main MSAA, the mirror's size and how often it is drawn. High is the picture
   // as it was (main 4x, mirror half size 4x, every frame); mid and low lose only these
-  const Qt = {mirror: .5, every: 1, ratio: 1, n: 0};
+  const Qt = {mirror: .5, every: 1, ratio: 1, sky: 1, n: 0};
+  function skyPixels(w, h) {
+    const k = Qt.sky == null ? 1 : Qt.sky;
+    return [Math.max(2, w * (Qt.ratio || 1) * k), Math.max(2, h * (Qt.ratio || 1) * k)];
+  }
   // 0 draws the reflection every frame, 1 every other, 2 keeps the last one. A late frame (the electro
   // grid lit by a drum section) must not paint that scene twice, or the next frame is later still.
   let frameAt = 0, mirrorLoad = 0, mirrorTick = 0;
@@ -316,12 +320,16 @@ export function createStage(canvas, opts = {}) {
     const ms = T.msaa ?? 4, mm = ms >= 4 ? 4 : 0;
     if (rt.samples !== ms) { for (const r of new Set([rt, composer.renderTarget1, composer.renderTarget2])) { r.samples = ms; r.dispose(); } }
     if (reflRT.samples !== mm) { reflRT.samples = mm; reflRT.dispose(); }
-    Qt.mirror = T.mirror ?? .5; Qt.every = Math.max(1, T.every || 1); Qt.aur = T.aur || 32; sky?.setAuroraLayers?.(Qt.aur);
+    Qt.mirror = T.mirror ?? .5; Qt.every = Math.max(1, T.every || 1); Qt.aur = T.aur || 32;
+    if (T.sky != null) Qt.sky = Math.min(1, Math.max(0.35, T.sky));
+    sky?.setAuroraLayers?.(Qt.aur);
     reflRT.setSize(Math.round(size.w * Qt.ratio * Qt.mirror), Math.round(size.h * Qt.ratio * Qt.mirror));
   }
   function resize(w, h, ratio) {
     renderer.setPixelRatio(ratio); renderer.setSize(w, h, false); composer.setPixelRatio(ratio); composer.setSize(w, h);
-    size.w = w; size.h = h; Qt.ratio = ratio; sky?.resize(w, h); reflRT.setSize(Math.round(w * ratio * Qt.mirror), Math.round(h * ratio * Qt.mirror));
+    size.w = w; size.h = h; Qt.ratio = ratio;
+    const px = skyPixels(w, h); sky?.resize(px[0], px[1]);
+    reflRT.setSize(Math.round(w * ratio * Qt.mirror), Math.round(h * ratio * Qt.mirror));
     aspect = w / h; cam.aspect = aspect; baseFov = aspect < 1 ? 62 : aspect < 1.4 ? 50 : 42; cam.fov = baseFov; cam.updateProjectionMatrix();
     if (track) { lyrics.setAspect(aspect); shots.setFit(baseFov, aspect); }
   }

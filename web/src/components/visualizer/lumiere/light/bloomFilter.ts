@@ -186,12 +186,15 @@ export const createBloomFilter = (pixi: PixiModule, initial: BloomOptions): Bloo
 
         apply(filterManager: FilterSystem, input: Texture, output: RenderSurface, clearMode: boolean) {
             const { strength, threshold, knee, levels, spread, tint } = this.options;
-            if (strength <= 0) {
+            const passThrough = () => {
                 mapFor(input, input, combineUniforms.uniforms.uAddMap as Float32Array, combineUniforms.uniforms.uAddClamp as Float32Array, 0);
                 combineUniforms.update();
                 combine.resources.uAdd = input.source;
                 combine.blendMode = this.blendMode;
                 filterManager.applyFilter(combine, input, output, clearMode);
+            };
+            if (strength <= 0) {
+                passThrough();
                 return;
             }
             const width = input.frame.width;
@@ -214,6 +217,13 @@ export const createBloomFilter = (pixi: PixiModule, initial: BloomOptions): Bloo
                 filterManager.applyFilter(down, source, target, true);
                 chain.push(target);
                 source = target;
+            }
+
+            // 滤镜区域太小（花火刚升空的一颗火星只有一两个像素宽）时一级都降不了，没有可叠加的光晕，原样画回去；
+            // 不拦的话下面取 chain 的最后一级是 undefined，mapFor 抛错，这一帧的渲染中断。
+            if (chain.length === 0) {
+                passThrough();
+                return;
             }
 
             // 上采样：从最小一级往上，每一级叠加同级的降采样结果。

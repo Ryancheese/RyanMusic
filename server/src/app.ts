@@ -5,9 +5,10 @@ import { Hono } from 'hono';
 import { KugouAccount } from './accounts/kugou.ts';
 import { NeteaseAccount } from './accounts/netease.ts';
 import { QishuiAccount } from './accounts/qishui.ts';
+import { SpotifyAccount } from './accounts/spotify.ts';
 import { QqAccount } from './accounts/qq.ts';
 import { FileCache } from './cache.ts';
-import { NETEASE_UA, UA, VERSION, apiSecret, bootstrapBase, isServerlessEnv, randomCnIp, type MusicSource, type SearchCategory } from './config.ts';
+import { NETEASE_UA, UA, VERSION, apiSecret, bootstrapBase, isServerlessEnv, parseFreePlaySource, randomCnIp, type MusicSource, type SearchCategory } from './config.ts';
 import { LyricsService } from './lyrics.ts';
 import { NeteaseService } from './netease.ts';
 import { spaHtml } from './pages.ts';
@@ -54,6 +55,9 @@ function isAllowedCoverUrl(url: string): boolean {
       || host.endsWith('toutiao.com')
       || host.endsWith('volccdn.com')
       || host.endsWith('volcengine.com')
+      || host.endsWith('scdn.co')
+      || host.endsWith('spotifycdn.com')
+      || host.endsWith('spotify.com')
     );
   } catch {
     return false;
@@ -123,6 +127,7 @@ export function createApp(options: AppOptions) {
   const qqAccount = new QqAccount(cache, qq);
   const kugouAccount = new KugouAccount(cache);
   const qishuiAccount = new QishuiAccount(cache);
+  const spotifyAccount = new SpotifyAccount(cache);
   const lyrics = new LyricsService(
     cache,
     netease,
@@ -206,15 +211,19 @@ export function createApp(options: AppOptions) {
       const useAuth = Boolean(c.req.query('auth'));
       const skipCache = Boolean(c.req.query('fresh'));
       const level = String(c.req.query('level') || '').trim();
+      const freeSource = parseFreePlaySource(c.req.query('free'));
       const neteaseCookie = useAuth ? neteaseAccount.sessionCookie() || '' : '';
       const qqCookie = useAuth ? qqAccount.sessionCookie() || '' : '';
       const wantCross = c.req.query('cross') === '1';
       const isDelisted = c.req.query('delisted') === '1';
       const resolveCurrent = (auth: boolean, fresh = skipCache) => {
-        if (type === 'qishui') return qishui.resolvePlayUrl(id, auth ? (qishuiAccount.sessionCookie() || '') : '');
+        if (type === 'qishui') {
+          if (auth && qishuiAccount.loggedIn()) return qishuiAccount.resolvePlayUrl(id);
+          return qishui.resolvePlayUrl(id, '');
+        }
         return type === 'qq'
-          ? qq.resolvePlayUrl(id, auth ? qqCookie : '', fresh)
-          : netease.resolvePlayUrl(id, auth ? neteaseCookie : '', level, fresh);
+          ? qq.resolvePlayUrl(id, auth ? qqCookie : '', fresh, freeSource)
+          : netease.resolvePlayUrl(id, auth ? neteaseCookie : '', level, fresh, freeSource);
       };
       const resolveCross = async () => {
         const meta = type === 'qishui' ? qishui.meta(id) : undefined;
@@ -228,8 +237,8 @@ export function createApp(options: AppOptions) {
           const best = pickBestCrossPlayTrack({ title, artist }, found?.tracks || [], mode);
           if (!best?.songid) return null;
           return altType === 'qq'
-            ? qq.resolvePlayUrl(String(best.songid), '', true)
-            : netease.resolvePlayUrl(String(best.songid), '', '', true);
+            ? qq.resolvePlayUrl(String(best.songid), '', true, freeSource)
+            : netease.resolvePlayUrl(String(best.songid), '', '', true, freeSource);
         };
         const query = [title, artist].filter(Boolean).join(' ');
         return (
@@ -393,6 +402,10 @@ export function createApp(options: AppOptions) {
       }
       if (action.startsWith('qishui_')) {
         const result = await qishuiAccount.handle(action, post);
+        return jsonResponse(result.data, result.code, result.error);
+      }
+      if (action.startsWith('spotify_')) {
+        const result = await spotifyAccount.handle(action, post);
         return jsonResponse(result.data, result.code, result.error);
       }
       if (action === 'lyrics_search') {

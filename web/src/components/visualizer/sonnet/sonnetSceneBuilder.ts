@@ -41,6 +41,7 @@ export interface ShotView {
     basePivotX: number;
     basePivotY: number;
     haloLayer: import('pixi.js').Container;
+    haloBaseAlpha: number;
     mgLayer: import('pixi.js').Container;
     mgBackgroundLayer?: import('pixi.js').Container;
     mgGeoLayer?: import('pixi.js').Container;
@@ -64,6 +65,7 @@ export interface SonnetSceneBuildOptions {
     host: HTMLDivElement;
     theme: Theme;
     tuning: SonnetTuning;
+    smartBeatEnabled: boolean;
     lyricsFontScale: number;
     staticMode: boolean;
 }
@@ -193,7 +195,8 @@ export const buildSonnetScene = (
             width,
             height,
             shotSeed,
-            iconTextures
+            iconTextures,
+            options.smartBeatEnabled,
         );
         shotContainer.addChild(mgLayer);
         const mgBackgroundLayer = (mgLayer as any).bgLayer as import('pixi.js').Container | undefined;
@@ -213,6 +216,7 @@ export const buildSonnetScene = (
         const textLayer = new Container();
         guideLayer.visible = showGuide;
         haloLayer.visible = !showOnlyText;
+        const haloBaseAlpha = haloLayer.alpha;
         shotContainer.addChild(guideLayer, haloLayer, textLayer);
         postProcessFilters.push(...haloFilters);
         // Virtual instrumental lines can share one shot; the complete staff belongs to the shot, not each line.
@@ -300,6 +304,7 @@ export const buildSonnetScene = (
             basePivotX: focusX,
             basePivotY: focusY,
             haloLayer,
+            haloBaseAlpha,
             mgLayer,
             mgBackgroundLayer,
             mgGeoLayer,

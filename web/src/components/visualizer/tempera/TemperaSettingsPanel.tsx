@@ -33,11 +33,12 @@ const TemperaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     ]), [t]);
 
     const visibilityControls: Array<{
-        key: Extract<keyof TemperaTuning, 'showBlocks' | 'showDecor' | 'textInversion' | 'enableTransitions'>;
+        key: Extract<keyof TemperaTuning, 'showBlocks' | 'showDecor' | 'showCornerMarks' | 'textInversion' | 'enableTransitions'>;
         label: string;
     }> = [
         { key: 'showBlocks', label: t('options.temperaShowBlocks') || '色块场景' },
         { key: 'showDecor', label: t('options.temperaShowDecor') || '装饰元素' },
+        { key: 'showCornerMarks', label: t('options.temperaShowCornerMarks') || '边角线框' },
         { key: 'textInversion', label: t('options.temperaTextInversion') || '文字动态反色' },
         { key: 'enableTransitions', label: t('options.temperaEnableTransitions') || '场景转场' },
     ];
@@ -213,6 +214,20 @@ const TemperaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                         />
                     </>
                 )}
+            </TemperaSettingsSection>
+
+            <TemperaSettingsSection title={t('options.temperaLyricSection') || '歌词'}>
+                <VisualizerPresetGroup
+                    label={t('options.temperaWholeLineLyrics') || '整句显示歌词'}
+                    value={temperaTuning.wholeLineLyrics}
+                    options={booleanOptions}
+                    onChange={wholeLineLyrics => onTemperaTuningChange?.({ wholeLineLyrics })}
+                    isDaylight={isDaylight}
+                    theme={theme}
+                />
+                <p className="text-xs leading-relaxed opacity-55" style={{ color: 'var(--text-secondary)' }}>
+                    {t('options.temperaWholeLineLyricsHint')}
+                </p>
             </TemperaSettingsSection>
 
             <TemperaSettingsSection title={t('options.temperaDisplaySection')}>

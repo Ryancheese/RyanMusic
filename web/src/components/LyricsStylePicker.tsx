@@ -1,12 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Image, Palette, Plus, RotateCcw, Trash2, X } from 'lucide-react';
+import { Image, Palette, Plus, RotateCcw, Shuffle, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { VISUALIZER_REGISTRY, getVisualizerModeLabel, getVisualizerRegistryEntry, getVisualizerSettingsTitle } from './visualizer/registry';
 import { useVisualizerTuningStore } from '../store/visualizerTuningStore';
+import { useVisualizerSettingsStore } from '../store/visualizerSettingsStore';
 import { useLyricsAppearanceStore } from '../store/lyricsAppearanceStore';
+import { BUILTIN_VISUALIZER_MODES } from '../utils/randomVisualizerModes';
 import FontFallbackStackControl from './visualizer/FontFallbackStackControl';
+import SmartBeatSettingsCard from './visualizer/SmartBeatSettingsCard';
+import BeatEffectsGroup from './visualizer/BeatEffectsGroup';
+import { offeredBeatEffects } from '../services/beatFx/beatEffects';
 import {
   VISUALIZER_BACKGROUND_REGISTRY,
   getVisualizerBackgroundModeLabel,
@@ -17,7 +22,9 @@ import type {
   LatentBackgroundTuning,
   MonetBackgroundTuning,
   NomandBackgroundTuning,
+  SoraBackgroundTuning,
   Theme,
+  UrlBackgroundItem,
   ThemeTokens,
   VisualizerBackgroundMode,
   VisualizerMode,
@@ -26,14 +33,16 @@ import {
   DEFAULT_LATENT_BACKGROUND_TUNING,
   DEFAULT_MONET_BACKGROUND_TUNING,
   DEFAULT_NOMAND_BACKGROUND_TUNING,
+  DEFAULT_SORA_BACKGROUND_TUNING,
 } from '../types';
+import { sanitizeUrlBackgroundItem } from '../utils/urlBackground';
 import { useIsMobile } from '../lib/media';
 import { toFoliaTheme } from '../lib/visualizer';
 import { translateBackgroundOption } from '../lib/backgroundI18n';
 import { fileToBackgroundImage } from '../lib/customBackgroundImage';
 
 export type StageSettingsTab = 'lyrics' | 'background';
-type LyricsSubTab = 'mode' | 'type' | 'subtitle';
+type LyricsSubTab = 'mode' | 'type' | 'subtitle' | 'global';
 
 const BG_LABELS: Record<string, string> = {
   common: '通用',
@@ -41,6 +50,7 @@ const BG_LABELS: Record<string, string> = {
   nomand: '纸纹',
   latent: '流光',
   sora: '星空',
+  url: '网页嵌入',
 };
 
 const FONT_SCALE_MIN = 0.85;
@@ -204,6 +214,12 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
     reset: state.reset,
   })));
 
+  const randomEnabled = useVisualizerSettingsStore((state) => state.randomVisualizerModePerSong);
+  const randomModes = useVisualizerSettingsStore((state) => state.randomVisualizerModes);
+  const setRandomModes = useVisualizerSettingsStore((state) => state.handleSetRandomVisualizerModes);
+  const toggleRandom = useVisualizerSettingsStore((state) => state.handleToggleRandomVisualizerModePerSong);
+  const rerollRandom = useVisualizerSettingsStore((state) => state.rerollRandomVisualizerMode);
+
   const tunings = useVisualizerTuningStore(useShallow((state) => ({
     classic: state.classic,
     partita: state.partita,
@@ -216,6 +232,7 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
     pendolo: state.pendolo,
     sonnet: state.sonnet,
     lumiere: state.lumiere,
+    hanabi: state.hanabi,
     lake: state.lake,
     jizura: state.jizura,
     tempera: state.tempera,
@@ -230,6 +247,7 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
     patchPendolo: state.patchPendolo,
     patchSonnet: state.patchSonnet,
     patchLumiere: state.patchLumiere,
+    patchHanabi: state.patchHanabi,
     patchLake: state.patchLake,
     patchJizura: state.patchJizura,
     patchTempera: state.patchTempera,
@@ -281,6 +299,15 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
       latent: patch.latent
         ? { tuning: { ...DEFAULT_LATENT_BACKGROUND_TUNING, ...current.latent?.tuning, ...patch.latent.tuning } }
         : current.latent,
+      sora: patch.sora
+        ? { tuning: { ...DEFAULT_SORA_BACKGROUND_TUNING, ...current.sora?.tuning, ...patch.sora.tuning } }
+        : current.sora,
+      url: patch.url
+        ? {
+            items: patch.url.items !== undefined ? patch.url.items : current.url?.items,
+            selectedId: patch.url.selectedId !== undefined ? patch.url.selectedId : current.url?.selectedId,
+          }
+        : current.url,
       customImage: patch.customImage !== undefined ? patch.customImage : current.customImage,
     };
     backgroundRef.current = next;
@@ -407,8 +434,52 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
         patchBackground({ latent: { tuning: { ...DEFAULT_LATENT_BACKGROUND_TUNING } } });
       },
     },
+    sora: {
+      onTuningChange: (patch: Partial<SoraBackgroundTuning>) => {
+        patchBackground({
+          sora: {
+            tuning: {
+              ...DEFAULT_SORA_BACKGROUND_TUNING,
+              ...backgroundRef.current.sora?.tuning,
+              ...patch,
+            },
+          },
+        });
+      },
+      onResetTuning: () => {
+        patchBackground({ sora: { tuning: { ...DEFAULT_SORA_BACKGROUND_TUNING } } });
+      },
+    },
+    url: {
+      onAdd: (item: UrlBackgroundItem) => {
+        const sanitized = sanitizeUrlBackgroundItem(item);
+        if (!sanitized) return;
+        const current = backgroundRef.current;
+        const items = [...(current.url?.items ?? []), sanitized];
+        patchBackground({ url: { items, selectedId: current.url?.selectedId ?? sanitized.id } });
+      },
+      onUpdate: (id: string, itemPatch: Partial<Omit<UrlBackgroundItem, 'id'>>) => {
+        const current = backgroundRef.current;
+        const items = (current.url?.items ?? []).map(item => {
+          if (item.id !== id) return item;
+          return sanitizeUrlBackgroundItem({ ...item, ...itemPatch, id: item.id }) ?? item;
+        });
+        patchBackground({ url: { items, selectedId: current.url?.selectedId } });
+      },
+      onDelete: (id: string) => {
+        const current = backgroundRef.current;
+        const items = (current.url?.items ?? []).filter(item => item.id !== id);
+        const selectedId = current.url?.selectedId;
+        const nextSelected = selectedId === id ? (items[0]?.id ?? null) : selectedId ?? null;
+        patchBackground({ url: { items, selectedId: nextSelected } });
+      },
+      onSelect: (id: string | null) => {
+        patchBackground({ url: { selectedId: id } });
+      },
+    },
   };
 
+  const hasBeatEffects = offeredBeatEffects(modeEntry.beatEffects).length > 0;
   const resetModeKey = modeEntry.tuningKind === 'none' ? null : modeEntry.tuningKind;
 
   const settingsPanel = modeEntry.renderSettingsPanel?.({
@@ -449,12 +520,15 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
     onSonnetTuningChange: tunings.patchSonnet,
     lumiereTuning: tunings.lumiere,
     onLumiereTuningChange: tunings.patchLumiere,
+    hanabiTuning: tunings.hanabi,
+    onHanabiTuningChange: tunings.patchHanabi,
     lakeTuning: tunings.lake,
     onLakeTuningChange: tunings.patchLake,
     jizuraTuning: tunings.jizura,
     onJizuraTuningChange: tunings.patchJizura,
     temperaTuning: tunings.tempera,
     onTemperaTuningChange: tunings.patchTempera,
+    onOpenSmartBeatSettings: () => setLyricsSubTab('global'),
   });
 
   const overlay = (
@@ -515,6 +589,7 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
                 { id: 'mode' as const, label: t('options.lyricsRenderer') },
                 { id: 'type' as const, label: t('options.lyricsTypography') },
                 { id: 'subtitle' as const, label: t('options.previewSubtitleSettings') },
+                { id: 'global' as const, label: '全局' },
               ]).map((item) => (
                 <button
                   key={item.id}
@@ -535,13 +610,30 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
               <>
                 <div className="text-xs opacity-50">{t('options.lyricsRendererDesc')}</div>
                 <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toggleRandom(true);
+                      if (!randomModes.includes(mode) && randomModes[0]) onChange(randomModes[0]);
+                    }}
+                    className={`rounded-2xl px-3 py-3 text-left text-sm font-medium transition-colors ${idle}`}
+                    style={randomEnabled ? activeStyle : undefined}
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <Shuffle size={14} />
+                      {t('ui.visualizerRandom')}
+                    </span>
+                  </button>
                   {VISUALIZER_REGISTRY.map((entry) => {
-                    const active = entry.mode === mode;
+                    const active = !randomEnabled && entry.mode === mode;
                     return (
                       <button
                         key={entry.mode}
                         type="button"
-                        onClick={() => onChange(entry.mode)}
+                        onClick={() => {
+                          toggleRandom(false);
+                          onChange(entry.mode);
+                        }}
                         className={`rounded-2xl px-3 py-3 text-left text-sm font-medium transition-colors ${idle}`}
                         style={active ? activeStyle : undefined}
                       >
@@ -551,9 +643,84 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
                   })}
                 </div>
 
-                {settingsPanel ? (
+                {randomEnabled ? (
+                  <SectionCard
+                    title={t('options.randomPool')}
+                    description={t('options.randomPoolDesc')}
+                    controlCardBg={controlCardBg}
+                    action={(
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] opacity-55 hover:opacity-100 disabled:opacity-30"
+                        disabled={!randomModes.some((item) => item !== mode)}
+                        onClick={() => {
+                          const next = rerollRandom();
+                          if (next) onChange(next);
+                        }}
+                      >
+                        <Shuffle size={12} />
+                        {t('options.randomVisualizerReroll')}
+                      </button>
+                    )}
+                  >
+                    <div className="flex items-center justify-between text-[12px]">
+                      <span className="opacity-70">{t('options.randomVisualizerCurrentStyle')}</span>
+                      <span className="font-medium" style={{ color: 'var(--text-accent)' }}>
+                        {getVisualizerModeLabel(mode, t)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] opacity-45">
+                      <span>
+                        {t('options.randomPoolCount', {
+                          selected: randomModes.length,
+                          total: BUILTIN_VISUALIZER_MODES.length,
+                        })}
+                      </span>
+                      <button
+                        type="button"
+                        className="opacity-70 hover:opacity-100 disabled:opacity-30"
+                        disabled={randomModes.length >= BUILTIN_VISUALIZER_MODES.length}
+                        onClick={() => setRandomModes(BUILTIN_VISUALIZER_MODES)}
+                      >
+                        {t('options.randomVisualizerSelectAll')}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {VISUALIZER_REGISTRY.map((entry) => {
+                        const selected = randomModes.includes(entry.mode);
+                        return (
+                          <button
+                            key={`pool-${entry.mode}`}
+                            type="button"
+                            onClick={() => {
+                              if (selected) {
+                                if (randomModes.length <= 1) return;
+                                setRandomModes(randomModes.filter((item) => item !== entry.mode));
+                              } else {
+                                setRandomModes([...randomModes, entry.mode]);
+                              }
+                            }}
+                            className={`rounded-xl px-2.5 py-2 text-left text-[12px] font-medium transition-colors ${idle}`}
+                            style={selected ? activeStyle : undefined}
+                          >
+                            {getVisualizerModeLabel(entry.mode, t)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </SectionCard>
+                ) : settingsPanel || hasBeatEffects ? (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    {hasBeatEffects ? (
+                      <BeatEffectsGroup
+                        effects={modeEntry.beatEffects}
+                        controlCardBg={controlCardBg}
+                        isDaylight={isDaylight}
+                        rangeInputClass={rangeInputClass}
+                        onOpenSmartBeat={() => setLyricsSubTab('global')}
+                      />
+                    ) : null}
+                    {settingsPanel ? <div className="flex items-center justify-between">
                       <div className="text-xs opacity-50">{t('options.modeTuningSection')}</div>
                       {resetModeKey ? (
                         <button
@@ -565,13 +732,22 @@ const LyricsStylePicker: React.FC<LyricsStylePickerProps> = ({
                           {t('options.resetModeTuning')}
                         </button>
                       ) : null}
-                    </div>
+                    </div> : null}
                     {settingsPanel}
                   </div>
                 ) : (
                   <p className="text-xs opacity-45">这个动画模式没有额外参数，切换即可生效。</p>
                 )}
               </>
+            ) : null}
+
+            {lyricsSubTab === 'global' ? (
+              <SmartBeatSettingsCard
+                controlCardBg={controlCardBg}
+                pill={pill}
+                idle={idle}
+                activeStyle={activeStyle}
+              />
             ) : null}
 
             {lyricsSubTab === 'type' ? (

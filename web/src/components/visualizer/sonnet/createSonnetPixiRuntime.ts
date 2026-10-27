@@ -37,6 +37,12 @@ import {
 } from './sonnetCredits';
 import { sonnetDebugState } from './sonnetDebug';
 import { resolveSonnetSegmentCameraFocus } from './sonnetCameraTracking';
+import {
+    applySonnetBeatFxLayers,
+    createSonnetBeatFxReader,
+    restoreSonnetBeatFxLayers,
+    type SonnetBeatFxFrame,
+} from './sonnetBeatFx';
 
 // src/components/visualizer/sonnet/createSonnetPixiRuntime.ts
 // Owns Pixi lifecycle and mutates bounded scene views directly from absolute playback time.
@@ -53,6 +59,7 @@ export interface SonnetRuntimeOptions {
     program: SonnetProgram;
     theme: Theme;
     tuning: SonnetTuning;
+    smartBeatEnabled: boolean;
     currentTime: MotionValue<number>;
     audioPower?: MotionValue<number>;
     audioBands?: AudioBands;
@@ -80,6 +87,7 @@ export class SonnetPixiRuntime {
     private overlayContainer!: import('pixi.js').Container;
     private outroBlurFilter: import('pixi.js').BlurFilter | null = null;
     private outroBlurScene: SceneView | null = null;
+    private readonly readBeatFx = createSonnetBeatFxReader();
 
     private constructor(
         private readonly pixi: PixiModule,
@@ -323,6 +331,7 @@ export class SonnetPixiRuntime {
             host: this.options.host,
             theme: this.options.theme,
             tuning: this.options.tuning,
+            smartBeatEnabled: this.options.smartBeatEnabled,
             lyricsFontScale: this.options.lyricsFontScale,
             staticMode: this.options.staticMode,
         }, this.iconTextures, this.options.program.paragraphs[index]);
@@ -339,7 +348,14 @@ export class SonnetPixiRuntime {
         });
     }
 
-    private updateShot(view: ShotView, time: number, width: number, height: number, shakeIntensity: number) {
+    private updateShot(
+        view: ShotView,
+        time: number,
+        width: number,
+        height: number,
+        shakeIntensity: number,
+        beatFx: SonnetBeatFxFrame | null,
+    ) {
         const progress = resolveShotProgress(view.shot, time);
         const motion = this.options.tuning.typographyMotion * resolveSonnetAnimationScale(this.options.theme);
         const camera = this.options.tuning.cameraIntensity * resolveSonnetAnimationScale(this.options.theme);
@@ -436,6 +452,14 @@ export class SonnetPixiRuntime {
         ) * camera;
         view.container.x = view.baseX + (cameraFrame.x * width + shake.x * width) * camera;
         view.container.y = view.baseY + (cameraFrame.y * height + shake.y * height) * camera;
+
+        if (beatFx) {
+            view.container.scale.set(view.container.scale.x * beatFx.zoom);
+            view.container.rotation += beatFx.rotation;
+            applySonnetBeatFxLayers(view, beatFx);
+        } else if (this.options.smartBeatEnabled) {
+            restoreSonnetBeatFxLayers(view);
+        }
 
         if (view.mgParticleLayer) {
             // Create a slight time-difference/parallax effect for decorative elements
@@ -601,6 +625,9 @@ export class SonnetPixiRuntime {
             finalParagraph?.endTime ?? Number.POSITIVE_INFINITY,
         );
         const hasCredits = this.creditsContainer.children.length > 0;
+        const beatFx = this.options.staticMode
+            ? null
+            : this.readBeatFx(this.options.audioBands, this.options.smartBeatEnabled);
 
         this.sceneCache.forEach((scene, index) => {
             const isActive = index === paragraphIndex;
@@ -665,7 +692,7 @@ export class SonnetPixiRuntime {
                 const isShotActive = shotIndex === visibleShotIndex;
                 shot.container.visible = isShotActive;
                 if (!isShotActive) return;
-                this.updateShot(shot, time, width, height, 0);
+                this.updateShot(shot, time, width, height, 0, beatFx);
             });
             if (scene.activeShotIndex !== visibleShotIndex) {
                 const previousShot = scene.shots[scene.activeShotIndex];
@@ -691,8 +718,16 @@ export class SonnetPixiRuntime {
                 scene.transitionBlurFilter.enabled = transitionFrame.blur > 0.01;
             }
             if (scene.transitionGlitchEffect) {
-                scene.transitionGlitchEffect.update(transitionFrame.glitch, transitionFrame.glitchSeed);
-                scene.transitionGlitchEffect.filter.enabled = transitionFrame.glitch > 0.01;
+                const transitionGlitch = transitionFrame.glitch;
+                const beatTearWins = !!beatFx && beatFx.tear > transitionGlitch;
+                const glitchAmount = beatTearWins ? beatFx!.tear : transitionGlitch;
+                scene.transitionGlitchEffect.update(
+                    glitchAmount,
+                    beatTearWins ? beatFx!.tearSeed : transitionFrame.glitchSeed,
+                );
+                scene.transitionGlitchEffect.filter.enabled = beatTearWins
+                    ? glitchAmount > 0.01
+                    : transitionFrame.glitch > 0.01;
             }
 
             if (isFinalScene && hasCredits) {
@@ -715,6 +750,13 @@ export class SonnetPixiRuntime {
         this.renderFrame();
         if (this.destroyed) return;
         this.app.renderer.render(this.app.stage);
+    }
+
+    setSmartBeatEnabled(enabled: boolean) {
+        if (this.destroyed || this.options.smartBeatEnabled === enabled) return;
+        this.options.smartBeatEnabled = enabled;
+        this.clearScenes();
+        if (this.options.paused) this.renderOnce();
     }
 
     setPaused(paused: boolean) {

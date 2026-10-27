@@ -185,6 +185,8 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
   const setFilterPattern = useLyricSettingsStore((state) => state.setFilterPattern);
   const crossPlayFallback = usePlaybackSettingsStore((state) => state.crossPlayFallback);
   const setCrossPlayFallback = usePlaybackSettingsStore((state) => state.setCrossPlayFallback);
+  const freePlaySource = usePlaybackSettingsStore((state) => state.freePlaySource);
+  const setFreePlaySource = usePlaybackSettingsStore((state) => state.setFreePlaySource);
   const preferredQuality = usePlaybackSettingsStore((state) => state.preferredQuality);
   const setPreferredQuality = usePlaybackSettingsStore((state) => state.setPreferredQuality);
   const transitionEnabled = usePlaybackSettingsStore((state) => state.transitionEnabled);
@@ -823,6 +825,48 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                   ) : null}
                 </div>
 
+                <div className={`rounded-2xl px-3 py-3 ${card}`}>
+                  <div className="mb-1 flex items-center gap-2 text-[11px] opacity-55">
+                    <Link2 size={14} />
+                    免费音源
+                  </div>
+                  <div className="text-sm font-semibold">非会员取流方式</div>
+                  <div className="mt-1 text-[11px] leading-relaxed opacity-50">
+                    {freePlaySource === 'auto'
+                      ? '按原逻辑依次尝试：私链 → 官方匿名 → 酷我全曲。'
+                      : freePlaySource === 'private'
+                        ? '只用 music.90svip.cn 私链全曲。'
+                        : freePlaySource === 'official'
+                          ? '只用平台匿名官方链（常为试听或受限）。'
+                          : '只用酷我匹配全曲。'}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {([
+                      { id: 'auto' as const, label: '自动（原逻辑）' },
+                      { id: 'private' as const, label: '仅私链' },
+                      { id: 'official' as const, label: '仅官方' },
+                      { id: 'kuwo' as const, label: '仅酷我' },
+                    ]).map((item) => {
+                      const active = freePlaySource === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => setFreePlaySource(item.id)}
+                          className={`rounded-xl px-3 py-2.5 text-[12px] font-medium transition ${
+                            active
+                              ? 'bg-sky-500/90 text-white'
+                              : (isDaylight ? 'bg-black/5 opacity-70 hover:opacity-100' : 'bg-white/5 opacity-70 hover:opacity-100')
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <ToggleRow
                   icon={<Link2 size={15} />}
                   title="下架歌曲跨渠道保底"
@@ -834,7 +878,7 @@ const AppSettingsPanel: React.FC<AppSettingsPanelProps> = ({ open, isDaylight, o
                   onToggle={() => setCrossPlayFallback(!crossPlayFallback)}
                 />
                 <div className={`rounded-2xl px-4 py-3 text-[11px] leading-relaxed opacity-55 ${card}`}>
-                  流程简述：先走当前渠道（登录音质 → 同渠道私链）；仍失败且本开关开启时，按歌名+艺人到对端搜索，命中后再用对端私链出流。例如网易云下架的《画中游》，会尝试用 QQ 私链播同名版本。
+                  流程简述：先走当前渠道（登录音质 → 同渠道免费/私链策略）；仍失败且本开关开启时，按歌名+艺人到对端搜索，命中后再用对端取流。例如网易云下架的《画中游》，会尝试用 QQ 侧播同名版本。
                 </div>
               </div>
             ) : null}

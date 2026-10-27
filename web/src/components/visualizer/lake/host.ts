@@ -35,7 +35,21 @@ export interface LakeSnap {
 
 type Stage = ReturnType<typeof createStage>;
 
-export function mountUniverseStage(host: HTMLElement, read: () => LakeSnap) {
+function clampUnit(value: unknown, min: number, max: number, fallback: number) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
+}
+
+export interface LakeDetail {
+  pixelRatio?: number;
+  skyScale?: number;
+  mirror?: number;
+  msaa?: number | boolean;
+  reflectEvery?: number;
+}
+
+export function mountUniverseStage(host: HTMLElement, read: () => LakeSnap, readDetail?: () => LakeDetail) {
   const canvas = document.createElement('canvas');
   canvas.style.cssText = 'width:100%;height:100%;display:block;';
   host.appendChild(canvas);
@@ -48,15 +62,28 @@ export function mountUniverseStage(host: HTMLElement, read: () => LakeSnap) {
   let buildingKey = '';
   let songId = '';
   let signal: LiveSignal | null = null;
-  let sized = { w: 0, h: 0 };
+  let sizedKey = '';
 
   const resize = () => {
     const rect = host.getBoundingClientRect();
     const w = Math.max(2, Math.round(rect.width));
     const h = Math.max(2, Math.round(rect.height));
-    if (w === sized.w && h === sized.h) return;
-    sized = { w, h };
-    const ratio = Math.min(2, window.devicePixelRatio || 1);
+    const detail = readDetail?.() ?? {};
+    const requested = Number(detail.pixelRatio);
+    const cap = Number.isFinite(requested) && requested > 0
+      ? Math.min(3, Math.max(1, requested))
+      : Math.min(3, window.devicePixelRatio || 1);
+    const ratio = Math.min(cap, window.devicePixelRatio || 1);
+    const skyScale = clampUnit(detail.skyScale, 0.35, 1, 1);
+    const mirror = detail.mirror == null
+      ? (w < 700 ? 1 : 0.5)
+      : clampUnit(detail.mirror, 0.25, 1, 1);
+    const msaa = detail.msaa === 0 || detail.msaa === false ? 0 : 4;
+    const every = Math.max(1, Math.round(Number(detail.reflectEvery) || 1));
+    const key = `${w}x${h}|${ratio}|${skyScale}|${mirror}|${msaa}|${every}`;
+    if (key === sizedKey) return;
+    sizedKey = key;
+    stage.setQuality({ msaa, mirror, every, sky: skyScale, aur: 32 });
     stage.resize(w, h, ratio);
   };
 
