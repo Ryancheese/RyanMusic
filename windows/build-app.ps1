@@ -374,6 +374,20 @@ if (-not (Test-Path $serverJs)) {
 }
 Copy-Item $serverJs (Join-Path $DistDir "server.mjs") -Force
 
+# qishui-music-api 用 Node 原生 require(node:*)，不能打进 ESM bundle；随包旁挂 node_modules。
+# 缺了它 server.mjs 一启动就崩，WebView 会一直黑屏直到超时。
+$qishuiApiSrc = Join-Path $ServerDir "node_modules\qishui-music-api"
+if (-not (Test-Path $qishuiApiSrc)) {
+  Write-Error "缺少 $qishuiApiSrc（请先在 server 目录 npm ci）"
+}
+$nodeModulesDst = Join-Path $DistDir "node_modules"
+New-Item -ItemType Directory -Force -Path $nodeModulesDst | Out-Null
+$qishuiApiDst = Join-Path $nodeModulesDst "qishui-music-api"
+if (Test-Path $qishuiApiDst) {
+  Remove-Item -Recurse -Force $qishuiApiDst
+}
+Copy-Item -Recurse -Force $qishuiApiSrc $qishuiApiDst
+
 # 复制图标到输出目录（备用）
 $icoSrc = Join-Path $WinDir "AppIcon.ico"
 if (Test-Path $icoSrc) {

@@ -1,12 +1,12 @@
 /** 当前应用版本（与 Info.plist / Windows Version / server package 保持一致） */
-export const APP_VERSION = '2.0.12';
+export const APP_VERSION = '2.0.13';
 
 const SEEN_KEY = 'ryanmusic-whats-new-seen';
 
 /** 本版启动后弹窗展示的更新说明 */
-export const WHATS_NEW_NOTES = `• 新增花火舞台，支持随机舞台与字面随机
-• 智能动感接入鼓点模型，舞台背景设置对齐 Folia
-• 会员取链首播更快，去掉重复的加载提示`;
+export const WHATS_NEW_NOTES = `• 修复 Windows 打开黑屏（安装包补齐汽水登录依赖）
+• 新增花火舞台，支持随机舞台与字面随机
+• 智能动感与舞台背景设置对齐 Folia`;
 
 export function shouldShowWhatsNew(currentVersion = APP_VERSION): boolean {
   try {

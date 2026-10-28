@@ -705,7 +705,12 @@ public sealed class MainForm : Form
             await Task.Delay(200);
         }
 
-        MessageBox.Show("服务启动超时，请重试", "RyanMusic", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        var logHint = string.IsNullOrWhiteSpace(_logPath) ? "" : $"\n\n日志：{_logPath}";
+        MessageBox.Show(
+            "本地服务启动失败或超时。请重装完整安装包后重试。" + logHint,
+            "RyanMusic",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Error);
         Close();
     }
 
