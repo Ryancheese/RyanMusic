@@ -1,10 +1,8 @@
 name: Android APK
 
 on:
+  # 默认不跟 tag / main 自动发安卓；需要时手动 workflow_dispatch。
   workflow_dispatch:
-  push:
-    branches: [main]
-    tags: ["v*"]
 
 jobs:
   build:

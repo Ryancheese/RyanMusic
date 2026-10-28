@@ -18,6 +18,7 @@ import {
   fetchQqRecommendFeed,
   fetchQishuiPlaylists,
   fetchQishuiPlaylistDetail,
+  fetchQishuiPersonalFm,
   fetchQishuiRecentSongs,
   fetchQishuiRecommendFeed,
   fetchSpotifyPlaylists,
@@ -151,6 +152,12 @@ interface CloudState {
   openQishuiPlaylist: (playlist: CloudPlaylist) => Promise<void>;
   openQishuiRecommend: (item: NeteaseRecommendItem) => Promise<void>;
   playQishuiRecent: () => Promise<LibraryEntry[]>;
+  playQishuiPersonalFm: (options?: {
+    scene?: string;
+    preference?: string;
+    first?: boolean;
+    limit?: number;
+  }) => Promise<LibraryEntry[]>;
   openSpotifyPlaylist: (playlist: CloudPlaylist) => Promise<void>;
   openSpotifyRecommend: (item: NeteaseRecommendItem) => Promise<void>;
   closeNeteasePlaylist: () => void;
@@ -182,6 +189,7 @@ function toEntries(tracks: CloudTrack[] | undefined, type: MusicSource): Library
       songid: String(item.songid),
       title: item.title || '未知曲目',
       author: item.author || '未知艺人',
+      ...(item.pic?.trim() ? { pic: item.pic.trim() } : {}),
       ...(item.delisted ? { delisted: true } : {}),
     }));
 }
@@ -202,9 +210,23 @@ async function firstTrackCover(playlist: CloudPlaylist, type: MusicSource): Prom
       return coverFromTrack(res.data?.tracks?.[0], 'netease');
     }
     if (type === 'qishui') {
-      const res = playlist.id === '__qishui_recent__'
-        ? await fetchQishuiRecentSongs()
-        : await fetchQishuiPlaylistDetail(playlist.id, 0, 1, playlist.ownerId || '');
+      if (playlist.id === '__qishui_recent__' || playlist.recommendKind === 'daily') {
+        const res = await fetchQishuiRecentSongs();
+        return coverFromTrack(res.data?.tracks?.[0], 'qishui');
+      }
+      if (playlist.recommendKind === 'fm' || playlist.id === '__qishui_fm__') {
+        const res = await fetchQishuiPersonalFm({ limit: 1 });
+        return coverFromTrack(res.data?.tracks?.[0], 'qishui');
+      }
+      const sceneId = String(playlist.sceneId || '').trim()
+        || (playlist.recommendKind === 'radio' && String(playlist.id || '').startsWith('scene-')
+          ? String(playlist.id).slice('scene-'.length)
+          : '');
+      if (sceneId && /^\d+$/.test(sceneId)) {
+        const res = await fetchQishuiPersonalFm({ scene: sceneId, limit: 1 });
+        return coverFromTrack(res.data?.tracks?.[0], 'qishui');
+      }
+      const res = await fetchQishuiPlaylistDetail(playlist.id, 0, 1, playlist.ownerId || '');
       return coverFromTrack(res.data?.tracks?.[0], 'qishui');
     }
     if (type === 'spotify') {
@@ -506,25 +528,52 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   },
   syncQishuiRecommend: async () => {
     set({ qishuiRecommendSyncing: true, qishuiRecommendError: '' });
-    const res = await fetchQishuiRecommendFeed();
-    if (res.code !== 200 || !res.data) {
-      set({ qishuiRecommendSyncing: false, qishuiRecommendError: res.error || '拉取汽水推荐失败' });
-      return;
+    try {
+      const res = await fetchQishuiRecommendFeed();
+      if (res.code !== 200 || !res.data) {
+        set({ qishuiRecommendSyncing: false, qishuiRecommendError: res.error || '拉取汽水推荐失败' });
+        return;
+      }
+      let items = (res.data.items || []).filter((item) => item?.id && item.recommendKind);
+      set({
+        qishuiRecommendItems: items,
+        qishuiRecommendSyncing: false,
+        qishuiRecommendError: items.length ? '' : '暂无推荐内容',
+        qishuiOpen: null,
+        qishuiTracks: [],
+      });
+      // 无封面的歌单 / 电台卡：用首曲封面补上，避免灰块占位。
+      items = await enrichMissingCovers(items, 'qishui', (partial) => {
+        set({ qishuiRecommendItems: partial as NeteaseRecommendItem[] });
+      }) as NeteaseRecommendItem[];
+      set({ qishuiRecommendItems: items });
+    } catch (error) {
+      set({
+        qishuiRecommendSyncing: false,
+        qishuiRecommendError: error instanceof Error ? error.message : '拉取汽水推荐失败',
+      });
     }
-    const items = (res.data.items || []).filter((item) => item?.id && item.recommendKind);
-    set({
-      qishuiRecommendItems: items,
-      qishuiRecommendSyncing: false,
-      qishuiRecommendError: items.length ? '' : '暂无推荐内容',
-      qishuiOpen: null,
-      qishuiTracks: [],
-    });
   },
   playQishuiRecent: async () => {
     set({ qishuiRecommendError: '' });
     const res = await fetchQishuiRecentSongs();
     if (res.code !== 200 || !res.data?.tracks?.length) {
       const message = res.error || '拉取最近播放失败';
+      set({ qishuiRecommendError: message });
+      throw new Error(message);
+    }
+    return toEntries(res.data.tracks, 'qishui');
+  },
+  playQishuiPersonalFm: async (options = {}) => {
+    set({ qishuiRecommendError: '' });
+    const res = await fetchQishuiPersonalFm({
+      scene: options.scene,
+      preference: options.preference,
+      limit: options.limit ?? 20,
+      first: options.first !== false,
+    });
+    if (res.code !== 200 || !res.data?.tracks?.length) {
+      const message = res.error || '拉取汽水电台失败';
       set({ qishuiRecommendError: message });
       throw new Error(message);
     }
@@ -815,7 +864,10 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     }
   },
   openQishuiRecommend: async (item) => {
-    if (item.recommendKind === 'fm') return;
+    if (item.recommendKind === 'fm' || item.recommendKind === 'radio') {
+      // 电台由 HomeView 的 onPlayPersonalFm / 场景开播处理；这里不打开歌单详情。
+      return;
+    }
     if (item.recommendKind === 'playlist' || (item.id && item.id !== '__qishui_recent__' && item.recommendKind !== 'daily')) {
       await get().openQishuiPlaylist(item);
       return;

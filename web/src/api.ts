@@ -188,11 +188,25 @@ export function fetchQishuiPlaylists() {
 }
 
 export function fetchQishuiRecommendFeed() {
-  return postAction<{ items: NeteaseRecommendItem[] }>('qishui_recommend_feed');
+  return postAction<{ items: NeteaseRecommendItem[] }>('qishui_recommend_feed', {}, 45_000);
 }
 
 export function fetchQishuiRecentSongs() {
   return postAction<CloudPlaylistDetail>('qishui_recent_songs');
+}
+
+export function fetchQishuiPersonalFm(options: {
+  scene?: string;
+  preference?: string;
+  limit?: number;
+  first?: boolean;
+} = {}) {
+  return postAction<CloudPlaylistDetail>('qishui_personal_fm', {
+    ...(options.scene ? { scene: options.scene } : {}),
+    ...(options.preference ? { preference: options.preference } : {}),
+    limit: String(options.limit ?? 20),
+    first: options.first === false ? '0' : '1',
+  });
 }
 
 export function fetchQishuiPlaylistDetail(id: string, offset = 0, limit = 80, ownerId = '') {
@@ -240,14 +254,16 @@ export interface CloudPlaylist {
   description?: string;
   /** 汽水车机协议：歌单详情需要 ownerId */
   ownerId?: string;
-  /** 网易云 / QQ 推荐区虚拟条目 */
-  recommendKind?: 'daily' | 'radar' | 'fm' | 'playlist';
+  /** 网易云 / QQ / 汽水推荐区虚拟条目 */
+  recommendKind?: 'daily' | 'radar' | 'fm' | 'playlist' | 'radio';
+  /** 汽水场景电台 id（feed scene_mode_id） */
+  sceneId?: string;
   /** Apple Music：资料库 / 目录 / 专辑 */
   kind?: 'library' | 'catalog' | 'album' | string;
 }
 
 export interface NeteaseRecommendItem extends CloudPlaylist {
-  recommendKind: 'daily' | 'radar' | 'fm' | 'playlist';
+  recommendKind: 'daily' | 'radar' | 'fm' | 'playlist' | 'radio';
 }
 
 export interface CloudTrack {

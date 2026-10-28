@@ -70,6 +70,13 @@ export class QishuiAccount {
         return this.playlistDetail(post.id || '', Number(post.offset || 0), Number(post.limit || 80), post.ownerId || '');
       case 'qishui_recommend_feed':
         return this.recommendFeed();
+      case 'qishui_personal_fm':
+        return this.personalFm(
+          post.scene || '',
+          post.preference || '',
+          Number(post.limit || 20),
+          post.first !== '0' && post.first !== 'false',
+        );
       case 'qishui_recent_songs':
         return this.recentSongs();
       default:
@@ -146,9 +153,18 @@ export class QishuiAccount {
       offset: 0,
     });
     if (!result.ok) return fail(502, result.error?.message || '无法读取汽水歌单');
-    const playlists = (result.data?.items || [])
+    let playlists = (result.data?.items || [])
       .map((item: any, index: number) => mapQishuiPlaylist(item, index))
-      .filter(Boolean);
+      .filter(Boolean) as Array<{ id: string; cover?: string; ownerId?: string; [key: string]: unknown }>;
+    const missing = playlists.filter((item) => item?.id && !String(item.cover || '').trim()).slice(0, 24);
+    if (missing.length) {
+      const covers = await this.playlistFirstTrackCovers(missing);
+      playlists = playlists.map((item) => (
+        String(item.cover || '').trim()
+          ? item
+          : { ...item, cover: covers.get(String(item.id)) || '' }
+      ));
+    }
     const user = this.bridge.user();
     return ok({ playlists, nickname: user?.nickname || '汽水音乐' });
   }
@@ -175,11 +191,12 @@ export class QishuiAccount {
     const collection = result.data?.collection || {};
     const mapped = mapQishuiPlaylist(collection, 0);
     const tracks = (result.data?.items || []).map((item: any) => mapQishuiTrack(item)).filter(Boolean);
+    const cover = mapped?.cover || tracks[0]?.pic || '';
     return ok({
       id: playlistId,
       playlistId,
       name: mapped?.name || String(collection?.base_info?.title || '汽水歌单'),
-      cover: mapped?.cover || '',
+      cover,
       ownerId: mapped?.ownerId || ownerId,
       total: Number(collection?.resource_cnt?.track_cnt || tracks.length) || tracks.length,
       tracks,
@@ -208,21 +225,28 @@ export class QishuiAccount {
 
   private async recommendFeed() {
     if (!this.bridge.loggedIn()) return fail(401, '未登录汽水');
-    const [recent, library] = await Promise.all([
-      this.recentSongs().catch(() => ok({ tracks: [] })),
-      this.playlists().catch(() => ok({ playlists: [] })),
+    const [recent, library, modes, fmPreview] = await Promise.all([
+      this.recentSongs().catch(() => ok({ tracks: [] as any[] })),
+      this.playlists().catch(() => ok({ playlists: [] as any[] })),
+      this.bridge.request<Array<{ id: string; name: string; group: string; coverUrl?: unknown }>>('feed_modes')
+        .catch(() => ({ ok: false as const, error: { code: 'network' as const, message: '' }, data: undefined })),
+      this.bridge.request<{ items?: any[] }>('feed', { queue: 'fm', first: true, limit: 1 })
+        .catch(() => ({ ok: false as const, error: { code: 'network' as const, message: '' }, data: undefined })),
     ]);
     const items: Array<Record<string, unknown>> = [];
     const recentTracks = Array.isArray((recent as any).data?.tracks) ? (recent as any).data.tracks : [];
+    const fmCover = fmPreview.ok
+      ? (mapQishuiTrack((fmPreview.data?.items || [])[0])?.pic || '')
+      : '';
+    items.push({
+      id: '__qishui_fm__',
+      name: '汽水电台',
+      description: '根据口味无限续播',
+      cover: fmCover || recentTracks[0]?.pic || '',
+      trackCount: 0,
+      recommendKind: 'fm',
+    });
     if (recentTracks.length) {
-      items.push({
-        id: '__qishui_fm__',
-        name: '汽水电台',
-        description: '从最近播放继续听',
-        cover: recentTracks[0]?.pic || '',
-        trackCount: recentTracks.length,
-        recommendKind: 'fm',
-      });
       items.push({
         id: '__qishui_recent__',
         name: '最近播放',
@@ -232,13 +256,114 @@ export class QishuiAccount {
         recommendKind: 'daily',
       });
     }
+
+    const scenes = modes.ok && Array.isArray(modes.data)
+      ? modes.data.filter((row) => /^\d+$/.test(String(row?.id || '')) && String(row?.name || '').trim())
+      : [];
+    // 场景封面留给前端用首曲补；这里不再串行拉 feed，避免推荐接口卡死在加载态。
+    for (const scene of scenes.slice(0, 28)) {
+      const sceneId = String(scene.id);
+      items.push({
+        id: `scene-${sceneId}`,
+        name: String(scene.name || '').trim() || `场景 ${sceneId}`,
+        description: String(scene.group || '场景音乐').trim() || '场景音乐',
+        cover: '',
+        trackCount: 0,
+        recommendKind: 'radio',
+        sceneId,
+      });
+    }
+
     const playlists = Array.isArray((library as any).data?.playlists) ? (library as any).data.playlists : [];
-    for (const playlist of playlists.slice(0, 16)) {
+    for (const playlist of playlists.slice(0, 20)) {
       items.push({
         ...playlist,
+        cover: String(playlist.cover || '').trim(),
         recommendKind: 'playlist',
       });
     }
     return ok({ items });
+  }
+
+  /** 私人 FM / 场景电台：返回可直接开播的曲目列表。 */
+  private async personalFm(scene = '', preference = '', limit = 20, first = true) {
+    if (!this.bridge.loggedIn()) return fail(401, '未登录汽水');
+    const pageSize = Math.min(40, Math.max(1, limit || 20));
+    const sceneId = String(scene || '').trim();
+    const pref = String(preference || '').trim();
+    const params: Record<string, string | number | boolean> = {
+      queue: 'fm',
+      first: first !== false,
+      limit: pageSize,
+    };
+    if (sceneId && /^\d+$/.test(sceneId)) params.scene = sceneId;
+    else if (pref === 'familiar' || pref === 'fresh') params.preference = pref;
+    const result = await this.bridge.request<{ items?: any[]; hasMore?: boolean }>('feed', params);
+    if (!result.ok) return fail(502, result.error?.message || '无法拉取汽水电台');
+    const tracks = (result.data?.items || []).map((item: any) => mapQishuiTrack(item)).filter(Boolean);
+    return ok({
+      id: sceneId ? `scene-${sceneId}` : '__qishui_fm__',
+      name: sceneId ? '场景电台' : '汽水电台',
+      cover: tracks[0]?.pic || '',
+      total: tracks.length,
+      tracks,
+      hasMore: Boolean(result.data?.hasMore),
+      sceneId: sceneId || undefined,
+    });
+  }
+
+  private async sceneFirstTrackCovers(sceneIds: string[]): Promise<Map<string, string>> {
+    const covers = new Map<string, string>();
+    const queue = [...sceneIds];
+    const workers = Array.from({ length: Math.min(4, queue.length) }, async () => {
+      while (queue.length) {
+        const sceneId = queue.shift();
+        if (!sceneId) break;
+        try {
+          const result = await this.bridge.request<{ items?: any[] }>('feed', {
+            queue: 'fm',
+            scene: sceneId,
+            first: true,
+            limit: 1,
+          });
+          if (!result.ok) continue;
+          const pic = mapQishuiTrack((result.data?.items || [])[0])?.pic || '';
+          if (pic) covers.set(sceneId, pic);
+        } catch {
+          // skip
+        }
+      }
+    });
+    await Promise.all(workers);
+    return covers;
+  }
+
+  private async playlistFirstTrackCovers(
+    playlists: Array<{ id?: string; ownerId?: string }>,
+  ): Promise<Map<string, string>> {
+    const covers = new Map<string, string>();
+    const queue = [...playlists];
+    const workers = Array.from({ length: Math.min(4, queue.length) }, async () => {
+      while (queue.length) {
+        const item = queue.shift();
+        const id = String(item?.id || '').trim();
+        if (!id) continue;
+        try {
+          const result = await this.bridge.request<{ items?: any[] }>('playlist_tracks', {
+            id,
+            ownerId: String(item?.ownerId || '').trim(),
+            limit: 1,
+            offset: 0,
+          });
+          if (!result.ok) continue;
+          const pic = mapQishuiTrack((result.data?.items || [])[0])?.pic || '';
+          if (pic) covers.set(id, pic);
+        } catch {
+          // skip
+        }
+      }
+    });
+    await Promise.all(workers);
+    return covers;
   }
 }

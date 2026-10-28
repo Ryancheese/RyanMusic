@@ -327,13 +327,8 @@ export const buildHanabiText = (options: HanabiTextOptions, deps: HanabiTextDeps
     const shakeAmplitude = placement.fontPx * 0.05 * motion;
 
     // type 的光标、underline 的粗线、wipe 的遮罩。
-    const cursor = spec.enter === 'type' ? new pixi.Graphics() : null;
-    if (cursor) {
-        cursor.rect(-0.5, -0.5, 1, 1).fill({ color: 0xffffff });
-        cursor.tint = palette.accent;
-        cursor.visible = false;
-        overlayLayer.addChild(cursor);
-    }
+    // 打字机光标（彩色竖条）容易当成误触的系统光标，底部歌词场景下直接关掉。
+    const cursor = null;
     const underlines: Array<{ g: Graphics; members: Rig[]; x: number; y: number; angle: number; length: number; thick: number; from: number; to: number }> = [];
     if (spec.sing === 'underline') {
         const groups = new Map<string, number[]>();

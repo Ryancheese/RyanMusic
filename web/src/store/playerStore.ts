@@ -254,76 +254,50 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (!queueEntries?.length) return;
     window.setTimeout(() => {
       void (async () => {
-        const playing = get().queue[get().index];
-        if (!playing || trackKey(playing) !== trackKey(first)) return;
-        // 保留当前已匹配的歌词：重建队列时不能用初始空 first 覆盖
-        const liveFirst: Track = {
-          ...first,
-          lrc: playing.lrc || first.lrc || '',
-          yrc: playing.yrc || first.yrc || '',
-          tlyric: playing.tlyric || first.tlyric || '',
-          lyricSource: playing.lyricSource || first.lyricSource,
-          delisted: playing.delisted || first.delisted,
-          pic: playing.pic || first.pic,
-          url: playing.url || first.url,
+        const stillFirst = () => {
+          const playing = get().queue[get().index];
+          return Boolean(playing && trackKey(playing) === trackKey(first));
         };
-        const resolved = await Promise.all(
-          queueEntries.map(async (item) => {
-            if (item.type === first.type && String(item.songid) === String(first.songid)) {
-              const latest = get().queue[get().index];
-              if (latest && trackKey(latest) === trackKey(first)) {
-                return {
-                  ...liveFirst,
-                  lrc: latest.lrc || liveFirst.lrc,
-                  yrc: latest.yrc || liveFirst.yrc,
-                  tlyric: latest.tlyric || liveFirst.tlyric,
-                  lyricSource: latest.lyricSource || liveFirst.lyricSource,
-                } satisfies Track;
-              }
-              return liveFirst;
+        if (!stillFirst()) return;
+
+        // 逐首签名并立刻塞进队列，电台下一首不用等整页签完。
+        const concurrency = 3;
+        let cursor = 0;
+        const workers = Array.from({ length: Math.min(concurrency, queueEntries.length) }, async () => {
+          while (cursor < queueEntries.length) {
+            const item = queueEntries[cursor];
+            cursor += 1;
+            if (!item || !stillFirst()) return;
+            if (item.type === first.type && String(item.songid) === String(first.songid)) continue;
+            const existing = get().queue.find(
+              (row) => row.type === item.type && String(row.songid) === String(item.songid),
+            );
+            if (existing?.url) continue;
+            try {
+              const signedItem = await fetchSignedMedia(item.type, item.songid, {
+                title: item.title,
+                author: item.author,
+                delisted: item.delisted,
+              });
+              if (!signedItem?.url || !stillFirst()) continue;
+              get().addToQueue({
+                type: item.type,
+                songid: String(item.songid),
+                title: item.title || '未知曲目',
+                author: item.author || '',
+                lrc: '',
+                url: signedItem.url,
+                pic: signedItem.pic || item.pic || '',
+                ...(signedItem.delisted || item.delisted ? { delisted: true } : {}),
+              });
+            } catch {
+              // 单首失败跳过
             }
-            const signedItem = await fetchSignedMedia(item.type, item.songid, {
-              title: item.title,
-              author: item.author,
-              delisted: item.delisted,
-            });
-            if (!signedItem?.url) return null;
-            return {
-              type: item.type,
-              songid: String(item.songid),
-              title: item.title || '未知曲目',
-              author: item.author || '',
-              lrc: '',
-              url: signedItem.url,
-              pic: signedItem.pic,
-              ...(signedItem.delisted || item.delisted ? { delisted: true } : {}),
-            } satisfies Track;
-          }),
-        );
-        if (trackKey(get().queue[get().index] || first) !== trackKey(first)) return;
-        const tracks = resolved.filter((item): item is Track => Boolean(item));
-        const index = Math.max(
-          0,
-          tracks.findIndex((item) => trackKey(item) === trackKey(first)),
-        );
-        if (tracks.length) {
-          const latest = get().queue[get().index];
-          if (latest && trackKey(latest) === trackKey(first) && index >= 0) {
-            tracks[index] = {
-              ...tracks[index],
-              lrc: latest.lrc || tracks[index].lrc,
-              yrc: latest.yrc || tracks[index].yrc,
-              tlyric: latest.tlyric || tracks[index].tlyric,
-              lyricSource: latest.lyricSource || tracks[index].lyricSource,
-              pic: latest.pic || tracks[index].pic,
-              url: latest.url || tracks[index].url,
-              delisted: latest.delisted || tracks[index].delisted,
-            };
           }
-          set({ queue: tracks, index: index < 0 ? 0 : index });
-        }
+        });
+        await Promise.all(workers);
       })();
-    }, 400);
+    }, 120);
   },
   patchCurrentLyrics: (lyrics, options) => {
     const { queue, index } = get();

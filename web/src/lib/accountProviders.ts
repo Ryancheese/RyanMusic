@@ -39,7 +39,7 @@ export const ACCOUNT_PROVIDERS: AccountProviderMeta[] = [
     id: 'kugou',
     label: '酷狗音乐',
     shortLabel: '酷狗',
-    mark: '狗',
+    mark: 'K',
     markClass: 'bg-[#00a9ff] text-white',
     logoutAction: 'kugou_logout',
     hasCloudLibrary: false,
@@ -118,17 +118,17 @@ export function membershipHint(account: AccountStatus | null | undefined): strin
 }
 
 export function platformStatusLine(account: AccountStatus | null | undefined): string {
-  if (!account?.loggedIn) return '未登录 · 点击登录';
+  if (!account?.loggedIn) return '未登录';
   const name = account.nickname?.trim();
   if (Number(account.vip) > 0) return name ? `${name} · 会员` : '已登录 · 会员';
   return name ? name : '已登录';
 }
 
-/** 胶囊主文案：已登录优先显示昵称 */
+/** 胶囊主文案：已登录优先显示昵称；未登录显示平台名（如 Spotify / 酷狗） */
 export function capsuleDisplayName(
   account: AccountStatus | null | undefined,
   platformShort: string,
 ): string {
-  if (!account?.loggedIn) return '登录';
+  if (!account?.loggedIn) return platformShort;
   return account.nickname?.trim() || platformShort;
 }

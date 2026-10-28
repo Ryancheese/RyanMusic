@@ -357,7 +357,9 @@ const HomeView: React.FC<HomeViewProps> = ({
             ? '根据你的喜好智能推荐，持续发现新歌'
             : item.recommendKind === 'fm'
               ? '无限私人电台'
-              : `${item.trackCount || 0} 首`),
+              : item.recommendKind === 'radio'
+                ? '场景音乐'
+                : `${item.trackCount || 0} 首`),
       coverUrl: coverImageUrl(item.cover, 400),
       covers: (item.covers || []).map((url) => coverImageUrl(url, 400)).filter(Boolean),
       coverItems: (item.coverItems || []).map((cover) => ({
@@ -763,6 +765,10 @@ const HomeView: React.FC<HomeViewProps> = ({
                     if (!recommendItem) return;
                     if (recommendItem.recommendKind === 'fm') {
                       onPlayPersonalFm();
+                      return;
+                    }
+                    if (recommendItem.recommendKind === 'radio') {
+                      onOpenRecommend(recommendItem);
                       return;
                     }
                     if (recommendItem.recommendKind === 'daily' || recommendItem.recommendKind === 'radar') {

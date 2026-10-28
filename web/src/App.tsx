@@ -137,6 +137,8 @@ const App: React.FC = () => {
   } | null>(null);
   const tailSamplesRef = useRef<number[]>([]);
   const tailStampRef = useRef(0);
+  /** 汽水电台会话：切歌将近末尾时续拉 feed */
+  const qishuiRadioRef = useRef<{ scene?: string; extending: boolean } | null>(null);
   const currentTime = useMotionValue(0);
   const audioPower = useMotionValue(0);
   const audioBands = useMemo(() => createAudioBands(), []);
@@ -303,6 +305,7 @@ const App: React.FC = () => {
   const openQishuiPlaylist = useCloudStore((state) => state.openQishuiPlaylist);
   const openQishuiRecommend = useCloudStore((state) => state.openQishuiRecommend);
   const playQishuiRecent = useCloudStore((state) => state.playQishuiRecent);
+  const playQishuiPersonalFm = useCloudStore((state) => state.playQishuiPersonalFm);
   const closeNeteasePlaylist = useCloudStore((state) => state.closeNeteasePlaylist);
   const closeQqPlaylist = useCloudStore((state) => state.closeQqPlaylist);
   const closeQishuiPlaylist = useCloudStore((state) => state.closeQishuiPlaylist);
@@ -796,12 +799,14 @@ const App: React.FC = () => {
     (fromEnded = false) => {
       if (!queue.length) return;
       if (blendRef.current) {
-        if (fromEnded) {
-          finishBlend(blendRef.current.token);
-          return;
-        }
+        const incomingKey = blendRef.current.incomingKey;
         finishBlend(blendRef.current.token);
+        if (fromEnded) return;
+        // 自动交叉淡入已切到下一首时，手动再点「下一首」不应再跳一首。
         const live = usePlayerStore.getState();
+        const current = live.queue[live.index];
+        const currentKey = current ? `${current.type}:${current.songid}` : '';
+        if (incomingKey && currentKey === incomingKey) return;
         const follow = live.index + 1 < live.queue.length
           ? live.index + 1
           : live.loopMode === 'all' && live.queue.length > 1
@@ -820,27 +825,62 @@ const App: React.FC = () => {
       }
       if (fromEnded) playbackIntentRef.current = 'playing';
       const keepIntent = !fromEnded;
-      const nextIndex = index + 1 < queue.length ? index + 1 : loopMode === 'all' && queue.length > 1 ? 0 : -1;
-      const outgoing = deckList()[activeDeckRef.current];
-      const remain = outgoing && Number.isFinite(outgoing.duration)
-        ? outgoing.duration - outgoing.currentTime
-        : transitionSeconds;
-      if (
-        !fromEnded
-        && transitionEnabled
-        && nextIndex >= 0
-        && !isAppleTrack(queue[index])
-        && queue[nextIndex]?.url
-        && !isAppleTrack(queue[nextIndex])
-        && remain >= 0.8
-      ) {
-        beginCrossfade(nextIndex);
+      // 手动切歌硬切，避免交叉淡入半路上要点两次才到下一首。
+      if (index + 1 < queue.length) {
+        playIndex(index + 1, { keepIntent });
         return;
       }
-      if (index + 1 < queue.length) playIndex(index + 1, { keepIntent });
-      else if (loopMode === 'all') playIndex(0, { keepIntent });
+      // 汽水电台：到队尾时续拉，不要按循环模式跳回第一首。
+      if (qishuiRadioRef.current) {
+        const session = qishuiRadioRef.current;
+        if (session.extending) return;
+        session.extending = true;
+        void playQishuiPersonalFm({ scene: session.scene, first: false, limit: 20 })
+          .then(async (entries) => {
+            const live = usePlayerStore.getState();
+            const known = new Set(live.queue.map((item) => `${item.type}:${item.songid}`));
+            let appended = 0;
+            for (const entry of entries) {
+              const key = `${entry.type}:${entry.songid}`;
+              if (known.has(key)) continue;
+              known.add(key);
+              try {
+                const signed = await fetchSignedMedia(entry.type, entry.songid, {
+                  title: entry.title,
+                  author: entry.author,
+                  delisted: entry.delisted,
+                });
+                if (!signed?.url || !qishuiRadioRef.current) continue;
+                usePlayerStore.getState().addToQueue({
+                  type: entry.type,
+                  songid: String(entry.songid),
+                  title: entry.title || '未知曲目',
+                  author: entry.author || '',
+                  lrc: '',
+                  url: signed.url,
+                  pic: signed.pic || entry.pic || '',
+                  ...(signed.delisted || entry.delisted ? { delisted: true } : {}),
+                });
+                appended += 1;
+              } catch {
+                // skip
+              }
+            }
+            if (!appended || !qishuiRadioRef.current) return;
+            const next = usePlayerStore.getState();
+            if (next.index + 1 < next.queue.length) {
+              playIndex(next.index + 1, { keepIntent: true });
+            }
+          })
+          .catch(() => {})
+          .finally(() => {
+            if (qishuiRadioRef.current) qishuiRadioRef.current.extending = false;
+          });
+        return;
+      }
+      if (loopMode === 'all') playIndex(0, { keepIntent });
     },
-    [beginCrossfade, clockAudio, deckList, finishBlend, index, loopMode, playIndex, queue, seek, startAppleQueue, transitionEnabled, transitionSeconds],
+    [clockAudio, finishBlend, index, loopMode, playIndex, playQishuiPersonalFm, queue, seek, startAppleQueue],
   );
 
   const playPrev = useCallback(() => {
@@ -1424,6 +1464,55 @@ const App: React.FC = () => {
       cancelled = true;
     };
   }, [homeTab, neteaseTracks, qishuiTracks, qqTracks, spotifyTracks]);
+
+  // 汽水电台：队列剩不到 3 首时续拉一页，避免下一首要点到末尾才失效。
+  useEffect(() => {
+    const session = qishuiRadioRef.current;
+    if (!session || session.extending) return;
+    if (!track || track.type !== 'qishui') return;
+    const remain = queue.length - index - 1;
+    if (remain > 2) return;
+    session.extending = true;
+    void playQishuiPersonalFm({
+      scene: session.scene,
+      first: false,
+      limit: 20,
+    })
+      .then(async (entries) => {
+        const live = usePlayerStore.getState();
+        const known = new Set(live.queue.map((item) => `${item.type}:${item.songid}`));
+        for (const entry of entries) {
+          const key = `${entry.type}:${entry.songid}`;
+          if (known.has(key)) continue;
+          known.add(key);
+          try {
+            const signed = await fetchSignedMedia(entry.type, entry.songid, {
+              title: entry.title,
+              author: entry.author,
+              delisted: entry.delisted,
+            });
+            if (!signed?.url) continue;
+            if (!qishuiRadioRef.current) return;
+            usePlayerStore.getState().addToQueue({
+              type: entry.type,
+              songid: String(entry.songid),
+              title: entry.title || '未知曲目',
+              author: entry.author || '',
+              lrc: '',
+              url: signed.url,
+              pic: signed.pic || entry.pic || '',
+              ...(signed.delisted || entry.delisted ? { delisted: true } : {}),
+            });
+          } catch {
+            // skip
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (qishuiRadioRef.current) qishuiRadioRef.current.extending = false;
+      });
+  }, [index, playQishuiPersonalFm, queue.length, track]);
 
   useEffect(() => {
     let alive = true;
@@ -2075,6 +2164,7 @@ const App: React.FC = () => {
             }
             returnToSearchRef.current = false;
             playbackIntentRef.current = 'playing';
+            qishuiRadioRef.current = null;
             void playLibraryEntry(entry, queueEntries);
             setView('player');
             setChromeHidden(false);
@@ -2125,6 +2215,40 @@ const App: React.FC = () => {
                 void openQqPlaylist(item);
               }
             } else if (homeTab === 'qishui') {
+              if (item.recommendKind === 'radio') {
+                const scene = String(item.sceneId || '').trim()
+                  || (String(item.id || '').startsWith('scene-') ? String(item.id).slice('scene-'.length) : '');
+                void playQishuiPersonalFm({ scene: scene || undefined })
+                  .then((entries) => {
+                    if (!entries.length) return;
+                    qishuiRadioRef.current = { scene: scene || undefined, extending: false };
+                    returnToSearchRef.current = false;
+                    playbackIntentRef.current = 'playing';
+                    void playLibraryEntry(entries[0], entries);
+                    setView('player');
+                    setChromeHidden(false);
+                  })
+                  .catch((error) => {
+                    showToast({ kind: 'error', title: error instanceof Error ? error.message : '拉取场景电台失败' });
+                  });
+                return;
+              }
+              if (item.recommendKind === 'daily') {
+                void playQishuiRecent()
+                  .then((entries) => {
+                    if (!entries.length) return;
+                    qishuiRadioRef.current = null;
+                    returnToSearchRef.current = false;
+                    playbackIntentRef.current = 'playing';
+                    void playLibraryEntry(entries[0], entries);
+                    setView('player');
+                    setChromeHidden(false);
+                  })
+                  .catch((error) => {
+                    showToast({ kind: 'error', title: error instanceof Error ? error.message : '拉取最近播放失败' });
+                  });
+                return;
+              }
               void openQishuiRecommend(item);
             } else if (homeTab === 'spotify') {
               void openSpotifyRecommend(item);
@@ -2139,13 +2263,14 @@ const App: React.FC = () => {
             const fm = homeTab === 'qq'
               ? playQqPersonalFm
               : homeTab === 'qishui'
-                ? playQishuiRecent
+                ? () => playQishuiPersonalFm()
                 : homeTab === 'spotify'
                   ? () => Promise.reject(new Error('Spotify 暂不提供私人电台'))
                   : playNeteasePersonalFm;
             void fm()
               .then((entries) => {
                 if (!entries.length) return;
+                qishuiRadioRef.current = homeTab === 'qishui' ? { extending: false } : null;
                 returnToSearchRef.current = false;
                 playbackIntentRef.current = 'playing';
                 void playLibraryEntry(entries[0], entries);
@@ -2453,7 +2578,7 @@ const App: React.FC = () => {
         currentView={view}
         canTogglePlay={Boolean(track)}
         canPrev={Boolean(track) && (index > 0 || (loopMode === 'all' && queue.length > 1))}
-        canNext={Boolean(track) && (index + 1 < queue.length || loopMode === 'all')}
+        canNext={Boolean(track) && (index + 1 < queue.length || Boolean(qishuiRadioRef.current) || loopMode === 'all')}
         isDaylight={isDaylight}
         buffering={(buffering || status === 'loading') && status !== 'paused'}
         isHidden={view === 'player' && chromeHidden}
