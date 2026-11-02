@@ -26,13 +26,15 @@ import {
     type TiltTuning,
     type VisualizerMode,
 } from '../../types';
+import type { MachiTuning } from './machi/types';
+import type { NebbiaTuning } from './nebbia/types';
 import type { VisualizerTuningBundle } from './tuningRegistry';
 import type { VisualizerBackgroundConfig } from './backgrounds/definition';
 import type { BeatEffectDef } from '../../services/beatFx/beatEffects';
 
 // src/components/visualizer/definition.ts
 // Shared contracts for discoverable visualizer modes.
-export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'claddagh' | 'cappella' | 'tilt' | 'monet' | 'diorama' | 'pendolo' | 'sonnet' | 'tempera' | 'lumiere' | 'hanabi' | 'lake' | 'jizura';
+export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'claddagh' | 'cappella' | 'tilt' | 'monet' | 'diorama' | 'pendolo' | 'sonnet' | 'tempera' | 'lumiere' | 'hanabi' | 'machi' | 'nebbia' | 'lake' | 'jizura';
 
 export interface VisualizerSharedProps {
     currentTime: MotionValue<number>;
@@ -97,6 +99,10 @@ export interface VisualizerSharedProps {
     onLumiereTuningChange?: (patch: Partial<LumiereTuning>) => void;
     hanabiTuning?: HanabiTuning;
     onHanabiTuningChange?: (patch: Partial<HanabiTuning>) => void;
+    machiTuning?: MachiTuning;
+    onMachiTuningChange?: (patch: Partial<MachiTuning>) => void;
+    nebbiaTuning?: NebbiaTuning;
+    onNebbiaTuningChange?: (patch: Partial<NebbiaTuning>) => void;
     lakeTuning?: LakeTuning;
     onLakeTuningChange?: (patch: Partial<LakeTuning>) => void;
     jizuraTuning?: JizuraTuning;
@@ -152,6 +158,10 @@ export interface VisualizerSettingsPanelProps {
     onLumiereTuningChange?: (patch: Partial<LumiereTuning>) => void;
     hanabiTuning?: HanabiTuning;
     onHanabiTuningChange?: (patch: Partial<HanabiTuning>) => void;
+    machiTuning?: MachiTuning;
+    onMachiTuningChange?: (patch: Partial<MachiTuning>) => void;
+    nebbiaTuning?: NebbiaTuning;
+    onNebbiaTuningChange?: (patch: Partial<NebbiaTuning>) => void;
     lakeTuning?: LakeTuning;
     onLakeTuningChange?: (patch: Partial<LakeTuning>) => void;
     jizuraTuning?: JizuraTuning;
@@ -178,6 +188,7 @@ export interface VisualizerSettingsResetProps {
     resetTemperaTuning?: () => void;
     resetLumiereTuning?: () => void;
     resetHanabiTuning?: () => void;
+    resetMachiTuning?: () => void;
     resetLakeTuning?: () => void;
     resetJizuraTuning?: () => void;
     setDraftFumeTuning?: (tuning: FumeTuning) => void;

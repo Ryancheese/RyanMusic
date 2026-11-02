@@ -63,7 +63,7 @@ const BeatEffectsGroup: React.FC<BeatEffectsGroupProps> = ({
                 const setting = resolveBeatEffectSetting(smartBeat, effect.id);
                 const name = t(effect.nameKey);
                 const desc = t(effect.descKey);
-                const missingModel = effect.source === 'drums' && !drumsPresent && smartBeatMayAnalyse(smartBeat);
+                const missingModel = (effect.source === 'drums' || effect.source === 'stems') && !drumsPresent && smartBeatMayAnalyse(smartBeat);
                 return (
                     <div key={effect.id} className="space-y-2 border-t border-white/8 pt-3 first:border-t-0 first:pt-0">
                         <button

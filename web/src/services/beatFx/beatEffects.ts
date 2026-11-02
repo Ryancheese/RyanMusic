@@ -14,7 +14,12 @@ import type { BeatEffectSetting, SmartBeatSettings } from '../../types';
 // set it aside (2026-10-17: 时计's 齿轮随拍 and the Latent background's 潮汐脉动) rather than deleting
 // it, so it can come back by dropping `retired`.
 
-export type BeatEffectSource = 'beats' | 'drums';
+export type BeatEffectSource = 'beats' | 'drums' | 'stems';
+
+export interface BeatEffectPart {
+    key: string;
+    nameKey: string;
+}
 
 export interface BeatEffectDef {
     /** Stable, stored in settings and exported configs: `<mode>.<name>`. */
@@ -24,6 +29,8 @@ export interface BeatEffectDef {
     /** i18n key of what it does. */
     descKey: string;
     source: BeatEffectSource;
+    /** Parts share the effect's strength until each has its own slider. */
+    parts?: readonly BeatEffectPart[];
     /** Never plays and is not offered; see the header. */
     retired?: boolean;
 }
@@ -41,7 +48,14 @@ export const BEAT_EFFECT_IDS = {
     latentPulse: 'latent.pulse',
     hanabiBeatBursts: 'hanabi.beatBursts',
     hanabiBeatPulse: 'hanabi.beatPulse',
+    machiNeonPulse: 'machi.neonPulse',
+    machiDrumRipple: 'machi.drumRipple',
+    machiScreenFlash: 'machi.screenFlash',
+    nebbiaDrizzleRide: 'nebbia.drizzleRide',
+    nebbiaAquaBeat: 'nebbia.aquaBeat',
 } as const;
+
+export const beatEffectPartId = (id: string, part: string): string => `${id}:${part}`;
 
 /**
  * The effects the old 轻拍 / 重拍 strengths scaled (one pair for every picture, before effects had

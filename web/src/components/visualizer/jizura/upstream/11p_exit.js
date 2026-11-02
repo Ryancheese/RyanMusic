@@ -592,7 +592,7 @@ X.dissolve = {
 };
 
 X.backspace = {
-  name: 'バックスペース', tags: ['editorial', 'glitch'], w: 0.8, cursor: true, minDur: 0.9,
+  name: 'バックスペース', tags: ['editorial', 'glitch'], w: 0.8, cursor: false, minDur: 0.9,
   outDur: (dur, n) => J.clamp(0.2 + n * 0.035, 0.3, Math.max(0.3, Math.min(0.9, dur * 0.45))),
   apply(env, it, p) {
     const lay = layOf(it), n = lay.N; if (!n) return;
@@ -605,7 +605,8 @@ X.backspace = {
       : [(g.x + g.w / 2) * sx + sz * 0.05, g.y * sy - sz * sy * 0.5, cw, sz * sy]);
     const cursorBefore = (g) => (vert ? [g.x * sx - sz * sx * 0.48, (g.y - g.h / 2) * sy - sz * 0.05 - cw, sz * sx * 0.96, cw]
       : [(g.x - g.w / 2) * sx - sz * 0.05 - cw, g.y * sy - sz * sy * 0.5, cw, sz * sy]);
-    const drawCur = r => chainPost(it, (env2, it2) => inItem(env2, it2, () => env2.rect(r[0], r[1], r[2], r[3], acc, 1, false)));
+    // 退场打字光标关闭：避免字幕旁留下紫色竖条。
+    const drawCur = (_r) => {};
     if (single) {
       const j = J.clamp(Math.round(+it.mi || 0), 0, N - 1), del = Math.pow(J.clamp((p - 0.1) / 0.8), 1.3);
       const tj = (N - 1 - j) / N, g = lay[0];

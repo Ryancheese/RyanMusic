@@ -187,6 +187,18 @@ export function rearmDeckOutput(fade: GainNode) {
   snapDeckGain(fade, 1);
 }
 
+/**
+ * 播放路径统一唤醒：暂停挂起 / 切歌 / 后台回来后，
+ * WKWebView 常出现「进度在走、MediaElementSource 仍静音」。
+ */
+export function ensureAudibleGraph(graph: AudioGraph | null | undefined): { longPause: boolean } {
+  const wake = beginAudioWake();
+  if (!graph?.fade) return wake;
+  rearmDeckOutput(graph.fade);
+  resetDeckTone(graph);
+  return wake;
+}
+
 export function attachAudioGraph(audio: HTMLMediaElement, fftSize = 256): AudioGraph | null {
   const bus = ensureShared(fftSize);
   if (!bus) return null;

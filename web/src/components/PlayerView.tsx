@@ -80,6 +80,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
     wordColors: state.wordColors,
     letterSpacingEm: state.letterSpacingEm,
   })));
+  const patchMachi = useVisualizerTuningStore((state) => state.patchMachi);
   const visualizerTunings = useVisualizerTuningStore(useShallow((state) => ({
     classic: state.classic,
     cadenza: state.cadenza,
@@ -94,6 +95,8 @@ const PlayerView: React.FC<PlayerViewProps> = ({
     sonnet: state.sonnet,
     lumiere: state.lumiere,
     hanabi: state.hanabi,
+    machi: state.machi,
+    nebbia: state.nebbia,
     lake: state.lake,
     jizura: state.jizura,
     tempera: state.tempera,
@@ -167,6 +170,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
             harmonySubtitleBackground={appearance.harmonySubtitleBackground}
             visualizerOpacity={appearance.visualizerOpacity}
             visualizerTunings={visualizerTunings}
+            onMachiTuningChange={patchMachi}
           />
           <CommentAtmosphereOverlay
             track={track}

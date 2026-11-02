@@ -29,6 +29,10 @@ interface VisualizerShellProps {
     audioBands: AudioBands;
     sharedProps?: VisualizerShellSharedProps;
     visualizerOpacity?: number;
+    /** When false, the shared stage background is not drawn. 町景 paints its own sky. */
+    renderBackground?: boolean;
+    /** Drops the shell fill so a transparent player page can show through. */
+    clearBackdrop?: boolean;
     children: React.ReactNode;
     className?: string;
 }
@@ -48,6 +52,8 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     audioBands,
     sharedProps,
     visualizerOpacity = 1,
+    renderBackground = true,
+    clearBackdrop = false,
     children,
     className = '',
 }, ref) => {
@@ -112,7 +118,7 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
             ref={ref}
             className={`absolute inset-0 flex h-full min-h-full w-full flex-col items-center justify-center overflow-hidden ${fontClassName} transition-colors duration-1000 ${className}`.trim()}
             style={{
-                backgroundColor: theme.backgroundColor,
+                backgroundColor: clearBackdrop ? 'transparent' : theme.backgroundColor,
                 fontFamily: resolveThemeFontStack(theme),
                 fontWeight: resolveThemeFontWeight(theme, 400),
                 opacity: resolvedVisualizerOpacity,
@@ -137,17 +143,19 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
                 updatePlayerPanelGuideHotspot(false);
             }}
         >
-            <VisualizerBackgroundRenderer
-                config={sharedProps?.background}
-                theme={theme}
-                isDaylight={resolvedIsDaylight}
-                coverUrl={resolvedCoverUrl}
-                audioPower={audioPower}
-                audioBands={audioBands}
-                seed={sharedProps?.seed}
-                staticMode={resolvedStaticMode || resolvedBackgroundStaticMode}
-                paused={resolvedPaused}
-            />
+            {renderBackground ? (
+                <VisualizerBackgroundRenderer
+                    config={sharedProps?.background}
+                    theme={theme}
+                    isDaylight={resolvedIsDaylight}
+                    coverUrl={resolvedCoverUrl}
+                    audioPower={audioPower}
+                    audioBands={audioBands}
+                    seed={sharedProps?.seed}
+                    staticMode={resolvedStaticMode || resolvedBackgroundStaticMode}
+                    paused={resolvedPaused}
+                />
+            ) : null}
 
             {children}
         </div>

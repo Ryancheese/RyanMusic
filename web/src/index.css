@@ -175,7 +175,9 @@ a {
 }
 
 .side-panel-lyrics,
-.side-panel-lyric-line {
+.side-panel-lyric-line,
+.ryan-visualizer-subtitle,
+.ryan-visualizer-subtitle * {
   user-select: none;
   -webkit-user-select: none;
   caret-color: transparent;

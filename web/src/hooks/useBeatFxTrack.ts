@@ -52,7 +52,11 @@ export function useBeatFxTrack(mediaUrl: string | null): boolean {
     visualizerMode: state.visualizerMode,
     visualizerBackgroundMode: state.visualizerBackgroundMode,
   })
-    .map((effect) => `${effect.id}=${resolveBeatEffectSetting(state.smartBeat, effect.id).strength}`)
+    .flatMap((effect) => {
+      const strength = resolveBeatEffectSetting(state.smartBeat, effect.id).strength;
+      const ids = [effect.id, ...(effect.parts ?? []).map((part) => `${effect.id}:${part.key}`)];
+      return ids.map((id) => `${id}=${strength}`);
+    })
     .join(','));
 
   // Asked again when htdemucs_gpu's answer arrives (the startup HEAD check).

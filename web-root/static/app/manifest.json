@@ -1,38 +1,43 @@
 {
-  "_VisualizerHanabi-CQg76YOm.js": {
-    "file": "assets/VisualizerHanabi-CQg76YOm.js",
+  "_VisualizerHanabi-R8LhxLzX.js": {
+    "file": "assets/VisualizerHanabi-R8LhxLzX.js",
     "name": "VisualizerHanabi",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_lucideIconResolver-gBvSKOW7.js",
-      "_wordSegmentation-C1fpppKZ.js"
+      "_lucideIconResolver-CuW_4uDZ.js",
+      "_pixiRuntimeHost-DlOTqtw9.js",
+      "_subtitleFontSizes-V98QZjGR.js",
+      "_paragraphStructure-Buezpwza.js",
+      "_wordSegmentation-D5b90VO-.js"
     ],
     "dynamicImports": [
       "src/components/visualizer/hanabi/createHanabiPixiRuntime.ts"
     ]
   },
-  "_VisualizerLumiere-MtSAJ4sP.js": {
-    "file": "assets/VisualizerLumiere-MtSAJ4sP.js",
+  "_VisualizerLumiere-BuSyzm7S.js": {
+    "file": "assets/VisualizerLumiere-BuSyzm7S.js",
     "name": "VisualizerLumiere",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_wordSegmentation-C1fpppKZ.js"
+      "_pixiRuntimeHost-DlOTqtw9.js",
+      "_subtitleFontSizes-V98QZjGR.js",
+      "_wordSegmentation-D5b90VO-.js"
     ],
     "dynamicImports": [
       "src/components/visualizer/lumiere/createLumierePixiRuntime.ts"
     ]
   },
-  "_VividLightBlend-Dvj6MjLZ.js": {
-    "file": "assets/VividLightBlend-Dvj6MjLZ.js",
+  "_VividLightBlend-R8EJ74m6.js": {
+    "file": "assets/VividLightBlend-R8EJ74m6.js",
     "name": "VividLightBlend",
     "imports": [
       "index.html"
     ]
   },
-  "_bloomFilter-CW1eOWCm.js": {
-    "file": "assets/bloomFilter-CW1eOWCm.js",
+  "_bloomFilter-BdulKX6-.js": {
+    "file": "assets/bloomFilter-BdulKX6-.js",
     "name": "bloomFilter",
     "imports": [
       "index.html"
@@ -41,42 +46,66 @@
       "node_modules/pixi.js/lib/index.mjs"
     ]
   },
-  "_lucideIconResolver-gBvSKOW7.js": {
-    "file": "assets/lucideIconResolver-gBvSKOW7.js",
+  "_lucideIconResolver-CuW_4uDZ.js": {
+    "file": "assets/lucideIconResolver-CuW_4uDZ.js",
     "name": "lucideIconResolver",
     "imports": [
       "index.html"
+    ]
+  },
+  "_paragraphStructure-Buezpwza.js": {
+    "file": "assets/paragraphStructure-Buezpwza.js",
+    "name": "paragraphStructure",
+    "imports": [
+      "index.html",
+      "_wordSegmentation-D5b90VO-.js"
     ]
   },
   "_pixiDisplayResources-MhzcgNpu.js": {
     "file": "assets/pixiDisplayResources-MhzcgNpu.js",
     "name": "pixiDisplayResources"
   },
+  "_pixiRuntimeHost-DlOTqtw9.js": {
+    "file": "assets/pixiRuntimeHost-DlOTqtw9.js",
+    "name": "pixiRuntimeHost",
+    "imports": [
+      "index.html"
+    ]
+  },
   "_sonnetPrintFilters-CtEx3DMO.js": {
     "file": "assets/sonnetPrintFilters-CtEx3DMO.js",
     "name": "sonnetPrintFilters"
   },
-  "_wordSegmentation-C1fpppKZ.js": {
-    "file": "assets/wordSegmentation-C1fpppKZ.js",
+  "_subtitleFontSizes-V98QZjGR.js": {
+    "file": "assets/subtitleFontSizes-V98QZjGR.js",
+    "name": "subtitleFontSizes",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_wordSegmentation-D5b90VO-.js": {
+    "file": "assets/wordSegmentation-D5b90VO-.js",
     "name": "wordSegmentation",
     "imports": [
       "index.html"
     ]
   },
   "index.html": {
-    "file": "assets/index-CzSrVElt.js",
+    "file": "assets/index-DNQBNUaQ.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "dynamicImports": [
-      "_VisualizerHanabi-CQg76YOm.js",
+      "_VisualizerHanabi-R8LhxLzX.js",
       "jizura-engine",
-      "_VisualizerLumiere-MtSAJ4sP.js",
+      "_VisualizerLumiere-BuSyzm7S.js",
+      "src/components/visualizer/machi/VisualizerMachi.tsx",
+      "src/components/visualizer/nebbia/VisualizerNebbia.tsx",
       "src/components/visualizer/sonnet/createSonnetPixiRuntime.ts",
       "src/components/visualizer/tempera/createTemperaPixiRuntime.ts"
     ],
     "css": [
-      "assets/index-DnRXOYOC.css"
+      "assets/index-B-s1KzDe.css"
     ],
     "assets": [
       "assets/avatar10-CEta-Hap.png",
@@ -106,42 +135,42 @@
     ]
   },
   "jizura-engine": {
-    "file": "assets/_jizura-engine-weyo6Mtu.js",
+    "file": "assets/_jizura-engine-C74-0pFj.js",
     "name": "_jizura-engine",
     "src": "jizura-engine",
     "isDynamicEntry": true
   },
   "node_modules/pixi.js/lib/environment-browser/browserAll.mjs": {
-    "file": "assets/browserAll-B1M4-gwz.js",
+    "file": "assets/browserAll-CETllBoK.js",
     "name": "browserAll",
     "src": "node_modules/pixi.js/lib/environment-browser/browserAll.mjs",
     "isDynamicEntry": true,
     "imports": [
-      "_VividLightBlend-Dvj6MjLZ.js",
+      "_VividLightBlend-R8EJ74m6.js",
       "node_modules/pixi.js/lib/index.mjs",
       "node_modules/pixi.js/lib/environment-webworker/webworkerAll.mjs",
       "index.html"
     ]
   },
   "node_modules/pixi.js/lib/environment-webworker/webworkerAll.mjs": {
-    "file": "assets/webworkerAll-CZz8TQGj.js",
+    "file": "assets/webworkerAll-Cr-FXacJ.js",
     "name": "webworkerAll",
     "src": "node_modules/pixi.js/lib/environment-webworker/webworkerAll.mjs",
     "isDynamicEntry": true,
     "imports": [
       "node_modules/pixi.js/lib/index.mjs",
-      "_VividLightBlend-Dvj6MjLZ.js",
+      "_VividLightBlend-R8EJ74m6.js",
       "index.html"
     ]
   },
   "node_modules/pixi.js/lib/index.mjs": {
-    "file": "assets/index-D9deetuu.js",
+    "file": "assets/index-amgdCA2D.js",
     "name": "index",
     "src": "node_modules/pixi.js/lib/index.mjs",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_VividLightBlend-Dvj6MjLZ.js"
+      "_VividLightBlend-R8EJ74m6.js"
     ],
     "dynamicImports": [
       "node_modules/pixi.js/lib/environment-browser/browserAll.mjs",
@@ -245,48 +274,99 @@
     "src": "src/components/visualizer/cappella/emo/vibe3.png"
   },
   "src/components/visualizer/hanabi/createHanabiPixiRuntime.ts": {
-    "file": "assets/createHanabiPixiRuntime-Cb6kMEnY.js",
+    "file": "assets/createHanabiPixiRuntime-Dy8ABaij.js",
     "name": "createHanabiPixiRuntime",
     "src": "src/components/visualizer/hanabi/createHanabiPixiRuntime.ts",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_lucideIconResolver-gBvSKOW7.js",
-      "_bloomFilter-CW1eOWCm.js",
+      "_lucideIconResolver-CuW_4uDZ.js",
+      "_bloomFilter-BdulKX6-.js",
       "_pixiDisplayResources-MhzcgNpu.js",
-      "_VisualizerHanabi-CQg76YOm.js",
-      "_wordSegmentation-C1fpppKZ.js"
+      "_VisualizerHanabi-R8LhxLzX.js",
+      "_wordSegmentation-D5b90VO-.js",
+      "_pixiRuntimeHost-DlOTqtw9.js",
+      "_subtitleFontSizes-V98QZjGR.js",
+      "_paragraphStructure-Buezpwza.js"
     ]
   },
   "src/components/visualizer/lumiere/createLumierePixiRuntime.ts": {
-    "file": "assets/createLumierePixiRuntime-LwG-ebgZ.js",
+    "file": "assets/createLumierePixiRuntime-DZ-6S1Qr.js",
     "name": "createLumierePixiRuntime",
     "src": "src/components/visualizer/lumiere/createLumierePixiRuntime.ts",
     "isDynamicEntry": true,
     "imports": [
-      "_bloomFilter-CW1eOWCm.js",
-      "_VisualizerLumiere-MtSAJ4sP.js",
+      "_bloomFilter-BdulKX6-.js",
+      "_VisualizerLumiere-BuSyzm7S.js",
       "index.html",
-      "_lucideIconResolver-gBvSKOW7.js",
-      "_wordSegmentation-C1fpppKZ.js"
+      "_lucideIconResolver-CuW_4uDZ.js",
+      "_wordSegmentation-D5b90VO-.js",
+      "_pixiRuntimeHost-DlOTqtw9.js",
+      "_subtitleFontSizes-V98QZjGR.js"
     ]
   },
+  "src/components/visualizer/machi/VisualizerMachi.tsx": {
+    "file": "assets/VisualizerMachi-DaZxT__w.js",
+    "name": "VisualizerMachi",
+    "src": "src/components/visualizer/machi/VisualizerMachi.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_lucideIconResolver-CuW_4uDZ.js",
+      "_pixiRuntimeHost-DlOTqtw9.js",
+      "_subtitleFontSizes-V98QZjGR.js"
+    ],
+    "dynamicImports": [
+      "src/components/visualizer/machi/createMachiRuntime.ts"
+    ]
+  },
+  "src/components/visualizer/machi/createMachiRuntime.ts": {
+    "file": "assets/createMachiRuntime-DjuXVmlI.js",
+    "name": "createMachiRuntime",
+    "src": "src/components/visualizer/machi/createMachiRuntime.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_lucideIconResolver-CuW_4uDZ.js",
+      "_paragraphStructure-Buezpwza.js",
+      "_wordSegmentation-D5b90VO-.js"
+    ]
+  },
+  "src/components/visualizer/nebbia/VisualizerNebbia.tsx": {
+    "file": "assets/VisualizerNebbia-3D_2O4wg.js",
+    "name": "VisualizerNebbia",
+    "src": "src/components/visualizer/nebbia/VisualizerNebbia.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_subtitleFontSizes-V98QZjGR.js",
+      "_lucideIconResolver-CuW_4uDZ.js",
+      "_wordSegmentation-D5b90VO-.js"
+    ],
+    "assets": [
+      "assets/nebbiaRaindrop-DNADElS4.png"
+    ]
+  },
+  "src/components/visualizer/nebbia/nebbiaRaindrop.png": {
+    "file": "assets/nebbiaRaindrop-DNADElS4.png",
+    "src": "src/components/visualizer/nebbia/nebbiaRaindrop.png"
+  },
   "src/components/visualizer/sonnet/createSonnetPixiRuntime.ts": {
-    "file": "assets/createSonnetPixiRuntime-B5JuriSk.js",
+    "file": "assets/createSonnetPixiRuntime-CiGXplON.js",
     "name": "createSonnetPixiRuntime",
     "src": "src/components/visualizer/sonnet/createSonnetPixiRuntime.ts",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
       "_sonnetPrintFilters-CtEx3DMO.js",
-      "_VividLightBlend-Dvj6MjLZ.js"
+      "_VividLightBlend-R8EJ74m6.js"
     ],
     "dynamicImports": [
       "node_modules/pixi.js/lib/index.mjs"
     ]
   },
   "src/components/visualizer/tempera/createTemperaPixiRuntime.ts": {
-    "file": "assets/createTemperaPixiRuntime-Bx6U4TZQ.js",
+    "file": "assets/createTemperaPixiRuntime-Ewbo6BG3.js",
     "name": "createTemperaPixiRuntime",
     "src": "src/components/visualizer/tempera/createTemperaPixiRuntime.ts",
     "isDynamicEntry": true,

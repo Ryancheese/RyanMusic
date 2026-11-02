@@ -326,9 +326,7 @@ export const buildHanabiText = (options: HanabiTextOptions, deps: HanabiTextDeps
     }
     const shakeAmplitude = placement.fontPx * 0.05 * motion;
 
-    // type 的光标、underline 的粗线、wipe 的遮罩。
-    // 打字机光标（彩色竖条）容易当成误触的系统光标，底部歌词场景下直接关掉。
-    const cursor = null;
+    // underline 的粗线、wipe 的遮罩（打字机光标已全局关闭）。
     const underlines: Array<{ g: Graphics; members: Rig[]; x: number; y: number; angle: number; length: number; thick: number; from: number; to: number }> = [];
     if (spec.sing === 'underline') {
         const groups = new Map<string, number[]>();
@@ -582,34 +580,6 @@ export const buildHanabiText = (options: HanabiTextOptions, deps: HanabiTextDeps
                 masked.mask = null;
                 wipeMask.clear();
                 wipeMask.visible = false;
-            }
-        }
-
-        // type：光标停在最后一个已出现的字后面，打字时常亮、停下后闪烁，退场时消失。
-        if (cursor) {
-            let current: Rig | null = null;
-            for (const rig of rigs) {
-                if (time >= rig.enterStart && (!current || rig.enterStart >= current.enterStart)) current = rig;
-            }
-            const first = rigs[0];
-            const typing = time < lastLanded;
-            const visibleFrom = options.enterAt - 0.25;
-            const exitFrom = rigs.reduce((min, rig) => Math.min(min, rig.exitStart), Number.POSITIVE_INFINITY);
-            const hideAt = Math.min(lastLanded + 1.2, exitFrom);
-            const blinkOn = typing || Math.floor((time - lastLanded) / 0.28) % 2 === 0;
-            const target: Rig | null = current ?? first ?? null;
-            if (!target || time < visibleFrom || time >= hideAt || !blinkOn) {
-                cursor.visible = false;
-            } else {
-                const glyph = glyphs[target.index]!;
-                const tx = Math.cos(target.angle), ty = Math.sin(target.angle);
-                const side = current ? 1 : -1;
-                const offset = (glyph.advance / 2 + target.size * 0.1) * side;
-                cursor.visible = true;
-                cursor.position.set(target.x + tx * offset, target.y + ty * offset);
-                cursor.rotation = target.angle;
-                cursor.scale.set(Math.max(2, target.size * 0.09), target.size * 0.95);
-                cursor.alpha = 1;
             }
         }
 

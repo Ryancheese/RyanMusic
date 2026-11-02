@@ -17,6 +17,8 @@ import type {
     TiltTuning,
     VisualizerMode,
 } from '../../types';
+import type { MachiTuning } from './machi/types';
+import type { NebbiaTuning } from './nebbia/types';
 import type { VisualizerSharedProps } from './definition';
 
 // src/components/visualizer/tuningRegistry.ts
@@ -36,6 +38,8 @@ export interface VisualizerTuningMap {
     tempera: TemperaTuning;
     lumiere: LumiereTuning;
     hanabi: HanabiTuning;
+    machi: MachiTuning;
+    nebbia: NebbiaTuning;
     lake: LakeTuning;
     jizura: JizuraTuning;
 }

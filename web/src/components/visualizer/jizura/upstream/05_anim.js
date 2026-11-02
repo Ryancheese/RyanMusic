@@ -70,12 +70,12 @@ J.ENTER = {
   },
 
   type: {
-    name: 'タイプ', cursor: true,
+    name: 'タイプ', cursor: false,
     apply(env, it, p, ctx) {
       const n = (it._m || (it._m = J.measure(it))).lay.N;
       const k = Math.floor(p * (n + 0.999));
       it.charFns.push((i) => (i >= k ? { hide: true } : null));
-      it.cursorAt = p < 1 ? k : -1;
+      it.cursorAt = -1;
     },
   },
 
@@ -124,7 +124,7 @@ J.ENTER = {
       const dir = (it.seed | 0) % 2 ? 1 : -1;
       const edge = dir > 0 ? J.lerp(x0, x1, e) : J.lerp(x1, x0, e);
       it.clip = dir > 0 ? [x0 - 4000, edge] : [edge, x1 + 4000];
-      it.wipeBar = p < 1 ? { x: edge, h: m.h * 1.3 + it.size * 0.2 } : null;
+      it.wipeBar = null;
     },
   },
 
@@ -313,7 +313,7 @@ J.EXIT = {
       const x0 = it.x - m.w / 2 - it.size * 0.2, x1 = it.x + m.w / 2 + it.size * 0.2;
       const edge = J.lerp(x0, x1, e);
       it.clip = [edge, x1 + 4000];
-      it.wipeBar = p > 0 && p < 1 ? { x: edge, h: m.h * 1.3 + it.size * 0.2 } : null;
+      it.wipeBar = null;
     },
   },
 

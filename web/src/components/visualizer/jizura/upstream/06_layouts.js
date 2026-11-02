@@ -79,17 +79,7 @@ J.drawFx = (env, it) => {
   if (it.clipY) ctx.restore();
   if (it.clip) ctx.restore();
   if (it.post) { try { it.post(env, it, bb); } catch (e) { console.warn(e); } }
-  if (it.wipeBar) env.rect(it.wipeBar.x - Math.max(4, it.size * 0.035), it.y - it.wipeBar.h / 2, Math.max(8, it.size * 0.07), it.wipeBar.h, env.sc.accent, 1, false);
-  if (it.cursorAt != null && it.cursorAt >= 0) {
-    const m = it._m || J.measure(it);
-    const blink = it.cursorAt >= m.lay.N ? (env.step % 2 === 0) : true;
-    if (blink) {
-      let x;
-      if (bb && bb.boxes.length) { const last = bb.boxes[bb.boxes.length - 1]; x = it.x + last.x + last.w / 2 + it.size * 0.08; }
-      else x = it.align === 'left' ? it.x : it.x - m.w / 2;
-      env.rect(x, it.y - it.size * 0.45, it.size * 0.5, it.size * 0.9, env.sc.accent, 1);
-    }
-  }
+  // wipe / type 的彩色竖条会像系统光标，底部字幕场景一律不画。
   return bb;
 };
 

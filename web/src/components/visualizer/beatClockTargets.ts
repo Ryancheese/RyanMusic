@@ -26,7 +26,7 @@ export const visualizerWantsBeats = (settings: BeatClockSettings): boolean =>
     liveBeatEffects(settings).some(effect => effect.source === 'beats');
 
 export const visualizerWantsDrumHits = (settings: BeatClockSettings): boolean =>
-    liveBeatEffects(settings).some(effect => effect.source === 'drums');
+    liveBeatEffects(settings).some(effect => effect.source === 'drums' || effect.source === 'stems');
 
 export const visualizerWantsBeatClock = (settings: BeatClockSettings): boolean =>
     visualizerWantsBeats(settings) || visualizerWantsDrumHits(settings);

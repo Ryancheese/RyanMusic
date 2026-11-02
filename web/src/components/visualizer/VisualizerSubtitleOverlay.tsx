@@ -123,7 +123,8 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                         opacity: { duration: 0.24, ease: 'easeOut' },
                         y: { duration: 0.24, ease: 'easeOut' },
                     }}
-                    className="absolute left-0 right-0 text-center space-y-2 px-4 z-20 pointer-events-none"
+                    className="ryan-visualizer-subtitle absolute left-0 right-0 text-center space-y-2 px-4 z-20 pointer-events-none select-none"
+                    style={{ caretColor: 'transparent', WebkitUserSelect: 'none', userSelect: 'none' }}
                 >
                     {subtitleText ? (
                         <div className={contentClassName}>

@@ -36,8 +36,35 @@ export function spaHtml(webRoot: string): string | null {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 ${cssTags}
+    <style>
+      html, body { margin: 0; background: #09090b; }
+      html[data-splash="day"], html[data-splash="day"] body { background: #f6f3ee; }
+      #ryan-splash { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; background: #09090b; color: #f4f1ea; }
+      html[data-splash="day"] #ryan-splash { background: #f6f3ee; color: #1c1917; }
+      #ryan-splash .mark { position: relative; display: flex; flex-direction: column; align-items: center; gap: 18px; animation: ryan-splash-in .9s cubic-bezier(.22,1,.36,1) both; }
+      #ryan-splash svg { width: 72px; height: 72px; }
+      #ryan-splash .ring { position: absolute; top: 0; }
+      #ryan-splash .ring circle { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-dasharray: 180; stroke-dashoffset: 180; animation: ryan-splash-draw 1.15s cubic-bezier(.22,1,.36,1) .08s forwards; }
+      #ryan-splash .disc circle { fill: currentColor; transform-origin: 36px 36px; animation: ryan-splash-dot .7s cubic-bezier(.22,1,.36,1) .2s both; }
+      #ryan-splash .name { margin: 0; font-family: Inter, "Songti SC", sans-serif; font-size: 14px; letter-spacing: .42em; text-indent: .42em; font-weight: 500; opacity: 0; animation: ryan-splash-name .7s ease .4s forwards; }
+      #ryan-splash.is-out { opacity: 0; transform: scale(1.04); transition: opacity .55s ease, transform .55s ease; pointer-events: none; }
+      @keyframes ryan-splash-in { from { opacity: 0; transform: translateY(10px) scale(.96); } to { opacity: 1; transform: none; } }
+      @keyframes ryan-splash-draw { to { stroke-dashoffset: 0; } }
+      @keyframes ryan-splash-dot { from { opacity: 0; transform: scale(.35); } to { opacity: 1; transform: scale(1); } }
+      @keyframes ryan-splash-name { to { opacity: .88; } }
+    </style>
+    <script>
+      try { if (localStorage.getItem('ryanmusic-theme') === 'daylight') document.documentElement.dataset.splash = 'day'; } catch (e) {}
+    </script>
 </head>
 <body>
+    <div id="ryan-splash" aria-hidden="true">
+      <div class="mark">
+        <svg class="ring" viewBox="0 0 72 72"><circle cx="36" cy="36" r="28"></circle></svg>
+        <svg class="disc" viewBox="0 0 72 72"><circle cx="36" cy="36" r="7"></circle></svg>
+        <p class="name">RyanMusic</p>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="static/app/${entry.file}"></script>
 </body>

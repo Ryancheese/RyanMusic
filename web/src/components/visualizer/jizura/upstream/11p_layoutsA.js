@@ -1688,12 +1688,7 @@ reg('searchBar', {
     }
     const tx = W / 2 - bw / 2 + bh * 0.95;
     const bb = J.mainDraw(env, { text, font: p.font, size: ts, x: tx, y: by, align: 'left', track: 0.02, color: tc, enter: env.cut.enter === 'cut' ? 'type' : undefined });
-    // caret after typing
     const typed = env.cut.enter === 'cut' || env.cut.enter === 'type' ? env.cut.inDur + 0.05 : env.cut.inDur;
-    if (env.lt > typed && out > 0.5 && env.step % 2 === 0) {
-      const tw = meas(text, p.font, ts, { track: 0.02 }).w;
-      env.rect(tx + tw + ts * 0.12, by - ts * 0.55, Math.max(2, ts * 0.06), ts * 1.1, sc.accent, 1, false);
-    }
     // suggestions
     const rom = hasLatin(text) ? null : J.romaji(strip(text));
     const rows = [text + ' lyrics', env.cut.lineText && strip(env.cut.lineText) !== strip(text) ? env.cut.lineText : text + ' meaning', rom ? rom.toLowerCase() : text + ' mv', text + ' cover'].slice(0, p.sugg);

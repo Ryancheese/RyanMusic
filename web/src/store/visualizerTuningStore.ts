@@ -34,6 +34,10 @@ import {
   type TiltTuning,
 } from '../types';
 import { normalizeHanabiTuning } from '../components/visualizer/hanabi/hanabiTuning';
+import { normalizeMachiTuning } from '../components/visualizer/machi/machiTuning';
+import { DEFAULT_MACHI_TUNING, type MachiTuning } from '../components/visualizer/machi/types';
+import { normalizeNebbiaTuning } from '../components/visualizer/nebbia/nebbiaTuning';
+import { DEFAULT_NEBBIA_TUNING, type NebbiaTuning } from '../components/visualizer/nebbia/types';
 import type { VisualizerTuningBundle } from '../components/visualizer/tuningRegistry';
 
 const KEY = 'ryanmusic-visualizer-tunings-v1';
@@ -54,6 +58,8 @@ export interface VisualizerTuningsState {
   tempera: TemperaTuning;
   lumiere: LumiereTuning;
   hanabi: HanabiTuning;
+  machi: MachiTuning;
+  nebbia: NebbiaTuning;
   lake: LakeTuning;
   jizura: JizuraTuning;
 }
@@ -75,6 +81,8 @@ export const VISUALIZER_TUNING_DEFAULTS: VisualizerTuningsState = {
   sonnet: { ...DEFAULT_SONNET_TUNING },
   lumiere: { ...DEFAULT_LUMIERE_TUNING },
   hanabi: { ...DEFAULT_HANABI_TUNING },
+  machi: normalizeMachiTuning(null),
+  nebbia: normalizeNebbiaTuning(null),
   lake: { ...DEFAULT_LAKE_TUNING },
   jizura: { ...DEFAULT_JIZURA_TUNING },
   tempera: {
@@ -122,6 +130,8 @@ const readTunings = (): VisualizerTuningsState => {
       sonnet: { ...DEFAULT_SONNET_TUNING, ...parsed?.sonnet },
       lumiere: { ...DEFAULT_LUMIERE_TUNING, ...parsed?.lumiere },
       hanabi: normalizeHanabiTuning(parsed?.hanabi),
+      machi: normalizeMachiTuning(parsed?.machi),
+      nebbia: normalizeNebbiaTuning(parsed?.nebbia),
       lake: { ...DEFAULT_LAKE_TUNING, ...parsed?.lake },
       jizura: { ...DEFAULT_JIZURA_TUNING, ...parsed?.jizura },
       tempera,
@@ -151,6 +161,8 @@ interface VisualizerTuningStore extends VisualizerTuningsState {
   patchMonet: (patch: Partial<MonetTuning>) => void;
   patchLumiere: (patch: Partial<LumiereTuning>) => void;
   patchHanabi: (patch: Partial<HanabiTuning>) => void;
+  patchMachi: (patch: Partial<MachiTuning>) => void;
+  patchNebbia: (patch: Partial<NebbiaTuning>) => void;
   patchLake: (patch: Partial<LakeTuning>) => void;
   patchJizura: (patch: Partial<JizuraTuning>) => void;
   patchPendolo: (patch: Partial<PendoloTuning>) => void;
@@ -182,6 +194,8 @@ const pick = (state: VisualizerTuningStore): VisualizerTuningsState => ({
   sonnet: state.sonnet,
   lumiere: state.lumiere,
   hanabi: state.hanabi,
+  machi: state.machi,
+  nebbia: state.nebbia,
   lake: state.lake,
   jizura: state.jizura,
   tempera: state.tempera,
@@ -277,6 +291,25 @@ export const useVisualizerTuningStore = create<VisualizerTuningStore>((set, get)
     set(next);
     persist(next);
   },
+  patchMachi: (patch) => {
+    const current = get().machi;
+    const next = {
+      ...pick(get()),
+      machi: normalizeMachiTuning({
+        ...current,
+        ...patch,
+        views: patch.views ? { ...current.views, ...patch.views } : current.views,
+        quality: patch.quality ? { ...current.quality, ...patch.quality } : current.quality,
+      }),
+    };
+    set(next);
+    persist(next);
+  },
+  patchNebbia: (patch) => {
+    const next = { ...pick(get()), nebbia: normalizeNebbiaTuning({ ...get().nebbia, ...patch }) };
+    set(next);
+    persist(next);
+  },
   patchLake: (patch) => {
     const next = { ...pick(get()), lake: { ...get().lake, ...patch } };
     set(next);
@@ -321,6 +354,8 @@ export const useVisualizerTuningStore = create<VisualizerTuningStore>((set, get)
       sonnet: { ...DEFAULT_SONNET_TUNING },
       lumiere: { ...DEFAULT_LUMIERE_TUNING },
       hanabi: { ...DEFAULT_HANABI_TUNING },
+      machi: normalizeMachiTuning(DEFAULT_MACHI_TUNING),
+      nebbia: normalizeNebbiaTuning(DEFAULT_NEBBIA_TUNING),
       lake: { ...DEFAULT_LAKE_TUNING },
       jizura: { ...DEFAULT_JIZURA_TUNING },
       tempera: mergeTempera(null),

@@ -20,7 +20,7 @@ import { useWebFullscreen } from './lib/webFullscreen';
 import WindowControls from './components/WindowControls';
 import TitlebarDragZone from './components/TitlebarDragZone';
 import { peekTrackProfile, plainBlend, planAutomix, primeTrackProfile, profileFromTail } from './lib/automix';
-import { attachAudioGraph, beginAudioWake, parkAudioGraph, readMixRms, rearmDeckOutput, resetDeckTone, scheduleBlend, snapDeckGain, unlockAudio } from './lib/audioGraph';
+import { attachAudioGraph, ensureAudibleGraph, parkAudioGraph, readMixRms, resetDeckTone, scheduleBlend, snapDeckGain, unlockAudio } from './lib/audioGraph';
 import { createAudioBands, pulseAudioBands, readBackgroundConfig, readVisualizerMode, writeBackgroundConfig } from './lib/visualizer';
 import { useRandomVisualizerMode } from './hooks/useRandomVisualizerMode';
 import { useBeatFxWantedRef } from './hooks/useBeatFxTrack';
@@ -713,16 +713,11 @@ const App: React.FC = () => {
   }, [setStatus]);
 
   const resumeWebAudioPlayback = useCallback(async () => {
-    const wake = beginAudioWake();
     const audio = clockAudio();
     if (!audio) return;
     const blend = blendRef.current;
     const incoming = blend ? deckList()[blend.incomingDeck] : audio;
-    const incomingGraph = fadeOf(incoming);
-    if (incomingGraph?.fade) {
-      rearmDeckOutput(incomingGraph.fade);
-      resetDeckTone(incomingGraph);
-    }
+    const wake = ensureAudibleGraph(fadeOf(incoming));
     if (!blend) {
       const idle = deckList().find((item) => item && item !== audio) || null;
       const idleGraph = fadeOf(idle);
@@ -737,7 +732,7 @@ const App: React.FC = () => {
     try {
       await playTarget.play();
     } catch {
-      beginAudioWake();
+      ensureAudibleGraph(fadeOf(playTarget));
       try { await playTarget.play(); } catch { /* ignore */ }
     }
     if (blend) {
@@ -1187,15 +1182,26 @@ const App: React.FC = () => {
     }
     if (secondary) {
       try {
-        const idle = attachAudioGraph(secondary, isWindowsApp() ? 128 : 256);
-        if (idle?.fade && !blendRef.current) snapDeckGain(idle.fade, 0);
+        attachAudioGraph(secondary, isWindowsApp() ? 128 : 256);
       } catch {
         // 第二路接不上时仍保留单路播放。
       }
     }
+    // 交叉淡化后活跃轨可能在 B；不要把 secondary 一律当成静音路。
+    if (!blendRef.current) {
+      const active = deckList()[activeDeckRef.current] || primary;
+      const idle = deckList().find((item) => item && item !== active) || null;
+      const activeGraph = fadeOf(active);
+      const idleGraph = fadeOf(idle);
+      if (activeGraph?.fade) snapDeckGain(activeGraph.fade, 1);
+      if (idleGraph?.fade) snapDeckGain(idleGraph.fade, 0);
+    }
     const analyser = graph?.analyser || null;
 
     let frame = 0;
+    let lastHeardAt = performance.now();
+    let lastClockTime = -1;
+    let silenceRearms = 0;
     const syncClock = () => {
       const audio = clockAudio() || primary;
       const clock = nativeClockRef.current;
@@ -1215,8 +1221,29 @@ const App: React.FC = () => {
         + audioBands.vocal.get()
         + audioBands.treble.get()
       ) / 5);
-      if (graph && graph.context.state !== 'running' && graph.context.state !== 'closed' && !audio.paused) {
-        void graph.context.resume();
+      const webPlaying = !clock.active && playbackIntentRef.current === 'playing' && !audio.paused;
+      if (webPlaying && graph) {
+        if (graph.context.state !== 'running' && graph.context.state !== 'closed') {
+          ensureAudibleGraph(fadeOf(audio));
+          void graph.context.resume();
+        } else {
+          const rms = readMixRms();
+          const advanced = Number.isFinite(next) && next > lastClockTime + 0.05;
+          if (rms > 0.0008) {
+            lastHeardAt = performance.now();
+            silenceRearms = 0;
+          } else if (advanced && performance.now() - lastHeardAt > 900 && silenceRearms < 3) {
+            // 进度在走、总线无声：重新挂接 MediaElementSource。
+            ensureAudibleGraph(fadeOf(audio));
+            lastHeardAt = performance.now();
+            silenceRearms += 1;
+          }
+          if (advanced) lastClockTime = next;
+        }
+      } else {
+        lastHeardAt = performance.now();
+        lastClockTime = next;
+        silenceRearms = 0;
       }
       maybeCrossfadeRef.current();
       frame = requestAnimationFrame(syncClock);
@@ -1242,7 +1269,7 @@ const App: React.FC = () => {
         audio?.removeEventListener('timeupdate', snapClock);
       }
     };
-  }, [audioBands, audioPower, clockAudio, currentTime]);
+  }, [audioBands, audioPower, clockAudio, currentTime, deckList, fadeOf]);
 
   useEffect(() => {
     setAuthFallback(false);
@@ -1322,19 +1349,21 @@ const App: React.FC = () => {
     setBuffering(true);
     setStatus('loading');
     const startPlayback = async () => {
+      const wake = ensureAudibleGraph(fadeOf(audio));
       await unlockAudio();
       const graph = fadeOf(audio);
-      if (graph?.fade) {
-        snapDeckGain(graph.fade, 1);
-        resetDeckTone(graph);
-      }
       if (graph?.context.state !== 'running' && graph?.context.state !== 'closed') {
         try { await graph.context.resume(); } catch { /* ignore */ }
+      }
+      if (wake.longPause) {
+        const keep = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+        try { audio.currentTime = Math.max(0, keep - 0.03); } catch { /* 还不能 seek */ }
       }
       try {
         await audio.play();
       } catch {
         if (playbackIntentRef.current !== 'playing') return;
+        ensureAudibleGraph(fadeOf(audio));
         await unlockAudio();
         try { await audio.play(); } catch {
           if (playbackIntentRef.current === 'paused') setStatus('paused');
@@ -2052,6 +2081,7 @@ const App: React.FC = () => {
           onPlay={(event) => {
             if (event.currentTarget !== clockAudio()) return;
             if (isAppleTrack(usePlayerStore.getState().queue[usePlayerStore.getState().index])) return;
+            ensureAudibleGraph(fadeOf(event.currentTarget));
             setBuffering(false);
             setStatus('playing');
           }}

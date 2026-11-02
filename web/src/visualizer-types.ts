@@ -115,7 +115,19 @@ export interface DualTheme {
 
 export type ThemeMode = 'default' | 'ai' | 'custom';
 
-export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' | 'monet' | 'spotlight' | 'tempera' | 'lumiere' | 'hanabi';
+export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' | 'monet' | 'spotlight' | 'tempera' | 'lumiere' | 'hanabi' | 'machi' | 'nebbia';
+
+/** 歌词画布的全局分辨率。雾笺可单独指定倍数；没指定时按 1×。 */
+export type LyricRenderScale = 0.5 | 0.75 | 1 | 1.5 | 2;
+export type LyricAntialias = 'auto' | 'on' | 'off';
+export interface LyricRenderQuality {
+  scale: LyricRenderScale;
+  antialias: LyricAntialias;
+}
+export interface LyricRenderOverride {
+  scale: 'global' | LyricRenderScale;
+  antialias: 'global' | 'on' | 'off';
+}
 
 /** 绘光画质档位。`full` 全分辨率；`balanced` / `low` 把光场与辉光降采样。 */
 export type LumiereRenderQuality = 'full' | 'balanced' | 'low';

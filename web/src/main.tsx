@@ -9,3 +9,16 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 );
+
+const splash = document.getElementById('ryan-splash');
+if (splash) {
+  const openedAt = performance.now();
+  const dismiss = () => {
+    const wait = Math.max(0, 1200 - (performance.now() - openedAt));
+    window.setTimeout(() => {
+      splash.classList.add('is-out');
+      window.setTimeout(() => splash.remove(), 560);
+    }, wait);
+  };
+  requestAnimationFrame(() => requestAnimationFrame(dismiss));
+}

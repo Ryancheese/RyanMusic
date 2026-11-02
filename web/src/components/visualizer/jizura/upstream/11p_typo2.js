@@ -225,7 +225,7 @@ reg('enter', 'tyBracketOpen', {
 
 /* 打ち直し — typed in with a cursor; one glyph is mistyped, deleted and typed again */
 reg('enter', 'tyRetype', {
-  name: '打ち直し', tags: ['editorial', 'glitch', 'emotional'], ae: 'type', w: 0.8, minDur: 1.0, cursor: true,
+  name: '打ち直し', tags: ['editorial', 'glitch', 'emotional'], ae: 'type', w: 0.8, minDur: 1.0, cursor: false,
   inDur: (dur, n) => J.clamp(0.1 * n + 0.4, 0.45, Math.min(1.5, dur * 0.55)),
   apply(env, it, p) {
     const lay = layOf(it), N = lay.N;
@@ -249,7 +249,7 @@ reg('enter', 'tyRetype', {
       if (wrong && i === wi) return { ch: wch === lay[wi].ch ? '＊' : wch, color: ac };
       return null;
     });
-    it.cursorAt = p < 1 && !it.vertical && !it.rot ? shown : -1;
+    it.cursorAt = -1;
   },
 });
 
