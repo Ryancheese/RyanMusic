@@ -115,7 +115,7 @@ export interface DualTheme {
 
 export type ThemeMode = 'default' | 'ai' | 'custom';
 
-export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' | 'monet' | 'spotlight' | 'tempera' | 'lumiere' | 'hanabi' | 'machi' | 'nebbia';
+export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' | 'monet' | 'spotlight' | 'tempera' | 'lumiere' | 'hanabi' | 'machi' | 'nebbia' | 'lyricwall';
 
 /** 歌词画布的全局分辨率。雾笺可单独指定倍数；没指定时按 1×。 */
 export type LyricRenderScale = 0.5 | 0.75 | 1 | 1.5 | 2;
@@ -295,6 +295,70 @@ export const DEFAULT_JIZURA_TUNING: JizuraTuning = {
   kinetic: true,
   roll: 0,
 };
+
+/** 无界：从坚果资源移植的六组音律场景。 */
+export type LyricWallMode = 'flowing' | 'mobius' | 'shapes' | 'elantra' | 'matrix' | 'vinyl';
+export type LyricWallEffect = 'clean' | 'focus' | 'neon' | 'poster' | 'karaoke';
+export type LyricWallFont = 'modern' | 'light' | 'poster' | 'serif';
+
+export interface LyricWallTuning {
+  mode: LyricWallMode;
+  lyricEffect: LyricWallEffect;
+  lyricFont: LyricWallFont;
+  fontScale: number;
+  rhythmEnabled: boolean;
+  rhythmStrength: number;
+  inputGain: number;
+  shapeVariant: number;
+}
+
+export const LYRIC_WALL_MODES: { id: LyricWallMode; label: string; description: string }[] = [
+  { id: 'flowing', label: '流动幻境', description: '贴图和流光跟随低频、中频展开' },
+  { id: 'mobius', label: '莫比乌斯光环', description: '光环随鼓点呼吸，流动的高光跟随节奏' },
+  { id: 'shapes', label: '轮廓几何', description: '球体或方块的面片随鼓点展开、收拢' },
+  { id: 'elantra', label: '动态几何球', description: '八频段推动棱面变形，瞬态触发圆环粒子' },
+  { id: 'matrix', label: '光影矩阵', description: '矩阵网格随频谱亮起和伸展' },
+  { id: 'vinyl', label: '黑胶唱机', description: '唱盘与唱针跟随播放，右侧歌词按实际换行高度滚动' },
+];
+export const LYRIC_WALL_EFFECTS: { id: LyricWallEffect; label: string }[] = [
+  { id: 'clean', label: '清晰字幕' }, { id: 'focus', label: '逐字聚焦' },
+  { id: 'neon', label: '霓虹描边' }, { id: 'poster', label: '海报字块' },
+  { id: 'karaoke', label: '流光高亮' },
+];
+export const LYRIC_WALL_FONTS: { id: LyricWallFont; label: string }[] = [
+  { id: 'modern', label: '现代黑体' }, { id: 'light', label: '轻盈细体' },
+  { id: 'poster', label: '海报标题黑' }, { id: 'serif', label: '宋体艺术字' },
+];
+export const LYRIC_WALL_SHAPES = [
+  { id: 0, label: '球体 · 1' }, { id: 1, label: '球体 · 2' },
+  { id: 2, label: '方块 · 1' }, { id: 3, label: '方块 · 2' }, { id: 4, label: '方块 · 3' },
+];
+
+const LYRIC_WALL_MODE_IDS = new Set<string>(LYRIC_WALL_MODES.map(item => item.id));
+export function isJmgoLyricWallMode(mode: unknown): mode is LyricWallMode {
+  return typeof mode === 'string' && LYRIC_WALL_MODE_IDS.has(mode);
+}
+export const DEFAULT_LYRIC_WALL_TUNING: LyricWallTuning = {
+  mode: 'flowing', lyricEffect: 'focus', lyricFont: 'poster', fontScale: 1,
+  rhythmEnabled: true, rhythmStrength: 1, inputGain: 1, shapeVariant: 2,
+};
+
+/** Removed scene IDs migrate to flowing; older mode-only settings inherit new controls. */
+export function normalizeLyricWallTuning(value: Partial<LyricWallTuning> | null | undefined): LyricWallTuning {
+  const defaults = DEFAULT_LYRIC_WALL_TUNING;
+  const bounded = (input: unknown, fallback: number, min: number, max: number) =>
+    typeof input === 'number' && Number.isFinite(input) ? Math.min(max, Math.max(min, input)) : fallback;
+  return {
+    mode: isJmgoLyricWallMode(value?.mode) ? value.mode : defaults.mode,
+    lyricEffect: LYRIC_WALL_EFFECTS.some(item => item.id === value?.lyricEffect) ? value.lyricEffect : defaults.lyricEffect,
+    lyricFont: LYRIC_WALL_FONTS.some(item => item.id === value?.lyricFont) ? value.lyricFont : defaults.lyricFont,
+    fontScale: bounded(value?.fontScale, defaults.fontScale, .65, 1.35),
+    rhythmEnabled: typeof value?.rhythmEnabled === 'boolean' ? value.rhythmEnabled : defaults.rhythmEnabled,
+    rhythmStrength: bounded(value?.rhythmStrength, defaults.rhythmStrength, .4, 1.8),
+    inputGain: bounded(value?.inputGain, defaults.inputGain, 0, 2),
+    shapeVariant: LYRIC_WALL_SHAPES.some(item => item.id === value?.shapeVariant) ? value.shapeVariant : defaults.shapeVariant,
+  };
+}
 
 export const JIZURA_THEME_OPTIONS: { id: JizuraThemeId; label: string }[] = [
   { id: 'none', label: '不限' },

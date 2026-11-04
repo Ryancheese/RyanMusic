@@ -13,6 +13,7 @@ import {
   DEFAULT_HANABI_TUNING,
   DEFAULT_JIZURA_TUNING,
   DEFAULT_LAKE_TUNING,
+  DEFAULT_LYRIC_WALL_TUNING,
   DEFAULT_SONNET_TUNING,
   DEFAULT_TEMPERA_TUNING,
   DEFAULT_TILT_TUNING,
@@ -29,9 +30,11 @@ import {
   type HanabiTuning,
   type JizuraTuning,
   type LakeTuning,
+  type LyricWallTuning,
   type SonnetTuning,
   type TemperaTuning,
   type TiltTuning,
+  normalizeLyricWallTuning,
 } from '../types';
 import { normalizeHanabiTuning } from '../components/visualizer/hanabi/hanabiTuning';
 import { normalizeMachiTuning } from '../components/visualizer/machi/machiTuning';
@@ -62,6 +65,7 @@ export interface VisualizerTuningsState {
   nebbia: NebbiaTuning;
   lake: LakeTuning;
   jizura: JizuraTuning;
+  lyricwall: LyricWallTuning;
 }
 
 export const VISUALIZER_TUNING_DEFAULTS: VisualizerTuningsState = {
@@ -85,6 +89,7 @@ export const VISUALIZER_TUNING_DEFAULTS: VisualizerTuningsState = {
   nebbia: normalizeNebbiaTuning(null),
   lake: { ...DEFAULT_LAKE_TUNING },
   jizura: { ...DEFAULT_JIZURA_TUNING },
+  lyricwall: { ...DEFAULT_LYRIC_WALL_TUNING },
   tempera: {
     ...DEFAULT_TEMPERA_TUNING,
     layerImages: [],
@@ -134,6 +139,7 @@ const readTunings = (): VisualizerTuningsState => {
       nebbia: normalizeNebbiaTuning(parsed?.nebbia),
       lake: { ...DEFAULT_LAKE_TUNING, ...parsed?.lake },
       jizura: { ...DEFAULT_JIZURA_TUNING, ...parsed?.jizura },
+      lyricwall: normalizeLyricWallTuning(parsed?.lyricwall),
       tempera,
     };
   } catch {
@@ -165,6 +171,7 @@ interface VisualizerTuningStore extends VisualizerTuningsState {
   patchNebbia: (patch: Partial<NebbiaTuning>) => void;
   patchLake: (patch: Partial<LakeTuning>) => void;
   patchJizura: (patch: Partial<JizuraTuning>) => void;
+  patchLyricWall: (patch: Partial<LyricWallTuning>) => void;
   patchPendolo: (patch: Partial<PendoloTuning>) => void;
   patchSonnet: (patch: Partial<SonnetTuning>) => void;
   patchTempera: (patch: Partial<TemperaTuning>) => void;
@@ -198,6 +205,7 @@ const pick = (state: VisualizerTuningStore): VisualizerTuningsState => ({
   nebbia: state.nebbia,
   lake: state.lake,
   jizura: state.jizura,
+  lyricwall: state.lyricwall,
   tempera: state.tempera,
 });
 
@@ -320,6 +328,11 @@ export const useVisualizerTuningStore = create<VisualizerTuningStore>((set, get)
     set(next);
     persist(next);
   },
+  patchLyricWall: (patch) => {
+    const next = { ...pick(get()), lyricwall: normalizeLyricWallTuning({ ...get().lyricwall, ...patch }) };
+    set(next);
+    persist(next);
+  },
   resetMode: (mode) => {
     const defaults = VISUALIZER_TUNING_DEFAULTS[mode];
     const next = {
@@ -358,6 +371,7 @@ export const useVisualizerTuningStore = create<VisualizerTuningStore>((set, get)
       nebbia: normalizeNebbiaTuning(DEFAULT_NEBBIA_TUNING),
       lake: { ...DEFAULT_LAKE_TUNING },
       jizura: { ...DEFAULT_JIZURA_TUNING },
+      lyricwall: { ...DEFAULT_LYRIC_WALL_TUNING },
       tempera: mergeTempera(null),
     };
     set(fresh);

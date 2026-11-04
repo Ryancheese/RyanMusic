@@ -21,6 +21,7 @@ const zh = {
     visualizerNebbia: '雾笺',
     visualizerLake: '湖面',
     visualizerJizura: '字面',
+    visualizerLyricWall: '无界',
     visualizerSpotlight: '聚光',
     visualizerRandom: '随机',
     waitingForMusic: '',

@@ -1,0 +1,280 @@
+{
+  "apk": "Arwen.apk",
+  "apkSHA256": "bd735fa9e9705496903d5a1301237e7dae8823809f89f30d41b8e058b8de1998",
+  "bundle": "assets/AssetBundles/share_font",
+  "bundleSHA256": "a92886641df4ac7fcfa86a8c09c90ddfeb0ad274588aefd4eb27304756653ac6",
+  "method": "UnityPy Font resource decode; SFNT Unicode cmap/name verification; no subsetting or code execution.",
+  "formatDecision": "Original SFNT bytes preserved: local fontTools/WOFF2 compressor unavailable; no dependency installed.",
+  "probeText": "轮廓几何音律特效莫比乌斯流动幻境黑胶唱片我爱音乐你好吗恋爱青春风雨夜晚汉字繁體中文龍鬱龘𠮷",
+  "lyricProbeText": "我只是还没有想好该怎么对你说沉默不是代表我的错",
+  "fonts": [
+    {
+      "resource": "NotoSerifCJKtc-Black",
+      "pathId": "-5705168061240896815",
+      "file": "NotoSerifCJKtc-Black.otf",
+      "sourceBytes": 22916588,
+      "exportBytes": 22916588,
+      "sourceSHA256": "6d2a669ae86781b3b0e166f47d13771d501c77529f1f6243e9db5cd95936078d",
+      "exportSHA256": "6d2a669ae86781b3b0e166f47d13771d501c77529f1f6243e9db5cd95936078d",
+      "sourceSignature": "4f54544f",
+      "fullGlyphCoveragePreserved": true,
+      "family": "Noto Serif CJK TC",
+      "subfamily": "Black",
+      "fullName": "Noto Serif CJK TC Black",
+      "postScriptName": "NotoSerifCJKtc-Black",
+      "names": {
+        "1": [
+          {
+            "value": "Noto Serif CJK TC Black",
+            "language": 1028,
+            "platform": 3
+          },
+          {
+            "value": "Noto Serif CJK TC Black",
+            "language": 1033,
+            "platform": 3
+          }
+        ],
+        "2": [
+          {
+            "value": "Regular",
+            "language": 1028,
+            "platform": 3
+          },
+          {
+            "value": "Regular",
+            "language": 1033,
+            "platform": 3
+          }
+        ],
+        "4": [
+          {
+            "value": "Noto Serif CJK TC Black",
+            "language": 1028,
+            "platform": 3
+          },
+          {
+            "value": "Noto Serif CJK TC Black",
+            "language": 1033,
+            "platform": 3
+          }
+        ],
+        "16": [
+          {
+            "value": "Noto Serif CJK TC",
+            "language": 1028,
+            "platform": 3
+          },
+          {
+            "value": "Noto Serif CJK TC",
+            "language": 1033,
+            "platform": 3
+          }
+        ],
+        "17": [
+          {
+            "value": "Black",
+            "language": 1028,
+            "platform": 3
+          },
+          {
+            "value": "Black",
+            "language": 1033,
+            "platform": 3
+          }
+        ],
+        "6": [
+          {
+            "value": "NotoSerifCJKtc-Black",
+            "language": 1033,
+            "platform": 3
+          }
+        ]
+      },
+      "numGlyphs": 65535,
+      "unicodeCodepoints": 43029,
+      "cjkUnifiedCodepoints": 20971,
+      "unicodeCoverageSHA256": "94d90a0b170c13959c8c7fdafb946a96a7cd2ef5434a21984f0265a313ba8426",
+      "unicodeCmaps": [
+        {
+          "platform": 0,
+          "encoding": 3,
+          "format": 4,
+          "mappedCodepoints": 42184
+        },
+        {
+          "platform": 0,
+          "encoding": 4,
+          "format": 12,
+          "mappedCodepoints": 43029
+        },
+        {
+          "platform": 0,
+          "encoding": 5,
+          "format": 14,
+          "mappedCodepoints": 0
+        },
+        {
+          "platform": 3,
+          "encoding": 1,
+          "format": 4,
+          "mappedCodepoints": 42184
+        },
+        {
+          "platform": 3,
+          "encoding": 10,
+          "format": 12,
+          "mappedCodepoints": 43029
+        }
+      ],
+      "variationSelectors": [
+        65024
+      ],
+      "missingProbeCharacters": [],
+      "missingLyricProbeCharacters": [],
+      "tables": [
+        "BASE",
+        "CFF ",
+        "DSIG",
+        "GPOS",
+        "GSUB",
+        "OS/2",
+        "VORG",
+        "cmap",
+        "head",
+        "hhea",
+        "hmtx",
+        "maxp",
+        "name",
+        "post",
+        "vhea",
+        "vmtx"
+      ]
+    },
+    {
+      "resource": "YouSheBiaoTiHei",
+      "pathId": "1626248778272479652",
+      "file": "YouSheBiaoTiHei.ttf",
+      "sourceBytes": 1414784,
+      "exportBytes": 1414784,
+      "sourceSHA256": "dab883d69fb713233ea5d9aff8d1f27ccc2b71e249143edf6ea08367784c5dba",
+      "exportSHA256": "dab883d69fb713233ea5d9aff8d1f27ccc2b71e249143edf6ea08367784c5dba",
+      "sourceSignature": "00010000",
+      "fullGlyphCoveragePreserved": true,
+      "family": "YouSheBiaoTiHei",
+      "subfamily": "Regular",
+      "fullName": "YouSheBiaoTiHei",
+      "postScriptName": "YouSheBiaoTiHei",
+      "names": {
+        "1": [
+          {
+            "value": "YouSheBiaoTiHei",
+            "language": 0,
+            "platform": 1
+          },
+          {
+            "value": "”≈…Ë±ÍÃ‚∫⁄",
+            "language": 33,
+            "platform": 1
+          },
+          {
+            "value": "YouSheBiaoTiHei",
+            "language": 1033,
+            "platform": 3
+          },
+          {
+            "value": "优设标题黑",
+            "language": 2052,
+            "platform": 3
+          }
+        ],
+        "2": [
+          {
+            "value": "Regular",
+            "language": 0,
+            "platform": 1
+          },
+          {
+            "value": "Regular",
+            "language": 33,
+            "platform": 1
+          },
+          {
+            "value": "Regular",
+            "language": 1033,
+            "platform": 3
+          },
+          {
+            "value": "Regular",
+            "language": 2052,
+            "platform": 3
+          }
+        ],
+        "4": [
+          {
+            "value": "YouSheBiaoTiHei",
+            "language": 0,
+            "platform": 1
+          },
+          {
+            "value": "YouSheBiaoTiHei",
+            "language": 1033,
+            "platform": 3
+          }
+        ],
+        "6": [
+          {
+            "value": "YouSheBiaoTiHei",
+            "language": 0,
+            "platform": 1
+          },
+          {
+            "value": "YouSheBiaoTiHei",
+            "language": 1033,
+            "platform": 3
+          }
+        ]
+      },
+      "numGlyphs": 7194,
+      "unicodeCodepoints": 7183,
+      "cjkUnifiedCodepoints": 6763,
+      "unicodeCoverageSHA256": "9f5188363a981a3fb80e7c5bb7037b359efd970aad9d02461267f66814ee74a2",
+      "unicodeCmaps": [
+        {
+          "platform": 0,
+          "encoding": 3,
+          "format": 4,
+          "mappedCodepoints": 7183
+        },
+        {
+          "platform": 3,
+          "encoding": 1,
+          "format": 4,
+          "mappedCodepoints": 7183
+        }
+      ],
+      "variationSelectors": [],
+      "missingProbeCharacters": [
+        "體",
+        "鬱",
+        "龍",
+        "龘",
+        "𠮷"
+      ],
+      "missingLyricProbeCharacters": [],
+      "tables": [
+        "GSUB",
+        "OS/2",
+        "cmap",
+        "glyf",
+        "head",
+        "hhea",
+        "hmtx",
+        "loca",
+        "maxp",
+        "name",
+        "post"
+      ]
+    }
+  ]
+}

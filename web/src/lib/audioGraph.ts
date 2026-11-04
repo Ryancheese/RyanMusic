@@ -113,6 +113,11 @@ function ensureShared(fftSize: number) {
 }
 
 /** WKWebView / Safari 里 AudioContext 默认挂起；必须在用户手势里 resume，否则会只播进度没声音。 */
+export function readAnalyserFormat(): { sampleRate: number; fftSize: number } | null {
+  if (!shared) return null;
+  return { sampleRate: shared.context.sampleRate, fftSize: shared.analyser.fftSize };
+}
+
 export function readMixRms() {
   if (!shared) return 0;
   const bins = new Float32Array(shared.analyser.fftSize);

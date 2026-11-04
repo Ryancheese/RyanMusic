@@ -73,6 +73,7 @@ export function readVisualizerMode(): VisualizerMode {
     // 旧模式迁移：墨染/回响 → 散字；IOS → 聚光
     if (raw === 'moran' || raw === 'echo') return 'classic';
     if (raw === 'ios') return 'spotlight';
+    if (raw === 'jmgo') return 'lyricwall';
     return raw as VisualizerMode;
   } catch {
     return 'classic';

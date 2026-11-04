@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, LogOut, RefreshCw, X } from 'lucide-react';
+import QRCode from 'qrcode';
 import type { ThemeTokens } from '../types';
 import { coverImageUrl, postAction, type AccountStatus } from '../api';
 import { useCloudStore } from '../store/cloudStore';
@@ -96,6 +97,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
     let timer = 0;
     let qrKey = '';
     const start = async () => {
+      setQr('');
       setBusy(true);
       setStatus('正在生成二维码…');
       const keyAction = tab === 'netease'
@@ -116,20 +118,29 @@ const AccountModal: React.FC<AccountModalProps> = ({
       try {
         res = await postAction<Record<string, string>>(keyAction);
       } catch (error) {
-        setBusy(false);
         if (stop) return;
+        setBusy(false);
         setStatus(error instanceof Error ? error.message : '无法生成二维码');
         return;
       }
-      setBusy(false);
       if (stop) return;
       if (res.code !== 200 || !res.data) {
+        setBusy(false);
         setStatus(res.error || '无法生成二维码');
         return;
       }
       if (tab === 'netease') {
         const qrurl = res.data.qrurl || `https://music.163.com/login?codekey=${encodeURIComponent(res.data.key)}`;
-        setQr(`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrurl)}`);
+        try {
+          const image = await QRCode.toDataURL(qrurl, { width: 180, margin: 4 });
+          if (stop) return;
+          setQr(image);
+        } catch {
+          if (stop) return;
+          setBusy(false);
+          setStatus('无法生成二维码，请关闭后重试或改用 Cookie');
+          return;
+        }
         setStatus('请使用网易云 App 扫码');
       } else if (tab === 'kugou') {
         const qrurl = res.data.qrurl || '';
@@ -144,6 +155,7 @@ const AccountModal: React.FC<AccountModalProps> = ({
         setQr(res.data.qrimg || '');
         setStatus('请使用 QQ / 微信扫码');
       }
+      setBusy(false);
       qrKey = res.data.key || '';
       const key = qrKey;
       timer = window.setInterval(async () => {

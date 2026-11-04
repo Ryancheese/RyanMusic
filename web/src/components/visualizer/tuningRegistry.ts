@@ -12,6 +12,7 @@ import type {
     LumiereTuning,
     JizuraTuning,
     LakeTuning,
+    LyricWallTuning,
     SonnetTuning,
     TemperaTuning,
     TiltTuning,
@@ -42,6 +43,7 @@ export interface VisualizerTuningMap {
     nebbia: NebbiaTuning;
     lake: LakeTuning;
     jizura: JizuraTuning;
+    lyricwall: LyricWallTuning;
 }
 
 export type VisualizerTuningMode = keyof VisualizerTuningMap;

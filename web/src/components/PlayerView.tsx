@@ -99,6 +99,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({
     nebbia: state.nebbia,
     lake: state.lake,
     jizura: state.jizura,
+    lyricwall: state.lyricwall,
     tempera: state.tempera,
   })));
   const resolvedLyrics = useMemo(

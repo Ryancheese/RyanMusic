@@ -1,0 +1,23 @@
+{
+  "apk": "Arwen.apk",
+  "apkSHA256": "bd735fa9e9705496903d5a1301237e7dae8823809f89f30d41b8e058b8de1998",
+  "bundle": "res_musicvisualization_flowingillusion",
+  "bundleSHA256": "01d9bf64817dd84356fdd053a6913dcb215114d4d4bdaeb01c8e47d466479352",
+  "shader": "JMGO/Music/FlowingIllusion03",
+  "fragmentBodySHA256": "4839f33473b6d72805bb3c57447520e397111b6fa19b5b9a8977682bf18f7378",
+  "method": "UnityPy decoded serialized resources and GLES3 program; fragment arithmetic is unchanged.",
+  "recovered": [
+    "three original effect textures",
+    "original mesh and UVs",
+    "material uniforms",
+    "camera settings and object transform",
+    "OPPOSans-H font",
+    "TextAnimator serialized settings"
+  ],
+  "unknown": [
+    "audioStrength runtime normalization and smoothing",
+    "runtime lyric override behavior",
+    "player color-space setting",
+    "visual comparison against the running projector"
+  ]
+}

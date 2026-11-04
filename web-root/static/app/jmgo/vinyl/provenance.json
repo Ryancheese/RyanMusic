@@ -1,0 +1,108 @@
+{
+  "bundle": "res_musicvisualization_vinyllrc",
+  "bundleSHA256": "355ec0efbbec0b6b5ac852397bc6e8f27a339418ca665a4ded5d2cfadc3eacb3",
+  "apkSHA256": "bd735fa9e9705496903d5a1301237e7dae8823809f89f30d41b8e058b8de1998",
+  "sourceLayout": "Cover2D03 (serialized active)",
+  "programs": {
+    "-5727206318075422573": {
+      "name": "JMGO/Music/MusicDefaultVinyl",
+      "vertex": "JMGO_Music_MusicDefaultVinyl.vertex.glsl",
+      "fragment": "JMGO_Music_MusicDefaultVinyl.fragment.glsl",
+      "cull": 2.0,
+      "zTest": 4.0,
+      "zWrite": 1.0,
+      "srcBlend": 1.0,
+      "dstBlend": 0.0,
+      "stateBindings": {
+        "cull": "<noninit>",
+        "zTest": "<noninit>",
+        "zWrite": "<noninit>",
+        "srcBlend": "<noninit>",
+        "dstBlend": "<noninit>"
+      },
+      "vertexBodySHA256": "71d1e9a263fd152043b9fda2138120de306510821c5d6404ec87bf898904f3e4",
+      "fragmentBodySHA256": "666553e9c6d4a2664e6f18c34cf6a6b414cb9234239915857e069d3dc6a385ec"
+    },
+    "-1896966161630918582": {
+      "name": "Universal Render Pipeline/Unlit",
+      "vertex": "Universal_Render_Pipeline_Unlit.vertex.glsl",
+      "fragment": "Universal_Render_Pipeline_Unlit.fragment.glsl",
+      "cull": 0.0,
+      "zTest": 4.0,
+      "zWrite": 0.0,
+      "srcBlend": 0.0,
+      "dstBlend": 0.0,
+      "stateBindings": {
+        "cull": "_Cull",
+        "zTest": "<noninit>",
+        "zWrite": "_ZWrite",
+        "srcBlend": "_SrcBlend",
+        "dstBlend": "_DstBlend"
+      },
+      "vertexBodySHA256": "57472e726777664168c9574a75c9ca27d7449b19d4adb658022b99842d927b12",
+      "fragmentBodySHA256": "0627b54fbd6983acf145d7b3617e750270b8e75cda95a7327ec68edf103b22eb"
+    },
+    "8032235356825112178": {
+      "name": "JMGO/Music/MusicDefaultShadowMix",
+      "vertex": "JMGO_Music_MusicDefaultShadowMix.vertex.glsl",
+      "fragment": "JMGO_Music_MusicDefaultShadowMix.fragment.glsl",
+      "cull": 2.0,
+      "zTest": 4.0,
+      "zWrite": 0.0,
+      "srcBlend": 5.0,
+      "dstBlend": 10.0,
+      "stateBindings": {
+        "cull": "<noninit>",
+        "zTest": "<noninit>",
+        "zWrite": "<noninit>",
+        "srcBlend": "<noninit>",
+        "dstBlend": "<noninit>"
+      },
+      "vertexBodySHA256": "71d1e9a263fd152043b9fda2138120de306510821c5d6404ec87bf898904f3e4",
+      "fragmentBodySHA256": "06825a98730a7fa163e06eb52f34df537316696a7b7366d22169567094d1487a"
+    },
+    "8450832460653186355": {
+      "name": "JMGO/Music/MusicDefaultShadowMixOpaque",
+      "vertex": "JMGO_Music_MusicDefaultShadowMixOpaque.vertex.glsl",
+      "fragment": "JMGO_Music_MusicDefaultShadowMixOpaque.fragment.glsl",
+      "cull": 2.0,
+      "zTest": 4.0,
+      "zWrite": 1.0,
+      "srcBlend": 1.0,
+      "dstBlend": 0.0,
+      "stateBindings": {
+        "cull": "<noninit>",
+        "zTest": "<noninit>",
+        "zWrite": "<noninit>",
+        "srcBlend": "<noninit>",
+        "dstBlend": "<noninit>"
+      },
+      "vertexBodySHA256": "71d1e9a263fd152043b9fda2138120de306510821c5d6404ec87bf898904f3e4",
+      "fragmentBodySHA256": "42580338cf18ab509dded1a43801a5591a63538ac6297fe419b69da6fc92393c"
+    }
+  },
+  "recovered": [
+    "original meshes, sprite tight outlines and nine-slice borders",
+    "all effect textures and three default covers",
+    "original unlit/vinyl/shadow GLES3 programs",
+    "orthographic camera and full saved hierarchy",
+    "streamed clip cubic coefficients and CRC32 transform bindings",
+    "Turntable2D animator states and transition durations",
+    "serialized record speed and lyric layout/transition parameters"
+  ],
+  "unknown": [
+    "native runtime selection between supplied layouts and default covers",
+    "native lyric pooling/masking and AdaptiveScreen overrides",
+    "native record rotation direction/time basis",
+    "full native pause/transition blending semantics",
+    "player color space and same-song original-device comparison"
+  ],
+  "adapterDecisions": [
+    "use serialized active Cover2D03 layout",
+    "source first default cover fills runtime-empty cover material",
+    "built-in Sprites-Default material uses unlit premultiplied adapter; original tight/sliced sprite geometry retained",
+    "sample original arm curves on play/pause; source transition duration used to blend interrupted changes",
+    "record rotates clockwise at source speed interpreted as degrees per playback second",
+    "DOM regular/light-font lyrics use serialized spacing/durations with projected source canvas coordinates; native TextMeshPro shaping/masks approximated"
+  ]
+}

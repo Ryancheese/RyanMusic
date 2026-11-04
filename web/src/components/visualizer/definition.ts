@@ -18,6 +18,7 @@ import {
     type PendoloTuning,
     type JizuraTuning,
     type LakeTuning,
+    type LyricWallTuning,
     type LumiereTuning,
     type SonnetTuning,
     type SubtitleContentMode,
@@ -34,7 +35,7 @@ import type { BeatEffectDef } from '../../services/beatFx/beatEffects';
 
 // src/components/visualizer/definition.ts
 // Shared contracts for discoverable visualizer modes.
-export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'claddagh' | 'cappella' | 'tilt' | 'monet' | 'diorama' | 'pendolo' | 'sonnet' | 'tempera' | 'lumiere' | 'hanabi' | 'machi' | 'nebbia' | 'lake' | 'jizura';
+export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'claddagh' | 'cappella' | 'tilt' | 'monet' | 'diorama' | 'pendolo' | 'sonnet' | 'tempera' | 'lumiere' | 'hanabi' | 'machi' | 'nebbia' | 'lake' | 'jizura' | 'lyricwall';
 
 export interface VisualizerSharedProps {
     currentTime: MotionValue<number>;
@@ -107,6 +108,8 @@ export interface VisualizerSharedProps {
     onLakeTuningChange?: (patch: Partial<LakeTuning>) => void;
     jizuraTuning?: JizuraTuning;
     onJizuraTuningChange?: (patch: Partial<JizuraTuning>) => void;
+    lyricWallTuning?: LyricWallTuning;
+    onLyricWallTuningChange?: (patch: Partial<LyricWallTuning>) => void;
 }
 
 export interface VisualizerSettingsPanelProps {
@@ -166,6 +169,8 @@ export interface VisualizerSettingsPanelProps {
     onLakeTuningChange?: (patch: Partial<LakeTuning>) => void;
     jizuraTuning?: JizuraTuning;
     onJizuraTuningChange?: (patch: Partial<JizuraTuning>) => void;
+    lyricWallTuning?: LyricWallTuning;
+    onLyricWallTuningChange?: (patch: Partial<LyricWallTuning>) => void;
     /** Mark slider drag start so onChange only updates draft. */
     onSliderPointerDown?: () => void;
     /** Commit draft values to persistent store on slider release. */

@@ -1,0 +1,14 @@
+@font-face{font-family:JMGOHeadline;src:url('./fonts/YouSheBiaoTiHei.ttf') format('truetype');font-weight:800;font-display:swap}
+@font-face{font-family:JMGOEditorial;src:url('./fonts/NotoSerifCJKtc-Black.otf') format('opentype');font-weight:900;font-display:swap}
+.lyric-text{white-space:pre-wrap}
+.lyric-fx-char{display:inline-block;white-space:pre;transform-origin:50% 65%;vertical-align:baseline;will-change:transform}
+.lyric-text[data-lyric-active="true"][data-lyric-effect="neon"] .lyric-fx-char{-webkit-text-stroke:.65px #e5d5ff;color:#fbf7ff;text-shadow:0 0 7px #ab78e8,0 0 20px #744ba8,0 2px 3px #000}
+.lyric-text[data-lyric-active="true"][data-lyric-effect="poster"] .lyric-fx-char{text-shadow:2px 3px 0 #0009}
+.lyric-text[data-lyric-active="true"][data-lyric-effect="poster"] .lyric-fx-char:nth-child(3n+1){color:#ffe7b0}
+.lyric-text[data-lyric-active="true"][data-lyric-effect="karaoke"] .lyric-fx-char{text-shadow:0 2px 6px #0009}
+.jmgo-lyric-readable[data-lyric-effect="neon"]{background:rgba(10,6,18,.64);border:1px solid #d3b9ff3b}
+.jmgo-lyric-readable[data-lyric-effect="poster"]{border-radius:4px;border-left:3px solid #f2d7a3;background:rgba(8,8,10,.73)}
+.jmgo-lyric-readable:after{content:'';display:block;position:absolute;left:20px;right:20px;bottom:5px;height:2px;background:#eed6a9;transform:scaleX(var(--lyric-progress,0));transform-origin:left;opacity:.45}
+.jmgo-lyric-readable[data-lyric-effect="clean"]:after{display:none}
+.settings-source{margin:20px 0 8px;border-top:1px solid #ffffff16;padding-top:15px}
+.settings-source summary{font-size:11px;color:#91899e;cursor:pointer}

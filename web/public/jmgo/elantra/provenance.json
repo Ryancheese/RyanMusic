@@ -1,0 +1,28 @@
+{
+  "bundle": "res_musicvisualization_elantraballlrc",
+  "bundleSHA256": "ed696440e718c68b91e94387c6107543b51f1a6bcd1d2027f0c8cd5e5067563a",
+  "apkSHA256": "bd735fa9e9705496903d5a1301237e7dae8823809f89f30d41b8e058b8de1998",
+  "shader": "JMGO/Music/DynamicGeometry",
+  "vertexBodySHA256": "88a62af9b37dac011060690484be6b4d7939e57aa03e1207989e59f39bbd69b4",
+  "fragmentBodySHA256": "147c1017825e51b1d1b1d47ce00f66371818e028d57becf3f27bb86011fa66da",
+  "recovered": [
+    "ball_20 original 600-vertex faceted mesh with both UV channels",
+    "original eight-band vertex noise displacement and fragment arithmetic",
+    "MatCap, ramp, outline, noise and circle textures",
+    "source transform/camera and material parameters",
+    "serialized particle burst, radius, speed, lifetime and fade/size curves",
+    "regular-font lyric sizing and shadow offset"
+  ],
+  "unknown": [
+    "original audio normalization",
+    "CircleEffect native retrigger timing and random seed",
+    "runtime lyric size/position overrides",
+    "original player color space and device visual comparison"
+  ],
+  "adapterDecisions": [
+    "native WebGL2 ordinary uniforms replace Unity UBO declarations",
+    "eight host bands feed original AudioStrength0..7 directly",
+    "circle particle billboards use recovered texture and parameters; low-band rising-edge trigger is an explicit demo approximation",
+    "camera postprocessing remains disabled as serialized"
+  ]
+}
