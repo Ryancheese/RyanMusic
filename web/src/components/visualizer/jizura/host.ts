@@ -50,7 +50,6 @@ interface JizuraApi {
   Renderer: new () => {
     frame: (ctx: CanvasRenderingContext2D, plan: JizuraPlan, t: number, opt?: { scale?: number; noBloom?: boolean }) => void;
   };
-  stepDur: (fx: Record<string, unknown>, fps: number) => number;
   ensureFonts: (text: string, keys: string[]) => Promise<void>;
   fontsOfPlan: (plan: JizuraPlan) => string[];
 }
@@ -137,6 +136,11 @@ function lyricKey(lines: Line[]): number {
   return hash >>> 0;
 }
 
+function displayFps(): number {
+  const rate = (window.screen as Screen & { refreshRate?: number }).refreshRate;
+  return rate && rate >= 60 ? Math.round(rate) : 60;
+}
+
 function mulberry32(seed: number) {
   let t = seed >>> 0;
   return () => {
@@ -161,6 +165,9 @@ export function mountJizuraStage(host: HTMLElement, read: () => JizuraSnap): () 
   let key = '';
   let warned = false;
   let frameId = 0;
+  let lastStamp = 0;
+  let frameMs = 1000 / 60;
+  let hz = displayFps();
 
   const fit = (current: JizuraPlan) => {
     const cap = 1280;
@@ -205,14 +212,20 @@ export function mountJizuraStage(host: HTMLElement, read: () => JizuraSnap): () 
       horror: snap.horror,
       typo: snap.typo,
       kinetic: snap.kinetic,
-      fps: 60,
+      fps: hz,
       fx: { ...base.fx, koma: 0, onTwos: false },
       timing: { ...base.timing, snap: false, offset: 0, tail: 1.2, bpm: 0 },
     };
     if (snap.omakase && typeof api.omakase === 'function') {
       const themeId = snap.theme && snap.theme !== 'none' ? snap.theme : null;
       const rolled = api.omakase(project, mulberry32(seed), themeId);
-      project = { ...project, ...rolled, seed: Number(rolled.seed ?? seed) };
+      project = {
+        ...project,
+        ...rolled,
+        seed: Number(rolled.seed ?? seed),
+        fps: hz,
+        fx: { ...(rolled.fx || project.fx), koma: 0, onTwos: false },
+      };
     }
     let next: JizuraPlan;
     try {
@@ -233,9 +246,19 @@ export function mountJizuraStage(host: HTMLElement, read: () => JizuraSnap): () 
     }).catch(() => {});
   };
 
-  const tick = () => {
+  const tick = (now: number) => {
     if (dead) return;
     frameId = requestAnimationFrame(tick);
+    if (lastStamp > 0) {
+      const dt = now - lastStamp;
+      if (dt > 4 && dt < 40) {
+        frameMs = frameMs * 0.9 + dt * 0.1;
+        const sample = 1000 / frameMs;
+        const next = sample >= 100 ? 120 : sample >= 75 ? 90 : 60;
+        if (next > hz) hz = next;
+      }
+    }
+    lastStamp = now;
     const width = host.clientWidth;
     const height = host.clientHeight;
     if (width < 8 || height < 8) return;
@@ -261,11 +284,12 @@ export function mountJizuraStage(host: HTMLElement, read: () => JizuraSnap): () 
       void rebuild(snap, aspect, nextKey);
     }
     if (!api || !renderer || !plan || document.hidden) return;
+    if (plan.fps < hz) plan.fps = hz;
+    plan.fx.koma = 0;
+    plan.fx.onTwos = false;
     const scale = fit(plan);
-    const step = Math.max(1 / 60, api.stepDur(plan.fx, plan.fps));
-    const quantized = Math.floor(snap.time / step + 1e-6) * step;
-    if (quantized === drawn) return;
-    drawn = quantized;
+    if (snap.time === drawn) return;
+    drawn = snap.time;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     try {

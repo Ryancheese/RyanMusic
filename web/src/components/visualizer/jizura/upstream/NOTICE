@@ -16,4 +16,4 @@ same order JIZURA's own build uses.
 RyanMusic changes:
 - 09_render.js: live playback can skip the full-frame glow. Copying the finished
   frame back to blur it costs most of a frame, so the player sets noBloom.
-  Playback also asks for every frame (koma 0, 60fps) instead of the 12fps step.
+  Playback also draws every display frame (koma 0, at least 60fps) instead of the 12fps step.

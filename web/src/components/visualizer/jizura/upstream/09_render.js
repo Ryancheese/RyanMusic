@@ -59,10 +59,13 @@ class Renderer {
     const W = plan.W, H = plan.H, scale = opt.scale || 1;
     const cw = ctx.canvas.width, ch = ctx.canvas.height;
     const fx = plan.fx, st = plan.style, fps = plan.fps;
-    // motion is quantised to 'koma' drawings per second (24fps timebase); random flicker runs on a <=24Hz clock
+    // koma holds one drawing across several output frames (on twos / on threes).
+    // Live playback sets koma to 0: motion stays continuous and the effect clock follows the display, at least 60fps.
+    const koma = J.komaOf(fx);
     const stepDur = J.stepDur(fx, fps);
-    const clock = J.komaOf(fx) > 0 ? stepDur : 1 / 24;
-    const tq = Math.floor(t / stepDur + 1e-6) * stepDur;
+    const live = !(koma > 0);
+    const clock = live ? 1 / Math.max(60, fps || 60) : stepDur;
+    const tq = live ? t : Math.floor(t / stepDur + 1e-6) * stepDur;
     const mainCut = J.cutAt(plan, tq);
     const sc = st.schemes[mainCut ? mainCut.scheme % st.schemes.length : 0] || st.schemes[0];
     const allowFilter = this.filterOK && !opt.fast;
